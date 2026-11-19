@@ -160,9 +160,6 @@ func evaluateGoPins(ctx context.Context, proxy *Proxy, now time.Time, pins []goP
 		if err != nil {
 			return nil, fmt.Errorf("%s: %s %s: %w", p.file, p.name, p.value, err)
 		}
-		if !pin.OutOfDate && pin.Newest != "" {
-			pin.Due = r.due[newest]
-		}
 		out = append(out, pin)
 	}
 	return out, nil
@@ -175,26 +172,48 @@ func (r *goReleases) evaluate(p goPin, target, required GoVersion) (Pin, error) 
 	if err != nil {
 		return Pin{}, err
 	}
-	pin := Pin{Name: p.name, File: p.file, Current: p.value}
-	if !p.exact {
-		if v.minor().Compare(target) < 0 {
-			pin.Newest = target.minorString()
-			pin.OutOfDate = v.minor().Compare(required) < 0
-		}
-		return pin, nil
-	}
-	latest, ok := r.newestPatch[v.minor()]
-	if !ok || v.Compare(latest) > 0 {
+	own, ok := r.newestPatch[v.minor()]
+	if p.exact && (!ok || v.Compare(own) > 0) {
 		return Pin{}, fmt.Errorf("the proxy lists no such Go release")
 	}
-	if v.minor().Compare(target) < 0 {
-		latest = r.newestPatch[target]
+	pin := Pin{Name: p.name, File: p.file, Current: p.value}
+	behind := v.minor().Compare(target) < 0
+	switch {
+	case v.minor().Compare(required) < 0:
+		pin.OutOfDate = true
+	case p.exact && v.Patch < own.Patch:
+		// The newest patch release of the pin's own minor release is due
+		// now; a move to target is not.
+		pin.Newest, pin.OutOfDate = p.prefix+own.String(), true
+		return pin, nil
+	case !behind:
+		return pin, nil
 	}
-	if v != latest {
-		pin.Newest = p.prefix + latest.String()
-		pin.OutOfDate = v.minor().Compare(required) < 0 || v.Patch < r.newestPatch[v.minor()].Patch
+	if p.exact {
+		pin.Newest = p.prefix + r.newestPatch[target].String()
+	} else {
+		pin.Newest = target.String()
+	}
+	if !pin.OutOfDate {
+		pin.Due = r.dueFor(v.minor(), p.older)
 	}
 	return pin, nil
+}
+
+// dueFor returns when a pin on the minor release m becomes out of date: when
+// the minor release after m becomes required, or, for a pin of the older
+// release, the one after that. It is zero when that date is not known yet.
+func (r *goReleases) dueFor(m GoVersion, older bool) time.Time {
+	steps := 1
+	if older {
+		steps = 2
+	}
+	for i, v := range r.minors {
+		if v == m && i+steps < len(r.minors) {
+			return r.due[r.minors[i+steps]]
+		}
+	}
+	return time.Time{}
 }
 
 // parsePinnedGo parses the release of a pin. A pin of one release must

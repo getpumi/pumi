@@ -134,3 +134,11 @@ func semverMajor(s string) (int, bool) {
 	v, ok := parseSemver(s)
 	return v.n[0], ok
 }
+
+// isPrerelease reports whether a module version is a prerelease, such as
+// v3.0.0-beta.1. The proxy answers @latest with a prerelease when a module
+// has no release yet.
+func isPrerelease(s string) bool {
+	v, ok := parseSemver(s)
+	return ok && v.pre != ""
+}

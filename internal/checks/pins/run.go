@@ -112,7 +112,8 @@ func releaseToolPin(ctx context.Context, proxy *Proxy, script []byte, name, vari
 	if err != nil {
 		return Pin{}, err
 	}
-	newest, err := newestRelease(ctx, proxy, module, "v"+v)
+	major, _ := semverMajor("v" + v)
+	newest, err := newestRelease(ctx, proxy, module, major)
 	if err != nil {
 		return Pin{}, fmt.Errorf("%s: %w", name, err)
 	}
@@ -145,15 +146,12 @@ func shellVariable(script []byte, name string) (string, error) {
 }
 
 // newestRelease returns the newest version of the module whose path,
-// without its major version suffix, is base, from the major version of
-// current up. A new major version of a Go module has a new module path, such
-// as golangci-lint/v3, so it asks for each next major version until the
-// proxy knows none.
-func newestRelease(ctx context.Context, proxy *Proxy, base, current string) (string, error) {
-	major, ok := semverMajor(current)
-	if !ok {
-		return "", fmt.Errorf("%s is not a module version", current)
-	}
+// without its major version suffix, is base, from the major version major
+// up. A new major version of a Go module has a new module path, such as
+// golangci-lint/v3, so it asks for each next major version until the proxy
+// knows none or has only a prerelease of it. A gopkg.in path names its major
+// version in another form, so only that path is asked.
+func newestRelease(ctx context.Context, proxy *Proxy, base string, major int) (string, error) {
 	newest, found, err := proxy.Latest(ctx, majorPath(base, major))
 	if err != nil {
 		return "", err
@@ -166,7 +164,7 @@ func newestRelease(ctx context.Context, proxy *Proxy, base, current string) (str
 	}
 	for next := max(major+1, 2); ; next++ {
 		v, found, err := proxy.Latest(ctx, majorPath(base, next))
-		if err != nil || !found {
+		if err != nil || !found || isPrerelease(v) {
 			return newest, err
 		}
 		newest = v
@@ -210,8 +208,8 @@ func readToolPins(ctx context.Context, dir fs.FS, proxy *Proxy) ([]Pin, error) {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		for _, m := range mods {
-			base, _ := splitMajorPath(m.Path)
-			newest, err := newestRelease(ctx, proxy, base, m.Version)
+			base, major := splitMajorPath(m.Path)
+			newest, err := newestRelease(ctx, proxy, base, major)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %s: %w", name, m.Path, err)
 			}

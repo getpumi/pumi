@@ -1,0 +1,202 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1f5b6-3db1-75aa-a6fa-f8acab109eb8",
+  "CreatedAt": "2026-11-19T21:28:43.697374252Z",
+  "ArtifactName": "go.mod",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "go.mod",
+      "Class": "lang-pkgs",
+      "Type": "gomod",
+      "Packages": [
+        {
+          "ID": "example.com/rec",
+          "Name": "example.com/rec",
+          "Identifier": {
+            "PURL": "pkg:golang/example.com/rec",
+            "UID": "a4c9b41054b64ea4"
+          },
+          "Relationship": "root",
+          "DependsOn": [
+            "github.com/google/uuid@v1.6.0",
+            "github.com/hashicorp/go-version@v1.9.0",
+            "github.com/juju/ratelimit@v1.0.2",
+            "github.com/stretchr/testify@v1.12.1",
+            "go.yaml.in/yaml/v3@v3.0.6",
+            "gopkg.in/check.v1@v1.0.0-20201130134442-10cb98267c6c"
+          ],
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/google/uuid@v1.6.0",
+          "Name": "github.com/google/uuid",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/google/uuid@v1.6.0",
+            "UID": "be349087f1bf1d83"
+          },
+          "Version": "v1.6.0",
+          "Licenses": [
+            "BSD-3-Clause"
+          ],
+          "Relationship": "direct",
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/hashicorp/go-version@v1.9.0",
+          "Name": "github.com/hashicorp/go-version",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/hashicorp/go-version@v1.9.0",
+            "UID": "23913c85320b6a5e"
+          },
+          "Version": "v1.9.0",
+          "Licenses": [
+            "MPL-2.0"
+          ],
+          "Relationship": "direct",
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/juju/ratelimit@v1.0.2",
+          "Name": "github.com/juju/ratelimit",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/juju/ratelimit@v1.0.2",
+            "UID": "c7afba1bd5743b65"
+          },
+          "Version": "v1.0.2",
+          "Licenses": [
+            "LGPL-3.0-only"
+          ],
+          "Relationship": "direct",
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/stretchr/testify@v1.12.1",
+          "Name": "github.com/stretchr/testify",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/stretchr/testify@v1.12.1",
+            "UID": "28f54f9b6e058301"
+          },
+          "Version": "v1.12.1",
+          "Licenses": [
+            "MIT"
+          ],
+          "Relationship": "direct",
+          "DependsOn": [
+            "go.yaml.in/yaml/v3@v3.0.6"
+          ],
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "go.yaml.in/yaml/v3@v3.0.6",
+          "Name": "go.yaml.in/yaml/v3",
+          "Identifier": {
+            "PURL": "pkg:golang/go.yaml.in/yaml/v3@v3.0.6",
+            "UID": "43aeb3b9e8b7a0e0"
+          },
+          "Version": "v3.0.6",
+          "Licenses": [
+            "Apache-2.0",
+            "MIT"
+          ],
+          "Relationship": "direct",
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "gopkg.in/check.v1@v1.0.0-20201130134442-10cb98267c6c",
+          "Name": "gopkg.in/check.v1",
+          "Identifier": {
+            "PURL": "pkg:golang/gopkg.in/check.v1@v1.0.0-20201130134442-10cb98267c6c",
+            "UID": "879140b0de68c595"
+          },
+          "Version": "v1.0.0-20201130134442-10cb98267c6c",
+          "Licenses": [
+            "BSD-2-Clause"
+          ],
+          "Indirect": true,
+          "Relationship": "indirect",
+          "AnalyzedBy": "gomod"
+        }
+      ]
+    },
+    {
+      "Target": "go.mod",
+      "Class": "license",
+      "Licenses": [
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "github.com/google/uuid",
+          "FilePath": "go.mod",
+          "Name": "BSD-3-Clause",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        },
+        {
+          "Severity": "MEDIUM",
+          "Category": "reciprocal",
+          "PkgName": "github.com/hashicorp/go-version",
+          "FilePath": "go.mod",
+          "Name": "MPL-2.0",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        },
+        {
+          "Severity": "HIGH",
+          "Category": "restricted",
+          "PkgName": "github.com/juju/ratelimit",
+          "FilePath": "go.mod",
+          "Name": "LGPL-3.0-only",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        },
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "github.com/stretchr/testify",
+          "FilePath": "go.mod",
+          "Name": "MIT",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        },
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "go.yaml.in/yaml/v3",
+          "FilePath": "go.mod",
+          "Name": "Apache-2.0",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        },
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "go.yaml.in/yaml/v3",
+          "FilePath": "go.mod",
+          "Name": "MIT",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        },
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "gopkg.in/check.v1",
+          "FilePath": "go.mod",
+          "Name": "BSD-2-Clause",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        }
+      ]
+    }
+  ]
+}

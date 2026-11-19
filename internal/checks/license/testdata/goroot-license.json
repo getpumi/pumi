@@ -1,0 +1,28 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1f5b6-428f-79ba-b221-29bac9550439",
+  "CreatedAt": "2026-11-19T21:28:44.943640277Z",
+  "ArtifactName": "LICENSE",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "Loose File License(s)",
+      "Class": "license-file",
+      "Licenses": [
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "",
+          "FilePath": "LICENSE",
+          "Name": "BSD-3-Clause",
+          "Text": "",
+          "Confidence": 0.9812206572769953,
+          "Link": "https://spdx.org/licenses/BSD-3-Clause.html"
+        }
+      ]
+    }
+  ]
+}

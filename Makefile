@@ -29,7 +29,7 @@ RANGE ?= origin/main..HEAD
 # tree. CI sets it to the base commit of the pull request.
 BASE ?=
 
-.PHONY: build test lint dco spdx imports image
+.PHONY: build test lint dco spdx imports license notices image
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -71,6 +71,18 @@ spdx:
 # modules that each binary links.
 imports:
 	go run ./internal/checks/cmd/imports
+
+# license runs the dependency license check (decisions 0075 to 0078) on the
+# modules that the five binaries include and on the Go standard library, with
+# the pinned Trivy and the policy and exceptions in .pumi/.
+license:
+	go run ./internal/checks/cmd/license
+
+# notices runs the license check and, when it passes, writes
+# bin/THIRD_PARTY_NOTICES for the release archives and images (decisions 0079
+# and 0130).
+notices:
+	go run ./internal/checks/cmd/license -notices bin/THIRD_PARTY_NOTICES
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

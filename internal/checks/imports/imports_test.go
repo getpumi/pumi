@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -160,7 +161,16 @@ const (
 )
 
 func TestCheckPassesAGoodLayout(t *testing.T) {
-	res, err := Check(t.Context(), fixture(t, nil), fixtureConfig())
+	// The go command skips these files and directories, and so does the
+	// check.
+	res, err := Check(t.Context(), fixture(t, map[string]string{
+		"internal/_old/old.go":          goFile("old", kernel, runner),
+		"internal/.hidden/hidden.go":    goFile("hidden", kernel, runner),
+		"internal/kernel/_skip.go":      goFile("kernel", runner),
+		"internal/kernel/vendor/v/v.go": goFile("v", runner),
+		"internal/nested/go.mod":        "module example.com/nested\n\ngo 1.26.0\n",
+		"internal/nested/nested.go":     goFile("nested", runner),
+	}), fixtureConfig())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,6 +355,50 @@ func TestCheckReportsTheAPIModuleImportingTheCoreInACycle(t *testing.T) {
 	}
 }
 
+// TestCheckReadsFilesThatTheBuildLeavesOut shows that files for another
+// platform or behind a build tag are checked too, so CI on one platform sees
+// every import.
+func TestCheckReadsFilesThatTheBuildLeavesOut(t *testing.T) {
+	other := "windows"
+	if runtime.GOOS == "windows" {
+		other = "linux"
+	}
+	got := findings(t, map[string]string{
+		"internal/runner/runner_" + other + ".go":    goFile("runner", kernel),
+		"internal/runner/integ_test.go":              "//go:build integration\n\n" + goFile("runner", runner+"/only"),
+		"internal/runner/only/only_" + other + ".go": goFile("only", lib),
+		"internal/shared/shared_" + other + ".go":    "//go:build cgo\n\n" + goFile("shared", deep),
+	})
+	assertFindings(t, got, []Finding{
+		{Package: runner, Import: kernel, Problem: componentProblem},
+		{Package: runner + "/only", Import: lib, Problem: "the module example.com/lib is not on the list of the runner component in .pumi/imports.json (decision 0064)"},
+		{Package: shared, Import: deep, Problem: sharedProblem},
+	})
+}
+
+// TestCheckDoesNotBlameATestDependency shows that a package compiled again
+// for another package's test is checked as itself: cmd/core imports the
+// kernel and the runner, which is allowed, and the kernel's external test
+// imports cmd/core/lib, which breaks a rule of its own.
+func TestCheckDoesNotBlameATestDependency(t *testing.T) {
+	got := findings(t, map[string]string{
+		"cmd/core/lib/lib.go":              goFile("lib", kernel, runner),
+		"internal/kernel/kernel_x_test.go": goFile("kernel_test", core+"/cmd/core/lib"),
+	})
+	assertFindings(t, got, []Finding{{Package: kernel, Import: core + "/cmd/core/lib", Problem: toCmdProblem}})
+}
+
+func TestCheckFailsWhenTheAPIPathIsNotTheAPIModule(t *testing.T) {
+	for _, api := range []string{"third", "third/deep"} {
+		cfg := fixtureConfig()
+		cfg.API = api
+		_, err := Check(t.Context(), fixture(t, nil), cfg)
+		if err == nil || !strings.Contains(err.Error(), `"api": `+api+" is the module") {
+			t.Errorf("Check() with api %q: error = %v, want one about the api module", api, err)
+		}
+	}
+}
+
 func TestCheckFailsAPackageInNoGroup(t *testing.T) {
 	got := findings(t, map[string]string{
 		"internal/other/other.go": goFile("other", kernel, runner),
@@ -366,7 +420,7 @@ func TestCheckFailsWhenAListedPathHasNoPackage(t *testing.T) {
 	}
 }
 
-func TestCheckFailsWhenGoListFails(t *testing.T) {
+func TestCheckFailsWhenThePackagesCannotBeLoaded(t *testing.T) {
 	tests := []struct {
 		name   string
 		change map[string]string
@@ -374,7 +428,7 @@ func TestCheckFailsWhenGoListFails(t *testing.T) {
 	}{
 		{"bad imports in the core", map[string]string{"internal/runner/runner.go": "package runner\n\nimport (\n"}, "go list: example.com/core/internal/runner: expected ')'"},
 		{"missing package", map[string]string{"internal/runner/runner.go": goFile("runner", core+"/internal/nothing")}, "go list: example.com/core/internal/nothing: no required module provides package"},
-		{"bad imports in the api", map[string]string{"api/api.go": "package api\n\nimport (\n"}, "go list: example.com/core/api: expected ')'"},
+		{"bad imports in the api", map[string]string{"api/api.go": "package api\n\nimport (\n"}, "api/api.go:3:10: expected ')'"},
 		{"missing api module", map[string]string{"api/go.mod": "", "api/api.go": ""}, "/api: no such file or directory"},
 		{"missing third-party in api", map[string]string{"api/api.go": goFile("api", "example.com/missing")}, "go list: example.com/missing: no required module provides package"},
 	}

@@ -3,7 +3,8 @@
 
 // Package imports is the import graph check (decision 0108). It reads the
 // layout and the third-party allowlists from .pumi/imports.json (decisions
-// 0064 and 0112) and the imports from go list, and fails when:
+// 0064 and 0112), the imports of every Go file from the files themselves,
+// and the packages and modules from go list, and fails when:
 //
 //   - a component imports another component (decision 0063);
 //   - internal/shared imports anything but the standard library, the api
@@ -22,7 +23,8 @@
 //
 // So a package outside cmd never imports more than one component: a
 // component may import none but its own, and internal/shared and
-// internal/checks may import none. Test files count like any other file.
+// internal/checks may import none. Every Go file counts: test files, and
+// files that build constraints leave out on the platform the check runs on.
 //
 // It also reports the third-party modules that each binary under cmd links,
 // direct and indirect, which decision 0064 tracks without a limit.
@@ -93,51 +95,67 @@ type checker struct {
 	cfg  *Config
 	core string
 	api  string
+	// mods holds the build list of the core module, without the core and
+	// the api module.
+	mods []string
 	// pkgs holds each package that go list reported in the core module, by
-	// its import path without a test suffix.
+	// its import path.
 	pkgs map[string]*pkg
-	// findings is a set, because a package and its test variant report the
-	// same import.
+	// findings is a set, so each finding is reported once.
 	findings map[Finding]bool
 }
 
 // Check runs the check on the core module in dir with the configuration cfg.
 // It checks the api module first; when the api module imports the core, it
-// returns only those findings, because such an import can stop go list from
-// loading the core. It returns an error when go list fails or reports a
-// package that it cannot load, other than a package of the core module that
-// the api module imports, and when a place in the configuration holds no
+// returns only those findings, because such an import can make an import
+// cycle that stops go list from loading the core. It returns an error when go
+// list fails or reports a package that it cannot load, other than a package
+// of the core module that the api module imports, when the api path does not
+// hold the api module, and when a place in the configuration holds no
 // package.
 func Check(ctx context.Context, dir string, cfg *Config) (*Result, error) {
+	c := &checker{cfg: cfg, pkgs: map[string]*pkg{}, findings: map[Finding]bool{}}
+	apiDir := filepath.Join(dir, filepath.FromSlash(cfg.API))
+	var err error
+	if c.core, err = mainModule(ctx, dir); err != nil {
+		return nil, err
+	}
+	if c.api, err = mainModule(ctx, apiDir); err != nil {
+		return nil, err
+	}
+	// Without this, a wrong path would make the core its own api module,
+	// and every import of the core would pass.
+	if want := c.core + "/" + cfg.API; c.api != want {
+		return nil, fmt.Errorf(`"api": %s is the module %s, not %s`, cfg.API, c.api, want)
+	}
+	if err := c.checkAPI(apiDir); err != nil {
+		return nil, err
+	}
+	if len(c.findings) > 0 {
+		return &Result{Findings: c.sorted()}, nil
+	}
+	return c.checkCoreModule(ctx, dir)
+}
+
+func (c *checker) checkCoreModule(ctx context.Context, dir string) (*Result, error) {
 	corePkgs, err := list(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	apiPkgs, err := list(ctx, filepath.Join(dir, filepath.FromSlash(cfg.API)))
+	mods, err := buildList(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	c := &checker{cfg: cfg, pkgs: map[string]*pkg{}, findings: map[Finding]bool{}}
-	if c.core, err = mainModule(corePkgs); err != nil {
-		return nil, err
-	}
-	if c.api, err = mainModule(apiPkgs); err != nil {
-		return nil, err
-	}
-	if err := c.checkAPI(apiPkgs); err != nil {
-		return nil, err
-	}
-	// An import of the core from the api module can make an import cycle,
-	// which stops go list from loading the core. Such an import is reported
-	// alone, and the core is checked once it is gone.
-	if len(c.findings) > 0 {
-		return &Result{Findings: c.sorted()}, nil
+	for _, m := range mods {
+		if m != c.core && m != c.api {
+			c.mods = append(c.mods, m)
+		}
 	}
 	if err := c.index(corePkgs); err != nil {
 		return nil, err
 	}
 	res := &Result{}
-	if res.Packages, err = c.checkCore(corePkgs); err != nil {
+	if res.Packages, err = c.checkCore(dir); err != nil {
 		return nil, err
 	}
 	res.Findings = c.sorted()
@@ -166,43 +184,52 @@ func (c *checker) index(pkgs []pkg) error {
 		if p.Error != nil {
 			return fmt.Errorf("go list: %s: %s", p.ImportPath, p.Error.Err)
 		}
-		if _, ok := c.pkgs[base(p.ImportPath)]; !ok || !p.variant() {
-			c.pkgs[base(p.ImportPath)] = p
-		}
+		c.pkgs[p.ImportPath] = p
 	}
 	return nil
 }
 
-// checkCore checks each import of each package of the core module and
-// returns the number of packages, not counting test variants.
-func (c *checker) checkCore(pkgs []pkg) (int, error) {
+// checkCore checks the imports of every Go file of each package of the core
+// module in dir and returns the number of packages.
+func (c *checker) checkCore(dir string) (int, error) {
+	rels, err := packageDirs(dir)
+	if err != nil {
+		return 0, err
+	}
 	used := map[place]bool{}
-	count := 0
-	for i := range pkgs {
-		p := &pkgs[i]
-		if !p.inModule() {
-			continue
+	for _, rel := range rels {
+		path := c.core + "/" + rel
+		if rel == "." {
+			path = c.core
 		}
-		from := c.placeOf(p.owner())
-		if !p.variant() {
-			count++
-			used[from] = true
-		}
+		from := c.placeOf(path)
+		used[from] = true
 		if from.kind == inNone {
-			c.findings[Finding{Package: p.owner(), Problem: c.noPlaceProblem()}] = true
+			c.findings[Finding{Package: path, Problem: c.noPlaceProblem()}] = true
 			continue
 		}
-		for _, imp := range p.Imports {
-			problem, err := c.problem(from, base(imp))
-			if err != nil {
-				return 0, err
-			}
-			if problem != "" {
-				c.findings[Finding{Package: p.owner(), Import: base(imp), Problem: problem}] = true
-			}
+		if err := c.checkPackage(filepath.Join(dir, filepath.FromSlash(rel)), path, from); err != nil {
+			return 0, err
 		}
 	}
-	return count, c.checkUsed(used)
+	return len(rels), c.checkUsed(used)
+}
+
+func (c *checker) checkPackage(dir, path string, from place) error {
+	imps, err := dirImports(dir)
+	if err != nil {
+		return err
+	}
+	for _, imp := range imps {
+		problem, err := c.problem(from, imp)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		if problem != "" {
+			c.findings[Finding{Package: path, Import: imp, Problem: problem}] = true
+		}
+	}
+	return nil
 }
 
 // checkUsed fails when a place in the configuration holds no package, which
@@ -228,22 +255,25 @@ func (c *checker) checkUsed(used map[place]bool) error {
 	return nil
 }
 
-// checkAPI checks that no package of the api module imports a package of
-// the core module. Go resolves such an import only through a go.work file,
-// so go list reports the imported package with an error, which is expected
-// here; any other error fails the check.
-func (c *checker) checkAPI(pkgs []pkg) error {
-	for i := range pkgs {
-		p := &pkgs[i]
-		if p.Error != nil && !c.inCore(base(p.ImportPath)) {
-			return fmt.Errorf("go list: %s: %s", p.ImportPath, p.Error.Err)
+// checkAPI checks that no Go file of the api module in dir imports a
+// package of the core module.
+func (c *checker) checkAPI(dir string) error {
+	rels, err := packageDirs(dir)
+	if err != nil {
+		return err
+	}
+	for _, rel := range rels {
+		path := c.api + "/" + rel
+		if rel == "." {
+			path = c.api
 		}
-		if !p.inModule() {
-			continue
+		imps, err := dirImports(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			return err
 		}
-		for _, imp := range p.Imports {
-			if c.inCore(base(imp)) {
-				c.findings[Finding{Package: p.owner(), Import: base(imp), Problem: apiProblem}] = true
+		for _, imp := range imps {
+			if c.inCore(imp) {
+				c.findings[Finding{Package: path, Import: imp, Problem: apiProblem}] = true
 			}
 		}
 	}
@@ -286,17 +316,26 @@ func (c *checker) problem(from place, imp string) (string, error) {
 	case within(imp, c.core):
 		return c.coreProblem(from, c.placeOf(imp)), nil
 	}
-	p, ok := c.pkgs[imp]
-	switch {
-	case imp == "C":
-		// cgo's pseudo-package.
-		return "", nil
-	case !ok || (!p.Standard && p.Module == nil):
-		return "", fmt.Errorf("go list did not report the module of %s", imp)
-	case p.Standard:
+	if standard(imp) {
 		return "", nil
 	}
-	return c.thirdPartyProblem(from, p.Module.Path), nil
+	mod := c.moduleOf(imp)
+	if mod == "" {
+		return "", fmt.Errorf("no module in the build list provides %s", imp)
+	}
+	return c.thirdPartyProblem(from, mod), nil
+}
+
+// moduleOf returns the third-party module in the build list whose path is
+// the longest prefix of the package path imp, or "".
+func (c *checker) moduleOf(imp string) string {
+	best := ""
+	for _, m := range c.mods {
+		if within(imp, m) && len(m) > len(best) {
+			best = m
+		}
+	}
+	return best
 }
 
 // coreProblem returns the rule that an import from a package in from of a
@@ -366,7 +405,7 @@ func (c *checker) binaries(pkgs []pkg) ([]Binary, error) {
 	var bins []Binary
 	for i := range pkgs {
 		p := &pkgs[i]
-		if !p.inModule() || p.variant() || p.Name != "main" || c.placeOf(p.ImportPath).kind != inCommands {
+		if !p.inModule() || p.Name != "main" || c.placeOf(p.ImportPath).kind != inCommands {
 			continue
 		}
 		bin, err := c.binary(p)

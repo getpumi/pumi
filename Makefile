@@ -39,12 +39,13 @@ test:
 	cd api && go test $(TEST_FLAGS) -coverprofile=../coverage/api.out ./...
 	cd api && GOTOOLCHAIN=$(GO_OLDER) go test $(TEST_FLAGS) -coverprofile=../coverage/api-$(GO_OLDER).out ./...
 
-# lint runs golangci-lint with .golangci.yml on both modules (decision 0109)
-# and the nolint check on the whole repository (decision 0110).
+# lint runs the nolint check on the whole repository (decision 0110), first
+# because it is fast, and then golangci-lint with .golangci.yml on both modules
+# (decision 0109).
 lint:
+	go run ./internal/checks/cmd/nolint
 	golangci-lint run ./...
 	cd api && golangci-lint run --config ../.golangci.yml ./...
-	go run ./internal/checks/cmd/nolint
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

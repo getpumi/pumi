@@ -6,10 +6,13 @@ package lintconfig
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -87,6 +90,30 @@ func names(t *testing.T, out []byte) []string {
 	}
 	slices.Sort(names)
 	return names
+}
+
+// installTools is the script that installs the pinned golangci-lint in the
+// devcontainer image, relative to the directory of this package.
+const installTools = "../../../.devcontainer/install-tools.sh"
+
+// TestGolangciLintVersion checks that the golangci-lint on the PATH is the
+// version pinned in the devcontainer image, which CI uses. With any other
+// version the other tests here could pass or fail for reasons that have
+// nothing to do with .golangci.yml.
+func TestGolangciLintVersion(t *testing.T) {
+	script, err := os.ReadFile(installTools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?m)^GOLANGCI_LINT_VERSION=(\S+)$`).FindSubmatch(script)
+	if m == nil {
+		t.Fatalf("%s sets no GOLANGCI_LINT_VERSION", installTools)
+	}
+	cmd := exec.CommandContext(t.Context(), "golangci-lint", "version", "--short")
+	got := strings.TrimSpace(string(output(t, cmd)))
+	if want := string(m[1]); got != want {
+		t.Errorf("golangci-lint on the PATH is version %s, want %s from %s", got, want, installTools)
+	}
 }
 
 // TestEnabledLinters checks that the configuration enables exactly the 20

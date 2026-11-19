@@ -66,7 +66,8 @@ func Check(fsys fs.FS) ([]Finding, error) {
 	return findings, err
 }
 
-// checkFile returns the nolint directives in one Go source file. The scanner
+// checkFile returns the nolint directives in one Go source file, at their
+// positions in that file, not those that a //line directive sets. The scanner
 // reads comments without parsing the file, so a syntax error does not hide a
 // directive, and a "//nolint" inside a string literal is not a comment.
 func checkFile(name string, src []byte) []Finding {
@@ -83,7 +84,7 @@ func checkFile(name string, src []byte) []Finding {
 		if tok != token.COMMENT || !directive.MatchString(strings.TrimLeft(lit, "/ ")) {
 			continue
 		}
-		p := fset.Position(pos)
+		p := fset.PositionFor(pos, false)
 		findings = append(findings, Finding{Path: name, Line: p.Line, Column: p.Column, Text: lit})
 	}
 }

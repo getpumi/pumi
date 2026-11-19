@@ -45,6 +45,11 @@ func TestCheckFindsDirectives(t *testing.T) {
 			want: []Finding{{Path: "p.go", Line: 4, Column: 1, Text: "//nolint:unused"}},
 		},
 		{
+			name: "after a line directive, which does not move the position",
+			src:  "package p\n\n//line other.y:100\nvar x = 1 //nolint\n",
+			want: []Finding{{Path: "p.go", Line: 4, Column: 11, Text: "//nolint"}},
+		},
+		{
 			name: "two directives",
 			src:  "package p\n\nvar a = 1 //nolint\nvar b = 2 //nolint:gosec\n",
 			want: []Finding{

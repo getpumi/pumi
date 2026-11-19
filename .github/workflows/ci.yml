@@ -4,6 +4,11 @@
 # CI for the core repository. The workflow only sets up and calls make; the
 # pass-or-fail logic is in the repository (decision 0084). Every check job runs
 # in the devcontainer image by digest (decisions 0089 and 0113).
+#
+# A block that more than one job uses is written once, at its first use, with
+# a YAML anchor (&name), and repeated elsewhere with an alias (*name). GitHub
+# Actions does not accept YAML merge keys (<<), so each job still lists its
+# own keys.
 
 name: CI
 
@@ -24,7 +29,8 @@ jobs:
     outputs:
       image: ${{ steps.image.outputs.image }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - &checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Log in to the GitHub container registry
@@ -43,18 +49,16 @@ jobs:
     name: test
     needs: image
     runs-on: ubuntu-24.04
-    permissions:
+    permissions: &check-permissions
       contents: read
       packages: read
-    container:
+    container: &devcontainer
       image: ${{ needs.image.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *checkout
       - run: make test
       - name: Keep the coverage profiles
         if: ${{ !cancelled() }}
@@ -68,18 +72,10 @@ jobs:
     name: lint
     needs: image
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    container:
-      image: ${{ needs.image.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions: *check-permissions
+    container: *devcontainer
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *checkout
       - run: make lint
 
   dco:
@@ -87,14 +83,8 @@ jobs:
     if: ${{ github.event_name == 'pull_request' }}
     needs: image
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    container:
-      image: ${{ needs.image.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions: *check-permissions
+    container: *devcontainer
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,7 +94,8 @@ jobs:
       # The workspace belongs to another user than the container's, and git
       # refuses to read a repository owned by another user unless it is
       # marked safe.
-      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - &safe-directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: make dco RANGE="$BASE_SHA..$HEAD_SHA"
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -114,14 +105,8 @@ jobs:
     name: spdx
     needs: image
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    container:
-      image: ${{ needs.image.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions: *check-permissions
+    container: *devcontainer
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -132,7 +117,8 @@ jobs:
       # The workspace belongs to another user than the container's, and git
       # refuses to read a repository owned by another user unless it is
       # marked safe.
-      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # Marks the workspace safe, as in the dco job.
+      - *safe-directory
       # A pull request's files that are added or changed (decision 0068). The
       # first parent of the merge commit is the commit that the pull request
       # merges into.
@@ -146,34 +132,18 @@ jobs:
     name: imports
     needs: image
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    container:
-      image: ${{ needs.image.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions: *check-permissions
+    container: *devcontainer
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *checkout
       - run: make imports
 
   license:
     name: license
     needs: image
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      packages: read
-    container:
-      image: ${{ needs.image.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions: *check-permissions
+    container: *devcontainer
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - *checkout
       - run: make license

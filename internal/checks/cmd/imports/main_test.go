@@ -15,7 +15,7 @@ import (
 )
 
 const config = `{
-  "api": "api",
+  "api": {"path": "api", "modules": []},
   "components": [
     {"name": "kernel", "path": "internal/kernel", "modules": []},
     {"name": "runner", "path": "internal/runner", "modules": []}
@@ -105,14 +105,14 @@ func TestRunFailsWithoutAConfiguration(t *testing.T) {
 
 func TestRunFailsOnABadConfiguration(t *testing.T) {
 	newModule(t, false)
-	if err := os.WriteFile(".pumi/imports.json", []byte(`{"api": ""}`), 0o600); err != nil {
+	if err := os.WriteFile(".pumi/imports.json", []byte(strings.Replace(config, `"path": "api"`, `"path": ""`, 1)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
 	if code := run(nil, &stdout, &stderr); code != 2 {
 		t.Errorf("run() = %d, want 2", code)
 	}
-	if got, want := stderr.String(), "imports: .pumi/imports.json: \"api\" is empty\n"; got != want {
+	if got, want := stderr.String(), "imports: .pumi/imports.json: \"api.path\" is empty\n"; got != want {
 		t.Errorf("run() wrote stderr %q, want %q", got, want)
 	}
 }

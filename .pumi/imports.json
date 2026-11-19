@@ -1,5 +1,5 @@
 {
-  "api": "api",
+  "api": {"path": "api", "modules": []},
   "components": [
     {"name": "kernel", "path": "internal/kernel", "modules": []},
     {"name": "control plane", "path": "internal/controlplane", "modules": []},

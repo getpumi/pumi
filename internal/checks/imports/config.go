@@ -14,12 +14,12 @@ import (
 
 // Config is .pumi/imports.json (decision 0112): where the api module, each
 // component, internal/shared, internal/checks and cmd are, and the
-// third-party modules each of them may import. internal/shared has no list,
+// third-party modules each of them may import (decisions 0064 and 0125). internal/shared has no list,
 // because it imports only the standard library and the api module (decision
 // 0063). Every path is relative to the root of the core module. Adding a
 // module to a list loosens the gate and is reviewed as such (decision 0064).
 type Config struct {
-	API        string      `json:"api"`
+	API        Group       `json:"api"`
 	Components []Component `json:"components"`
 	Shared     Shared      `json:"shared"`
 	Checks     Group       `json:"checks"`
@@ -39,8 +39,8 @@ type Shared struct {
 	Path string `json:"path"`
 }
 
-// Group is internal/checks or cmd: its directory and the third-party modules
-// its packages may import.
+// Group is the api module, internal/checks or cmd: its directory and the
+// third-party modules its packages may import.
 type Group struct {
 	Path    string   `json:"path"`
 	Modules []Module `json:"modules"`
@@ -74,9 +74,6 @@ func ParseConfig(data []byte) (*Config, error) {
 }
 
 func (cfg *Config) validate() error {
-	if strings.TrimSpace(cfg.API) == "" {
-		return errors.New(`"api" is empty`)
-	}
 	if len(cfg.Components) == 0 {
 		return errors.New(`"components" is empty`)
 	}
@@ -87,6 +84,7 @@ func (cfg *Config) validate() error {
 		name  string
 		group Group
 	}{
+		{"api", cfg.API},
 		{"shared", Group{Path: cfg.Shared.Path, Modules: []Module{}}},
 		{"checks", cfg.Checks},
 		{"commands", cfg.Commands},
@@ -143,7 +141,7 @@ func validateModules(mods []Module) error {
 
 // paths returns every path in the configuration, in the order of the file.
 func (cfg *Config) paths() []string {
-	paths := []string{cfg.API}
+	paths := []string{cfg.API.Path}
 	for _, c := range cfg.Components {
 		paths = append(paths, c.Path)
 	}

@@ -85,7 +85,7 @@ func baseFixture() map[string]string {
 // fixtureConfig is the configuration for the fixture.
 func fixtureConfig() *Config {
 	return &Config{
-		API: "api",
+		API: Group{Path: "api", Modules: []Module{}},
 		Components: []Component{
 			{Name: "kernel", Path: "internal/kernel", Modules: []Module{{Module: lib, Reason: "The kernel needs it."}}},
 			{Name: "runner", Path: "internal/runner", Modules: []Module{}},
@@ -154,8 +154,8 @@ func lines(fs []Finding) string {
 const (
 	componentProblem = "a component never imports another component; only the main packages under cmd/ import more than one component (decision 0063)"
 	sharedProblem    = "internal/shared imports only the standard library, the api module and its own packages (decision 0063)"
-	checksProblem    = "internal/checks imports only the standard library, the api module, internal/shared, its own packages and the modules on its list (decisions 0063 and 0107)"
-	toChecksProblem  = "only packages under internal/checks import internal/checks, because the checks are not part of the binaries (decision 0107)"
+	checksProblem    = "internal/checks imports only the standard library, the api module, internal/shared, its own packages and the modules on its list (decisions 0063, 0107 and 0123)"
+	toChecksProblem  = "only packages under internal/checks import internal/checks, because the checks are not part of the binaries (decisions 0107 and 0123)"
 	toCmdProblem     = "only packages under cmd import packages under cmd, which wire the components together (decision 0063)"
 	noGroupProblem   = "is not in a component, internal/shared, internal/checks or cmd as .pumi/imports.json lists them (decision 0105)"
 )
@@ -204,7 +204,7 @@ func TestCheckCountsAModuleThatABinaryImportsDirectlyAsDirect(t *testing.T) {
 	res, err := Check(t.Context(), fixture(t, map[string]string{
 		"internal/runner/runner.go": goFile("runner", shared, deep),
 	}), &Config{
-		API: "api",
+		API: Group{Path: "api", Modules: []Module{}},
 		Components: []Component{
 			{Name: "kernel", Path: "internal/kernel", Modules: []Module{{Module: lib, Reason: "r"}}},
 			{Name: "runner", Path: "internal/runner", Modules: []Module{{Module: deep, Reason: "r"}}},
@@ -405,11 +405,63 @@ func TestCheckDoesNotBlameATestDependency(t *testing.T) {
 func TestCheckFailsWhenTheAPIPathIsNotTheAPIModule(t *testing.T) {
 	for _, api := range []string{"third", "third/deep"} {
 		cfg := fixtureConfig()
-		cfg.API = api
+		cfg.API.Path = api
 		_, err := Check(t.Context(), fixture(t, nil), cfg)
 		if err == nil || !strings.Contains(err.Error(), `"api": `+api+" is the module") {
 			t.Errorf("Check() with api %q: error = %v, want one about the api module", api, err)
 		}
+	}
+}
+
+// apiGoMod is a go.mod for the fixture's api module that requires the two
+// third-party modules.
+const apiGoMod = `module example.com/core/api
+
+go 1.26.0
+
+require (
+	example.com/deep v0.0.0 // indirect
+	example.com/lib v0.0.0
+)
+
+replace (
+	example.com/deep => ../third/deep
+	example.com/lib => ../third/lib
+)
+`
+
+func TestCheckFailsTheAPIModuleImportingAThirdPartyModuleNotOnItsList(t *testing.T) {
+	got := findings(t, map[string]string{
+		"api/go.mod":                apiGoMod,
+		"api/api.go":                goFile("api", lib),
+		"api/sub/sub_test.go":       goFile("sub_test", deep),
+		"internal/runner/runner.go": goFile("runner", kernel),
+	})
+	// The core is still checked.
+	assertFindings(t, got, []Finding{
+		{Package: apiMod, Import: lib, Problem: "the module example.com/lib is not on the list of the api module in .pumi/imports.json (decisions 0064 and 0125)"},
+		{Package: apiMod + "/sub", Import: deep, Problem: "the module example.com/deep is not on the list of the api module in .pumi/imports.json (decisions 0064 and 0125)"},
+		{Package: runner, Import: kernel, Problem: componentProblem},
+	})
+}
+
+func TestCheckPassesTheAPIModuleImportingAModuleOnItsList(t *testing.T) {
+	cfg := fixtureConfig()
+	cfg.API.Modules = []Module{{Module: lib, Reason: "r"}}
+	res, err := Check(t.Context(), fixture(t, map[string]string{
+		"api/go.mod": apiGoMod,
+		"api/api.go": goFile("api", lib),
+	}), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Findings) != 0 {
+		t.Errorf("findings:\n%s\nwant none", lines(res.Findings))
+	}
+	// cmd/core imports the kernel, which imports the api module and lib.
+	want := []Binary{{Path: "cmd/core", Direct: []string{lib}, Indirect: []string{deep}}}
+	if !reflect.DeepEqual(res.Binaries, want) {
+		t.Errorf("Binaries = %+v, want %+v", res.Binaries, want)
 	}
 }
 
@@ -444,7 +496,7 @@ func TestCheckFailsWhenThePackagesCannotBeLoaded(t *testing.T) {
 		{"missing package", map[string]string{"internal/runner/runner.go": goFile("runner", core+"/internal/nothing")}, "go list: example.com/core/internal/nothing: no required module provides package"},
 		{"bad imports in the api", map[string]string{"api/api.go": "package api\n\nimport (\n"}, "api/api.go:3:10: expected ')'"},
 		{"missing api module", map[string]string{"api/go.mod": "", "api/api.go": ""}, "/api: no such file or directory"},
-		{"missing third-party in api", map[string]string{"api/api.go": goFile("api", "example.com/missing")}, "go list: example.com/missing: no required module provides package"},
+		{"missing third-party in api", map[string]string{"api/api.go": goFile("api", "example.com/missing")}, "example.com/core/api: no module in the build list of the api module provides example.com/missing"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

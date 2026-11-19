@@ -11,7 +11,9 @@ import (
 )
 
 const goodConfig = `{
-  "api": "api",
+  "api": {"path": "api", "modules": [
+    {"module": "example.com/proto", "reason": "The api module needs it."}
+  ]},
   "components": [
     {"name": "kernel", "path": "internal/kernel", "modules": [
       {"module": "example.com/lib", "reason": "The kernel needs it."}
@@ -29,7 +31,7 @@ func TestParseConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := &Config{
-		API: "api",
+		API: Group{Path: "api", Modules: []Module{{Module: "example.com/proto", Reason: "The api module needs it."}}},
 		Components: []Component{
 			{Name: "kernel", Path: "internal/kernel", Modules: []Module{{Module: "example.com/lib", Reason: "The kernel needs it."}}},
 			{Name: "runner", Path: "internal/runner", Modules: []Module{}},
@@ -66,7 +68,7 @@ func TestParseConfigReadsTheRepositoryFile(t *testing.T) {
 }
 
 func TestParseConfigRejectsNoComponents(t *testing.T) {
-	data := `{"api": "api", "components": [], "shared": {"path": "s"}, "checks": {"path": "c", "modules": []}, "commands": {"path": "cmd", "modules": []}}`
+	data := `{"api": {"path": "api", "modules": []}, "components": [], "shared": {"path": "s"}, "checks": {"path": "c", "modules": []}, "commands": {"path": "cmd", "modules": []}}`
 	_, err := ParseConfig([]byte(data))
 	if err == nil || !strings.Contains(err.Error(), `"components" is empty`) {
 		t.Errorf("ParseConfig() error = %v, want one about empty components", err)
@@ -77,8 +79,17 @@ func TestParseConfigRejectsBadFiles(t *testing.T) {
 	tests := []struct {
 		name, old, new, want string
 	}{
-		{"unknown field", `"api": "api",`, `"api": "api", "extra": 1,`, `unknown field "extra"`},
-		{"missing api", `"api": "api",`, ``, `"api" is empty`},
+		{"unknown field", `"components": [`, `"extra": 1, "components": [`, `unknown field "extra"`},
+		{"missing api", `"api": {"path": "api", "modules": [
+    {"module": "example.com/proto", "reason": "The api module needs it."}
+  ]},`, ``, `"api.path" is empty`},
+		{"api as a string", `"api": {"path": "api", "modules": [
+    {"module": "example.com/proto", "reason": "The api module needs it."}
+  ]},`, `"api": "api",`, `cannot unmarshal string`},
+		{"missing api modules", `{"path": "api", "modules": [
+    {"module": "example.com/proto", "reason": "The api module needs it."}
+  ]}`, `{"path": "api"}`, `"api.modules" is missing`},
+		{"empty api reason", `"reason": "The api module needs it."`, `"reason": ""`, `api: module 1: "reason" is empty`},
 		{"missing shared", `"shared": {"path": "internal/shared"},`, ``, `"shared.path" is empty`},
 		{"missing checks", `"checks": {"path": "internal/checks", "modules": []},`, ``, `"checks.path" is empty`},
 		{"missing commands", `,

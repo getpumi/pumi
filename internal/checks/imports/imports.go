@@ -11,10 +11,10 @@
 //     module and its own packages (decision 0063);
 //   - internal/checks imports a component or a package under cmd, or a
 //     package outside internal/checks imports internal/checks, which is not
-//     part of the binaries (decision 0107);
+//     part of the binaries (decisions 0107 and 0123);
 //   - a package outside cmd imports a package under cmd (decision 0063);
 //   - a package imports a third-party module that is not on its list
-//     (decision 0064);
+//     (decision 0064), the api module included (decision 0125);
 //   - the api module imports anything from the core module (decision 0105);
 //     such an import can make an import cycle that stops go list from
 //     loading the core, so it is reported alone;
@@ -115,7 +115,7 @@ type checker struct {
 // package.
 func Check(ctx context.Context, dir string, cfg *Config) (*Result, error) {
 	c := &checker{cfg: cfg, pkgs: map[string]*pkg{}, findings: map[Finding]bool{}}
-	apiDir := filepath.Join(dir, filepath.FromSlash(cfg.API))
+	apiDir := filepath.Join(dir, filepath.FromSlash(cfg.API.Path))
 	var err error
 	if c.core, err = mainModule(ctx, dir); err != nil {
 		return nil, err
@@ -125,13 +125,14 @@ func Check(ctx context.Context, dir string, cfg *Config) (*Result, error) {
 	}
 	// Without this, a wrong path would make the core its own api module,
 	// and every import of the core would pass.
-	if want := c.core + "/" + cfg.API; c.api != want {
-		return nil, fmt.Errorf(`"api": %s is the module %s, not %s`, cfg.API, c.api, want)
+	if want := c.core + "/" + cfg.API.Path; c.api != want {
+		return nil, fmt.Errorf(`"api": %s is the module %s, not %s`, cfg.API.Path, c.api, want)
 	}
-	if err := c.checkAPI(apiDir); err != nil {
+	importsCore, err := c.checkAPI(ctx, apiDir)
+	if err != nil {
 		return nil, err
 	}
-	if len(c.findings) > 0 {
+	if importsCore {
 		return &Result{Findings: c.sorted()}, nil
 	}
 	return c.checkCoreModule(ctx, dir)
@@ -198,10 +199,7 @@ func (c *checker) checkCore(dir string) (int, error) {
 	}
 	used := map[place]bool{}
 	for _, rel := range rels {
-		path := c.core + "/" + rel
-		if rel == "." {
-			path = c.core
-		}
+		path := packagePath(c.core, rel)
 		from := c.placeOf(path)
 		used[from] = true
 		if from.kind == inNone {
@@ -255,29 +253,77 @@ func (c *checker) checkUsed(used map[place]bool) error {
 	return nil
 }
 
-// checkAPI checks that no Go file of the api module in dir imports a
-// package of the core module.
-func (c *checker) checkAPI(dir string) error {
+// checkAPI checks the imports of every Go file of the api module in dir: it
+// imports nothing from the core module, and only the third-party modules on
+// its list (decision 0125). It reports whether any file imports the core.
+func (c *checker) checkAPI(ctx context.Context, dir string) (bool, error) {
+	mods, err := buildList(ctx, dir)
+	if err != nil {
+		return false, err
+	}
 	rels, err := packageDirs(dir)
 	if err != nil {
-		return err
+		return false, err
 	}
+	importsCore := false
 	for _, rel := range rels {
-		path := c.api + "/" + rel
-		if rel == "." {
-			path = c.api
-		}
-		imps, err := dirImports(filepath.Join(dir, filepath.FromSlash(rel)))
+		core, err := c.checkAPIPackage(mods, filepath.Join(dir, filepath.FromSlash(rel)), packagePath(c.api, rel))
 		if err != nil {
-			return err
+			return false, err
 		}
-		for _, imp := range imps {
-			if c.inCore(imp) {
-				c.findings[Finding{Package: path, Import: imp, Problem: apiProblem}] = true
-			}
+		importsCore = importsCore || core
+	}
+	return importsCore, nil
+}
+
+// checkAPIPackage checks the package path of the api module in dir and
+// reports whether it imports the core.
+func (c *checker) checkAPIPackage(mods []string, dir, path string) (bool, error) {
+	imps, err := dirImports(dir)
+	if err != nil {
+		return false, err
+	}
+	importsCore := false
+	for _, imp := range imps {
+		problem, core, err := c.apiProblem(mods, imp)
+		if err != nil {
+			return false, fmt.Errorf("%s: %w", path, err)
+		}
+		if problem != "" {
+			importsCore = importsCore || core
+			c.findings[Finding{Package: path, Import: imp, Problem: problem}] = true
 		}
 	}
-	return nil
+	return importsCore, nil
+}
+
+// packagePath returns the import path of the package in the directory rel
+// of the module mod.
+func packagePath(mod, rel string) string {
+	if rel == "." {
+		return mod
+	}
+	return mod + "/" + rel
+}
+
+// apiProblem returns the rule that an import from the api module breaks, or
+// "", and whether the import is of the core module. mods is the api module's
+// build list.
+func (c *checker) apiProblem(mods []string, imp string) (string, bool, error) {
+	switch {
+	case c.inCore(imp):
+		return apiProblem, true, nil
+	case within(imp, c.api), standard(imp):
+		return "", false, nil
+	}
+	mod := longestModule(mods, imp, c.api)
+	if mod == "" {
+		return "", false, fmt.Errorf("no module in the build list of the api module provides %s", imp)
+	}
+	if slices.ContainsFunc(c.cfg.API.Modules, func(m Module) bool { return m.Module == mod }) {
+		return "", false, nil
+	}
+	return fmt.Sprintf("the module %s is not on the list of the api module in .pumi/imports.json (decisions 0064 and 0125)", mod), false, nil
 }
 
 // inCore reports whether path is a package of the core module.
@@ -326,12 +372,18 @@ func (c *checker) problem(from place, imp string) (string, error) {
 	return c.thirdPartyProblem(from, mod), nil
 }
 
-// moduleOf returns the third-party module in the build list whose path is
-// the longest prefix of the package path imp, or "".
+// moduleOf returns the third-party module in the core's build list whose
+// path is the longest prefix of the package path imp, or "".
 func (c *checker) moduleOf(imp string) string {
+	return longestModule(c.mods, imp, "")
+}
+
+// longestModule returns the module in mods, other than skip, whose path is
+// the longest prefix of the package path imp, or "".
+func longestModule(mods []string, imp, skip string) string {
 	best := ""
-	for _, m := range c.mods {
-		if within(imp, m) && len(m) > len(best) {
+	for _, m := range mods {
+		if m != skip && within(imp, m) && len(m) > len(best) {
 			best = m
 		}
 	}
@@ -352,7 +404,7 @@ func (c *checker) coreProblem(from, to place) string {
 	case from.kind == inChecks:
 		return c.checksProblem()
 	case to.kind == inChecks:
-		return fmt.Sprintf("only packages under %[1]s import %[1]s, because the checks are not part of the binaries (decision 0107)", c.cfg.Checks.Path)
+		return fmt.Sprintf("only packages under %[1]s import %[1]s, because the checks are not part of the binaries (decisions 0107 and 0123)", c.cfg.Checks.Path)
 	case to.kind == inCommands:
 		return fmt.Sprintf("only packages under %[1]s import packages under %[1]s, which wire the components together (decision 0063)", c.cfg.Commands.Path)
 	case from.kind == inCommands:
@@ -390,7 +442,7 @@ func (c *checker) sharedProblem() string {
 }
 
 func (c *checker) checksProblem() string {
-	return c.cfg.Checks.Path + " imports only the standard library, the api module, " + c.cfg.Shared.Path + ", its own packages and the modules on its list (decisions 0063 and 0107)"
+	return c.cfg.Checks.Path + " imports only the standard library, the api module, " + c.cfg.Shared.Path + ", its own packages and the modules on its list (decisions 0063, 0107 and 0123)"
 }
 
 func (c *checker) noPlaceProblem() string {

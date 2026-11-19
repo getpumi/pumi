@@ -29,7 +29,7 @@ RANGE ?= origin/main..HEAD
 # tree. CI sets it to the base commit of the pull request.
 BASE ?=
 
-.PHONY: build test lint dco spdx image
+.PHONY: build test lint dco spdx imports image
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -65,6 +65,12 @@ dco:
 # or, when BASE is set, on the files added or changed between BASE and HEAD.
 spdx:
 	go run ./internal/checks/cmd/spdx $(if $(BASE),"$(BASE)")
+
+# imports runs the import graph check (decision 0108) with the rules and the
+# third-party allowlists in .pumi/imports.json, and reports the third-party
+# modules that each binary links.
+imports:
+	go run ./internal/checks/cmd/imports
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

@@ -1,0 +1,13 @@
+{
+  "api": {"path": "api", "modules": []},
+  "components": [
+    {"name": "kernel", "path": "internal/kernel", "modules": []},
+    {"name": "control plane", "path": "internal/controlplane", "modules": []},
+    {"name": "runner", "path": "internal/runner", "modules": []},
+    {"name": "gateway", "path": "internal/gateway", "modules": []},
+    {"name": "CLI", "path": "internal/cli", "modules": []}
+  ],
+  "shared": {"path": "internal/shared"},
+  "checks": {"path": "internal/checks", "modules": []},
+  "commands": {"path": "cmd", "modules": []}
+}

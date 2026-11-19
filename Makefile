@@ -20,7 +20,11 @@ GO_OLDER ?= $(PUMI_GO_OLDER)
 # devcontainer images (decision 0113).
 IMAGE ?= ghcr.io/getpumi/pumi-devcontainer
 
-.PHONY: build test lint image
+# RANGE is the range of commits that make dco checks. CI sets it to the base
+# and head commits of the pull request.
+RANGE ?= origin/main..HEAD
+
+.PHONY: build test lint dco image
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -46,6 +50,11 @@ lint:
 	go run ./internal/checks/cmd/nolint
 	golangci-lint run ./...
 	cd api && golangci-lint run --config ../.golangci.yml ./...
+
+# dco runs the DCO check (decisions 0070 and 0081) on the commits in RANGE,
+# merge commits included.
+dco:
+	go run ./internal/checks/cmd/dco "$(RANGE)"
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

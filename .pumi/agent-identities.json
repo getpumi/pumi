@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "Claude",
+      "email": "noreply@anthropic.com",
+      "reason": "Claude Code commits with this identity in Pumi's project threads, where the agent is the git author of the commits it writes (decision 0081). Each such commit carries the Signed-off-by line of the person who asked for the work (decision 0082)."
+    }
+  ]
+}

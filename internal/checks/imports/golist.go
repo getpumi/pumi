@@ -70,11 +70,13 @@ func decodeAll[T any](data []byte) ([]T, error) {
 }
 
 // list returns every package of the module in dir and every package they
-// depend on in the build for this platform. -e reports a package that cannot
+// depend on in the build for this platform. -buildvcs=false stops go list
+// from reading the git status of the main packages, which the check does
+// not need and which fails where git cannot read the repository. -e reports a package that cannot
 // be loaded as a package with an Error instead of stopping, so the caller
 // decides which errors matter.
 func list(ctx context.Context, dir string) ([]pkg, error) {
-	out, err := goList(dir, exec.CommandContext(ctx, "go", "list", "-e", "-deps", "-json", "./..."))
+	out, err := goList(dir, exec.CommandContext(ctx, "go", "list", "-e", "-deps", "-buildvcs=false", "-json", "./..."))
 	if err != nil {
 		return nil, err
 	}

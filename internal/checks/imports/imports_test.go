@@ -222,6 +222,20 @@ func TestCheckCountsAModuleThatABinaryImportsDirectlyAsDirect(t *testing.T) {
 	}
 }
 
+// TestCheckDoesNotNeedGit shows that the check runs where git cannot read
+// the repository, as in CI's container, where the workspace belongs to
+// another user: the .git directory here is empty, so git fails. go list
+// would read the git status of the main packages to stamp the build.
+func TestCheckDoesNotNeedGit(t *testing.T) {
+	dir := fixture(t, nil)
+	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(t.Context(), dir, fixtureConfig()); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCheckFailsAComponentThatImportsAnotherComponent(t *testing.T) {
 	got := findings(t, map[string]string{
 		"internal/runner/runner.go": goFile("runner", shared, kernel),

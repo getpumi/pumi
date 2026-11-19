@@ -1,0 +1,28 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1f5b6-4520-7223-a1ce-681a2c4ded37",
+  "CreatedAt": "2026-11-19T21:28:45.600143984Z",
+  "ArtifactName": "LICENSE",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "Loose File License(s)",
+      "Class": "license-file",
+      "Licenses": [
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "",
+          "FilePath": "LICENSE",
+          "Name": "MIT",
+          "Text": "",
+          "Confidence": 1,
+          "Link": "https://spdx.org/licenses/MIT.html"
+        }
+      ]
+    }
+  ]
+}

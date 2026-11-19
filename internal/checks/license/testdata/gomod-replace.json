@@ -1,0 +1,62 @@
+{
+  "SchemaVersion": 2,
+  "Trivy": {
+    "Version": "0.76.2"
+  },
+  "ReportID": "01a1f5b6-f777-7981-9fb8-fbf83154b2eb",
+  "CreatedAt": "2026-11-19T21:29:31.255627611Z",
+  "ArtifactName": "go.mod",
+  "ArtifactType": "filesystem",
+  "Results": [
+    {
+      "Target": "go.mod",
+      "Class": "lang-pkgs",
+      "Type": "gomod",
+      "Packages": [
+        {
+          "ID": "example.com/rep",
+          "Name": "example.com/rep",
+          "Identifier": {
+            "PURL": "pkg:golang/example.com/rep",
+            "UID": "264983be4cc57eb0"
+          },
+          "Relationship": "root",
+          "DependsOn": [
+            "github.com/gofrs/uuid@v4.4.0+incompatible"
+          ],
+          "AnalyzedBy": "gomod"
+        },
+        {
+          "ID": "github.com/gofrs/uuid@v4.4.0+incompatible",
+          "Name": "github.com/gofrs/uuid",
+          "Identifier": {
+            "PURL": "pkg:golang/github.com/gofrs/uuid@v4.4.0%2Bincompatible",
+            "UID": "74cd6837f188e81d"
+          },
+          "Version": "v4.4.0+incompatible",
+          "Licenses": [
+            "MIT"
+          ],
+          "Relationship": "direct",
+          "AnalyzedBy": "gomod"
+        }
+      ]
+    },
+    {
+      "Target": "go.mod",
+      "Class": "license",
+      "Licenses": [
+        {
+          "Severity": "LOW",
+          "Category": "notice",
+          "PkgName": "github.com/gofrs/uuid",
+          "FilePath": "go.mod",
+          "Name": "MIT",
+          "Text": "",
+          "Confidence": 1,
+          "Link": ""
+        }
+      ]
+    }
+  ]
+}

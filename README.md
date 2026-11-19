@@ -1,3 +1,8 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+SPDX-FileCopyrightText: The Pumi Authors
+-->
+
 # Pumi
 
 Pumi is an open-source, spec-driven framework for working with coding agents. It drives the agent harness a project already uses through small adapters, and governs the work with stages, gates, independent review, budgets and metrics, so that every merge carries a record of why it was allowed.

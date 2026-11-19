@@ -16,6 +16,7 @@ The design lives in [getpumi/design](https://github.com/getpumi/design). Read it
 - Read and change the Status through GitHub's MCP server, as described in the design's [development environment](https://github.com/getpumi/design/blob/main/components/development-environment.md#tracking-work). api.github.com does not work for projects from a cloud thread ([0093](https://github.com/getpumi/design/blob/main/decisions/0093-github-projects-through-mcp-server.md)).
 - Set the item to In Review when you open the pull request.
 - Close the issue through the pull request description ("Closes #n"). Never put a closing keyword in a commit pushed directly to `main`, because it closes the issue at once.
+- The issue's acceptance criteria are the specification. Do not commit plans, specs, design notes or other files that record how a change was worked out; the pull request description holds the plan and the evidence. Some agent tools commit such files by default, such as the Superpowers brainstorming and plan-writing skills under `docs/superpowers/`. This holds until [design #39](https://github.com/getpumi/design/issues/39) decides who owns Pumi's own specs ([0120](https://github.com/getpumi/design/blob/main/decisions/0120-no-process-files.md)).
 
 ## Layout
 
@@ -60,7 +61,9 @@ The supported development environment is the repository's devcontainer, on Linux
 
 ## Tests
 
+- For a change to code, write the test first and run it to see it fail because the behavior is missing, then write the code that makes it pass. Show the failing run in the pull request, because the final diff cannot show the order. This does not cover files with no behavior to test, such as go.mod, the Makefile or this file ([0119](https://github.com/getpumi/design/blob/main/decisions/0119-test-first.md)).
 - A test failure is a real defect. Reproduce it and fix it. Never run the tests again in the hope that a failure goes away. `make test` runs the tests in a random order and, when a test fails, prints the order's seed as `-test.shuffle <seed>`. Where the order matters, repeat it with `make test SHUFFLE=<seed>`.
+- A pull request shows the output of every make target it affects that CI does not run ([0121](https://github.com/getpumi/design/blob/main/decisions/0121-show-output-ci-does-not-run.md)).
 
 ## Files
 
@@ -91,3 +94,12 @@ The supported development environment is the repository's devcontainer, on Linux
   Assisted-by: <harness> (<model>)
   Signed-off-by: Jane Doe <jane@example.com>
   ```
+
+## Keeping this file current
+
+When you learn a fact that the next agent needs in order to work here, such as how a tool behaves or which network host works, add it under "Facts" in the pull request where you learned it. Say when a fact holds only in one environment, such as cloud threads or one harness. Do not add a rule, meaning something that must or must not be done: a new rule needs the maintainer's decision and a decision record in getpumi/design first ([0122](https://github.com/getpumi/design/blob/main/decisions/0122-agents-md-facts.md)).
+
+## Facts
+
+- Cloud threads only: go.dev is blocked, so its release list cannot be read. `https://proxy.golang.org/golang.org/toolchain/@v/list` lists every Go release, and `GOTOOLCHAIN=auto` downloads the toolchain in a go.mod `toolchain` line from the module proxy.
+- revive's default `blank-imports` rule rejects a blank import in a non-`main` package even with a comment above a single-line import, and accepts one in a test file. The blank import of the `api` module that keeps its requirement in go.mod is in `internal/shared/doc_test.go` for that reason.

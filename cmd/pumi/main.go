@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: The Pumi Authors
 
-// Command pumi is the Pumi command-line interface. It also runs Pumi in embedded mode, with every component in one process.
+// Command pumi is the Pumi command-line interface. It also runs Pumi in
+// embedded mode, with every component in one process.
 //
 // A main package under cmd/ is the only kind of package that may import more
 // than one component, and only to wire them together. For now it prints its

@@ -12,9 +12,10 @@ The design lives in [getpumi/design](https://github.com/getpumi/design). Read it
 ## Starting work
 
 - Start only an issue whose item in the [Pumi GitHub project](https://github.com/orgs/getpumi/projects/5) has the Status Ready. Ready is the maintainer's approval. Do not start an item in any other Status ([0118](https://github.com/getpumi/design/blob/main/decisions/0118-ready-is-approval.md)).
+- Moving an item to Ready does not start work by itself. Start a Ready item only when the maintainer says to start it.
+- Read and change the Status through GitHub's MCP server, as described in the design's [development environment](https://github.com/getpumi/design/blob/main/components/development-environment.md#tracking-work). api.github.com does not work for projects from a cloud thread ([0093](https://github.com/getpumi/design/blob/main/decisions/0093-github-projects-through-mcp-server.md)).
 - Set the item to In Review when you open the pull request.
 - Close the issue through the pull request description ("Closes #n"). Never put a closing keyword in a commit pushed directly to `main`, because it closes the issue at once.
-- The issue's acceptance criteria are the specification. Do not commit plans, design notes or other process files; the pull request description holds the plan and the evidence.
 
 ## Layout
 
@@ -31,6 +32,8 @@ In the core module:
 - `internal/checks/<name>/` holds the logic of the project's own checks, and `internal/checks/cmd/<name>/` holds the `main` package that make runs with `go run`. The checks are not part of the binaries ([0107](https://github.com/getpumi/design/blob/main/decisions/0107-checks-in-internal-checks.md)).
 - `tools/` holds one module file per pinned Go tool, run with `go tool -modfile` ([0086](https://github.com/getpumi/design/blob/main/decisions/0086-tool-pinning.md)).
 - `.pumi/` holds the plain JSON files that the checks read ([0112](https://github.com/getpumi/design/blob/main/decisions/0112-check-config-json.md)).
+
+`internal/checks/`, `tools/`, `.pumi/`, `.golangci.yml` and the check targets of the Makefile are added by later issues in epic E1 ([#1](https://github.com/getpumi/pumi/issues/1)).
 
 The core's go.mod requires `getpumi.dev/pumi/api` and replaces it with `./api`, so the core always builds against the `api` code in the same commit, and a change to both is one pull request ([0106](https://github.com/getpumi/design/blob/main/decisions/0106-api-replace-directive.md)).
 
@@ -57,9 +60,7 @@ The supported development environment is the repository's devcontainer, on Linux
 
 ## Tests
 
-- Write the test first and watch it fail before you write the code that makes it pass.
-- A test failure is a real defect. Reproduce it and fix it; never run the tests again until they pass. `make test` runs the tests in a random order and, when a test fails, prints the order's seed as `-test.shuffle <seed>`. Where the order matters, repeat it with `make test SHUFFLE=<seed>`.
-- Show the output of `make build` and `make test` in the pull request until CI runs them.
+- A test failure is a real defect. Reproduce it and fix it. Never run the tests again in the hope that a failure goes away. `make test` runs the tests in a random order and, when a test fails, prints the order's seed as `-test.shuffle <seed>`. Where the order matters, repeat it with `make test SHUFFLE=<seed>`.
 
 ## Files
 
@@ -90,7 +91,3 @@ The supported development environment is the repository's devcontainer, on Linux
   Assisted-by: <harness> (<model>)
   Signed-off-by: Jane Doe <jane@example.com>
   ```
-
-## Keeping these instructions current
-
-If you learn something the next agent needs in order to work here, add it to this file in the pull request where you learned it.

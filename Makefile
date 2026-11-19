@@ -42,18 +42,21 @@ test:
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of
 # that directory (decision 0113). It builds and pushes the image first when the
-# registry does not have that tag. Everything except the reference goes to
-# stderr. It needs a docker login to ghcr.io.
+# registry reports that the tag is not found; any other registry error stops
+# it, so an existing tag is never rebuilt. Everything except the reference goes
+# to stderr. It needs a docker login to ghcr.io.
 image:
 	@test -z "$$(git status --porcelain -- .devcontainer)" || { echo "make image: .devcontainer/ has uncommitted changes" >&2; exit 1; }
 	@ref=$(IMAGE):$$(git rev-parse HEAD:.devcontainer) && \
-	if docker buildx imagetools inspect "$$ref" >/dev/null 2>&1; then \
+	if err=$$(docker buildx imagetools inspect "$$ref" 2>&1 >/dev/null); then \
 		echo "make image: found $$ref" >&2; \
-	else \
+	elif echo "$$err" | grep -q ': not found$$'; then \
 		echo "make image: building $$ref" >&2 && \
 		docker build --tag "$$ref" .devcontainer >&2 && \
 		docker push "$$ref" >&2; \
+	else \
+		echo "$$err" >&2; exit 1; \
 	fi && \
-	digest=$$(docker buildx imagetools inspect "$$ref" | awk '$$1 == "Digest:" { print $$2 }') && \
-	test -n "$$digest" && \
+	digest=$$(docker buildx imagetools inspect "$$ref" --format '{{.Manifest.Digest}}') && \
+	echo "$$digest" | grep -Eqx 'sha256:[0-9a-f]{64}' && \
 	echo "$(IMAGE)@$$digest"

@@ -20,7 +20,7 @@ GO_OLDER ?= $(PUMI_GO_OLDER)
 # devcontainer images (decision 0113).
 IMAGE ?= ghcr.io/getpumi/pumi-devcontainer
 
-.PHONY: build test image
+.PHONY: build test lint image
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -38,6 +38,14 @@ test:
 	go test $(TEST_FLAGS) -coverprofile=coverage/core.out ./...
 	cd api && go test $(TEST_FLAGS) -coverprofile=../coverage/api.out ./...
 	cd api && GOTOOLCHAIN=$(GO_OLDER) go test $(TEST_FLAGS) -coverprofile=../coverage/api-$(GO_OLDER).out ./...
+
+# lint runs the nolint check on the whole repository (decision 0110), first
+# because it is fast, and then golangci-lint with .golangci.yml on both modules
+# (decision 0109).
+lint:
+	go run ./internal/checks/cmd/nolint
+	golangci-lint run ./...
+	cd api && golangci-lint run --config ../.golangci.yml ./...
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

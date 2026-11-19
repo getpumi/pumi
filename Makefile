@@ -24,7 +24,12 @@ IMAGE ?= ghcr.io/getpumi/pumi-devcontainer
 # and head commits of the pull request.
 RANGE ?= origin/main..HEAD
 
-.PHONY: build test lint dco image
+# BASE is the commit against which make spdx checks only the files added or
+# changed up to HEAD. When it is empty, make spdx checks every file of the
+# tree. CI sets it to the base commit of the pull request.
+BASE ?=
+
+.PHONY: build test lint dco spdx image
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -55,6 +60,11 @@ lint:
 # merge commits included.
 dco:
 	go run ./internal/checks/cmd/dco "$(RANGE)"
+
+# spdx runs the SPDX header check (decision 0068) on every file of the tree,
+# or, when BASE is set, on the files added or changed between BASE and HEAD.
+spdx:
+	go run ./internal/checks/cmd/spdx $(if $(BASE),"$(BASE)")
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

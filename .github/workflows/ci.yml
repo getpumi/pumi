@@ -109,3 +109,35 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+  spdx:
+    name: spdx
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    container:
+      image: ${{ needs.image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # A pull request checks out its merge commit. The check compares it
+          # with its first parent, so it needs two commits.
+          fetch-depth: 2
+      # The workspace belongs to another user than the container's, and git
+      # refuses to read a repository owned by another user unless it is
+      # marked safe.
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # A pull request's files that are added or changed (decision 0068). The
+      # first parent of the merge commit is the commit that the pull request
+      # merges into.
+      - if: ${{ github.event_name == 'pull_request' }}
+        run: make spdx BASE=HEAD^1
+      # Every file, after a merge to main.
+      - if: ${{ github.event_name != 'pull_request' }}
+        run: make spdx

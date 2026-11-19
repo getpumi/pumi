@@ -105,11 +105,14 @@ const mergeHint = `. This is a merge commit. If GitHub's "Update branch" button 
 // Check returns a finding for each commit that fails the check, in the order
 // of commits. agents is the list of agent identities.
 //
-// A commit's author is a listed agent when both the name and the email match
-// an identity. A Signed-off-by line is from a person when its email is not the
-// email of any listed identity, so that an agent cannot sign off for a person
-// by using another name. Emails are compared without regard to case; names
-// must match exactly.
+// An identity is recognized by its email alone, compared without regard to
+// case, so that an agent cannot change its name to pass as a person: a commit's
+// author is a listed agent when its email is the email of a listed identity,
+// and a Signed-off-by line is from a person when it has the form
+// "Name <email>" and its email is not the email of any listed identity. The
+// name in the file is for the reader. For a commit by anyone else, the name
+// and the email of a Signed-off-by line must both match the author; names must
+// match exactly.
 func Check(commits []Commit, agents []Identity) []Finding {
 	var findings []Finding
 	for _, c := range commits {
@@ -129,9 +132,9 @@ func Check(commits []Commit, agents []Identity) []Finding {
 func check(c Commit, agents []Identity) string {
 	signoffs := signoffs(c.Message)
 	author := fmt.Sprintf("%s <%s>", c.AuthorName, c.AuthorEmail)
-	if isAgent(c.AuthorName, c.AuthorEmail, agents) {
+	if isAgentEmail(c.AuthorEmail, agents) {
 		for _, s := range signoffs {
-			if !isAgentEmail(s.email, agents) {
+			if s.email != "" && !isAgentEmail(s.email, agents) {
 				return ""
 			}
 		}
@@ -146,15 +149,6 @@ func check(c Commit, agents []Identity) string {
 		}
 	}
 	return "no Signed-off-by line matches the author " + author
-}
-
-func isAgent(name, email string, agents []Identity) bool {
-	for _, a := range agents {
-		if a.Name == name && strings.EqualFold(a.Email, email) {
-			return true
-		}
-	}
-	return false
 }
 
 func isAgentEmail(email string, agents []Identity) bool {

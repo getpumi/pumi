@@ -34,6 +34,8 @@ func TestCheck(t *testing.T) {
 	merge.Parents = append(merge.Parents, "2222222222222222222222222222222222222222")
 	signedMerge := commit(jane, "Merge branch 'main' into topic\n\nSigned-off-by: "+jane+"\n")
 	signedMerge.Parents = merge.Parents
+	agentMerge := commit(agent, "Merge branch 'main' into topic\n\nSigned-off-by: "+agent+"\n")
+	agentMerge.Parents = merge.Parents
 
 	tests := []struct {
 		name   string
@@ -102,13 +104,34 @@ func TestCheck(t *testing.T) {
 			want:   "the author Claude <noreply@anthropic.com> is a listed agent identity, and no Signed-off-by line is from a person",
 		},
 		{
-			name:   "agent email under a name that is not listed",
+			name:   "listed agent with a malformed sign-off",
+			commit: commit(agent, "Add a feature\n\nSigned-off-by: nobody\n"),
+			want:   "the author Claude <noreply@anthropic.com> is a listed agent identity, and no Signed-off-by line is from a person",
+		},
+		{
+			name:   "listed agent with an empty sign-off and one with text after the email",
+			commit: commit(agent, "Add a feature\n\nSigned-off-by:\nSigned-off-by: Jane Doe <jane@example.com>, extra\n"),
+			want:   "the author Claude <noreply@anthropic.com> is a listed agent identity, and no Signed-off-by line is from a person",
+		},
+		{
+			name:   "agent email under another name with a person's sign-off",
 			commit: commit("Claude Code <noreply@anthropic.com>", "Add a feature\n\nSigned-off-by: "+jane+"\n"),
-			want:   "no Signed-off-by line matches the author Claude Code <noreply@anthropic.com>",
+		},
+		{
+			name:   "agent email under another name with only its own sign-off",
+			commit: commit("claude <NoReply@anthropic.com>", "Add a feature\n\nSigned-off-by: claude <NoReply@anthropic.com>\n"),
+			want:   "the author claude <NoReply@anthropic.com> is a listed agent identity, and no Signed-off-by line is from a person",
 		},
 		{
 			name:   "signed merge commit",
 			commit: signedMerge,
+		},
+		{
+			name:   "agent merge commit with only its own sign-off",
+			commit: agentMerge,
+			want: "the author Claude <noreply@anthropic.com> is a listed agent identity, and no Signed-off-by line is from a person. " +
+				`This is a merge commit. If GitHub's "Update branch" button made it, remove it and update the branch with "Update with rebase" instead, ` +
+				"because GitHub's merge commit has no sign-off. An agent updates a branch with git merge --signoff",
 		},
 		{
 			name:   "merge commit without a sign-off",

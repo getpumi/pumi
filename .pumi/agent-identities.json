@@ -4,6 +4,16 @@
       "name": "Claude",
       "email": "noreply@anthropic.com",
       "reason": "Claude Code commits with this identity in Pumi's project threads, where the agent is the git author of the commits it writes (decision 0081). Each such commit carries the Signed-off-by line of the person who asked for the work (decision 0082)."
+    },
+    {
+      "name": "dependabot[bot]",
+      "email": "49699333+dependabot[bot]@users.noreply.github.com",
+      "reason": "Dependabot is the git author of the commits in its update pull requests (decision 0115). A person adds a Signed-off-by line to each such commit before it is merged (decision 0131)."
+    },
+    {
+      "name": "dependabot[bot]",
+      "email": "support@github.com",
+      "reason": "Dependabot signs off with this email when a repository requires sign-off on web-based commits. Listing it means that such a line does not count as a person's sign-off (decision 0131)."
     }
   ]
 }

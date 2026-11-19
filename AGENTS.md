@@ -55,7 +55,8 @@ These rules hold for every change ([0063](https://github.com/getpumi/design/blob
 Run the commands through make ([0088](https://github.com/getpumi/design/blob/main/decisions/0088-make.md)). The logic of the project's own checks is written in Go, with tests; bash in the Makefile is only short glue.
 
 - `make build` compiles both modules and writes the five binaries to `bin/`.
-- `make test` runs `go test -race -shuffle=on -count=1 ./...` in both modules and writes a coverage profile for each module to `coverage/` ([0117](https://github.com/getpumi/design/blob/main/decisions/0117-make-test.md)).
+- `make test` runs `go test -race -shuffle=on -count=1 ./...` in both modules, runs the `api` module's tests again on the older supported Go release named by `PUMI_GO_OLDER` in the devcontainer image, and writes a coverage profile for each run to `coverage/` ([0117](https://github.com/getpumi/design/blob/main/decisions/0117-make-test.md)).
+- `make image` prints the reference by digest of the devcontainer image for the committed content of `.devcontainer/`, tagged with that directory's git tree hash, and builds and pushes the image to `ghcr.io/getpumi/pumi-devcontainer` first when the tag is missing. CI's first job runs it ([0113](https://github.com/getpumi/design/blob/main/decisions/0113-devcontainer-image-by-content.md)).
 
 The supported development environment is the repository's devcontainer, on Linux. Windows is not supported for development ([0087](https://github.com/getpumi/design/blob/main/decisions/0087-devcontainer-is-the-environment.md)).
 
@@ -102,4 +103,5 @@ When you learn a fact that the next agent needs in order to work here, such as h
 ## Facts
 
 - Cloud threads only: go.dev is blocked, so its release list cannot be read. `https://proxy.golang.org/golang.org/toolchain/@v/list` lists every Go release, and `GOTOOLCHAIN=auto` downloads the toolchain in a go.mod `toolchain` line from the module proxy.
+- Cloud threads only: Docker Hub answers image pulls with 429 Too Many Requests. Start `dockerd` with `{"registry-mirrors":["https://mirror.gcr.io"]}` in `/etc/docker/daemon.json`; the mirror serves the same digests. A container that downloads during a build does not trust the cloud proxy's certificate authority, so a local test build needs `/root/.ccr/ca-bundle.crt` copied into the image and named by `SSL_CERT_FILE`. That change is for local test builds only.
 - revive's default `blank-imports` rule rejects a blank import in a non-`main` package even with a comment above a single-line import, and accepts one in a test file. The blank import of the `api` module that keeps its requirement in go.mod is in `internal/shared/doc_test.go` for that reason.

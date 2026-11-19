@@ -29,7 +29,7 @@ RANGE ?= origin/main..HEAD
 # tree. CI sets it to the base commit of the pull request.
 BASE ?=
 
-.PHONY: build test lint dco spdx imports license notices image
+.PHONY: build test lint dco spdx imports license notices pins image
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -83,6 +83,14 @@ license:
 # and 0130).
 notices:
 	go run ./internal/checks/cmd/license -notices bin/THIRD_PARTY_NOTICES
+
+# pins runs the pin report (decision 0115): it asks the Go module proxy for
+# newer releases of golangci-lint, Trivy, Go and each tool module in tools/,
+# and fails when a pin is out of date. A newer Go minor release is due one
+# month after its x.y.1 (decision 0085). It needs network access, so CI runs it
+# only in the weekly pins workflow.
+pins:
+	go run ./internal/checks/cmd/pins
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

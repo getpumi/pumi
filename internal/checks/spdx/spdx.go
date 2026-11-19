@@ -73,9 +73,20 @@ var exemptPaths = map[string]bool{
 	"LICENSE": true,
 	// Its content is set by decision 0067: the name and the copyright line.
 	"NOTICE": true,
-	// It holds only the import of AGENTS.md (decision 0091).
-	"CLAUDE.md": true,
+	// It holds only the import of AGENTS.md (decision 0091), which Check
+	// checks.
+	claudeFile: true,
 }
+
+// claudeFile is the file that holds only the import of AGENTS.md, and
+// claudeContent is that content.
+const (
+	claudeFile    = "CLAUDE.md"
+	claudeContent = "@AGENTS.md\n"
+)
+
+// claudeProblem is the problem of a CLAUDE.md that holds more than the import.
+const claudeProblem = "is exempt only while it holds only the line @AGENTS.md (decisions 0068 and 0091)"
 
 // pathStyles are the files, by their path from the repository root, whose
 // style differs from the one their name or extension gives.
@@ -141,7 +152,8 @@ func (f Finding) String() string {
 
 // Check returns the files among paths in fsys that fail the check, in the
 // order of paths. It skips paths that do not exist, directories and symbolic
-// links, and it does not read exempt files.
+// links. It does not read exempt files, except CLAUDE.md, which is exempt only
+// while it holds only the import of AGENTS.md.
 func Check(fsys fs.FS, paths []string) ([]Finding, error) {
 	var findings []Finding
 	for _, name := range paths {
@@ -159,6 +171,9 @@ func Check(fsys fs.FS, paths []string) ([]Finding, error) {
 // checkFile returns the problem of the file at name, or "" when it passes or
 // is skipped.
 func checkFile(fsys fs.FS, name string) (string, error) {
+	if name == claudeFile {
+		return checkClaudeFile(fsys)
+	}
 	style := Classify(name)
 	if style == Exempt {
 		return "", nil
@@ -182,6 +197,21 @@ func checkFile(fsys fs.FS, name string) (string, error) {
 		return "", nil
 	}
 	return headers[style].problem, nil
+}
+
+// checkClaudeFile returns the problem of CLAUDE.md, or "" when it holds only
+// the import of AGENTS.md or does not exist.
+func checkClaudeFile(fsys fs.FS) (string, error) {
+	src, err := fs.ReadFile(fsys, claudeFile)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "", nil
+	case err != nil:
+		return "", err
+	case string(src) != claudeContent:
+		return claudeProblem, nil
+	}
+	return "", nil
 }
 
 // hasHeader reports whether src, the content of the file at name, starts with

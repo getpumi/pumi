@@ -148,6 +148,19 @@ const (
 	unknown      = "has a file type that the SPDX check does not list; list it in internal/checks/spdx as a source type or as exempt (decision 0068)"
 )
 
+func TestCheckFailsCLAUDEmdWithMoreThanTheImport(t *testing.T) {
+	for _, src := range []string{"@AGENTS.md\nMore instructions.\n", htmlHeader + "@AGENTS.md\n", "@AGENTS.md", ""} {
+		got, err := Check(fstest.MapFS{"CLAUDE.md": file(src)}, []string{"CLAUDE.md"})
+		if err != nil {
+			t.Fatalf("Check() error = %v", err)
+		}
+		want := []Finding{{Path: "CLAUDE.md", Problem: "is exempt only while it holds only the line @AGENTS.md (decisions 0068 and 0091)"}}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Check() of %q = %+v, want %+v", src, got, want)
+		}
+	}
+}
+
 func TestCheckReportsInTheOrderGiven(t *testing.T) {
 	fsys := fstest.MapFS{"b.go": file(""), "a.go": file("")}
 	got, err := Check(fsys, []string{"b.go", "a.go"})

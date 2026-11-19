@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -138,9 +139,35 @@ func TestChangedFilesRejectsBadBases(t *testing.T) {
 	r := newRepo(t)
 	r.write("a.go", "")
 	r.commit()
-	for _, base := range []string{"", "--output=x", "main\nHEAD", "main HEAD", "no-such-commit", "main..HEAD"} {
-		if got, err := ChangedFiles(t.Context(), r.dir, base); err == nil {
-			t.Errorf("ChangedFiles(%q) = %q, want an error", base, got)
+	tests := []struct {
+		base string
+		want string
+	}{
+		{"", "the base commit is empty"},
+		{"--output=x", `the base commit "--output=x" starts with "-"`},
+		{"main\nHEAD", `the base commit "main\nHEAD" has white space`},
+		{"main HEAD", `the base commit "main HEAD" has white space`},
+		{"no-such-commit", `the base commit "no-such-commit" does not name a commit`},
+		{"main..HEAD", `the base commit "main..HEAD" does not name a commit`},
+	}
+	for _, tt := range tests {
+		got, err := ChangedFiles(t.Context(), r.dir, tt.base)
+		if err == nil || !strings.HasPrefix(err.Error(), tt.want) {
+			t.Errorf("ChangedFiles(%q) = %q, %v; want an error that starts with %q", tt.base, got, err, tt.want)
 		}
+	}
+}
+
+// CI passes HEAD^1, the first parent of a pull request's merge commit, which
+// is the commit that the pull request merges into.
+func TestChangedFilesAgainstTheFirstParent(t *testing.T) {
+	r := newRepo(t)
+	r.write("a.go", "")
+	r.commit()
+	r.write("b.go", "")
+	r.commit()
+	got, err := ChangedFiles(t.Context(), r.dir, "HEAD^1")
+	if want := []string{"b.go"}; err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("ChangedFiles() = %q, %v; want %q", got, err, want)
 	}
 }

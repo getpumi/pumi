@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The golangci-lint configuration for both modules (decision 0109). Adding a
+# linter tightens the gate and removing one loosens it (decision 0012).
+#
+# A finding is suppressed only by a rule under linters.exclusions.rules, never
+# by a nolint comment, which make lint fails (decision 0110). The tests in
+# internal/checks/lintconfig run this file on fixtures.
+
+version: "2"
+
+linters:
+  # Each linter is named, so an upgrade of golangci-lint never turns on a new
+  # linter by itself (decision 0062).
+  default: none
+  enable:
+    # Required by decisions 0092 and 0109.
+    - gocognit
+    - dupl
+    - godox
+    # golangci-lint's standard group.
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Correctness.
+    - errorlint
+    - nilerr
+    - bodyclose
+    - noctx
+    - contextcheck
+    - exhaustive
+    - forcetypeassert
+    - unparam
+    # Security.
+    - gosec
+    # Hygiene.
+    - revive
+    - misspell
+    - nolintlint
+  settings:
+    gocognit:
+      # gocognit reports a function whose cognitive complexity is above this.
+      min-complexity: 15
+    dupl:
+      # Tokens.
+      threshold: 100
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

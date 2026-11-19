@@ -34,7 +34,7 @@ In the core module:
 - `tools/` holds one module file per pinned Go tool, run with `go tool -modfile` ([0086](https://github.com/getpumi/design/blob/main/decisions/0086-tool-pinning.md)).
 - `.pumi/` holds the plain JSON files that the checks read ([0112](https://github.com/getpumi/design/blob/main/decisions/0112-check-config-json.md)).
 
-`internal/checks/`, `tools/`, `.pumi/`, `.golangci.yml` and the check targets of the Makefile are added by later issues in epic E1 ([#1](https://github.com/getpumi/pumi/issues/1)).
+`tools/`, `.pumi/` and the other check targets of the Makefile are added by later issues in epic E1 ([#1](https://github.com/getpumi/pumi/issues/1)).
 
 The core's go.mod requires `getpumi.dev/pumi/api` and replaces it with `./api`, so the core always builds against the `api` code in the same commit, and a change to both is one pull request ([0106](https://github.com/getpumi/design/blob/main/decisions/0106-api-replace-directive.md)).
 
@@ -56,6 +56,7 @@ Run the commands through make ([0088](https://github.com/getpumi/design/blob/mai
 
 - `make build` compiles both modules and writes the five binaries to `bin/`.
 - `make test` runs `go test -race -shuffle=on -count=1 ./...` in both modules, runs the `api` module's tests again on the older supported Go release named by `PUMI_GO_OLDER` in the devcontainer image, and writes a coverage profile for each run to `coverage/` ([0117](https://github.com/getpumi/design/blob/main/decisions/0117-make-test.md)).
+- `make lint` runs golangci-lint with `.golangci.yml` on both modules and the nolint check on the whole repository. The tests in `internal/checks/lintconfig` run golangci-lint on fixtures to show that the configuration enables the 20 linters and enforces the thresholds ([0109](https://github.com/getpumi/design/blob/main/decisions/0109-linter-set.md), [0110](https://github.com/getpumi/design/blob/main/decisions/0110-suppressions-in-lint-config.md)).
 - `make image` prints the reference by digest of the devcontainer image for the committed content of `.devcontainer/`, tagged with that directory's git tree hash, and builds and pushes the image to `ghcr.io/getpumi/pumi-devcontainer` first when the tag is missing. CI's first job runs it ([0113](https://github.com/getpumi/design/blob/main/decisions/0113-devcontainer-image-by-content.md)).
 
 The supported development environment is the repository's devcontainer, on Linux. Windows is not supported for development ([0087](https://github.com/getpumi/design/blob/main/decisions/0087-devcontainer-is-the-environment.md)).
@@ -105,3 +106,6 @@ When you learn a fact that the next agent needs in order to work here, such as h
 - Cloud threads only: go.dev is blocked, so its release list cannot be read. `https://proxy.golang.org/golang.org/toolchain/@v/list` lists every Go release, and `GOTOOLCHAIN=auto` downloads the toolchain in a go.mod `toolchain` line from the module proxy.
 - Cloud threads only: Docker Hub answers image pulls with 429 Too Many Requests. Start `dockerd` with `{"registry-mirrors":["https://mirror.gcr.io"]}` in `/etc/docker/daemon.json`; the mirror serves the same digests. A container that downloads during a build does not trust the cloud proxy's certificate authority, so a local test build needs `/root/.ccr/ca-bundle.crt` copied into the image and named by `SSL_CERT_FILE`. That change is for local test builds only.
 - revive's default `blank-imports` rule rejects a blank import in a non-`main` package even with a comment above a single-line import, and accepts one in a test file. The blank import of the `api` module that keeps its requirement in go.mod is in `internal/shared/doc_test.go` for that reason.
+- Cloud threads only: the golangci-lint on the PATH is an older release (2.5.0, built with Go 1.25), not the version pinned in `.devcontainer/install-tools.sh`. Download the pinned release from github.com and check its SHA-256 against the script before running `make lint` or `make test`.
+- gosec's G204 reports `exec.Command` and `exec.CommandContext` when any argument is not a constant, including the arguments of a helper that passes `args...`. Constant arguments, with `cmd.Dir` set for anything that varies, avoid the finding, as in `internal/checks/lintconfig`.
+- `golangci-lint run ./...` skips `testdata` directories, as the go command does, so fixtures there that break the lint rules do not fail `make lint`.

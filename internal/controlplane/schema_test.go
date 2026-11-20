@@ -181,18 +181,10 @@ func checkAttribute(name string, attr resolved.Attribute, byAttribute map[string
 	if !ok {
 		return "the context attribute " + name + " is neither a fact of the catalog nor a profile setting"
 	}
-	if !fitsKind(got, s.CedarType) {
-		return "the setting " + name + " is " + got + " in the schema, want a " + s.CedarType
+	if got != s.CedarType {
+		return "the setting " + name + " is " + got + " in the schema, want " + s.CedarType
 	}
 	return ""
-}
-
-// fitsKind reports whether the type text got is of the Cedar type kind.
-func fitsKind(got, kind string) bool {
-	if kind == "Record" {
-		return strings.HasPrefix(got, "{")
-	}
-	return got == kind
 }
 
 func TestEveryActionReadsUsage(t *testing.T) {

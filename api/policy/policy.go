@@ -16,8 +16,9 @@ var Schema string
 type Setting struct {
 	// Name is the setting's name in the context, such as reviewers.
 	Name string
-	// CedarType is the Cedar type of the setting: Bool, Long, Set<String> or
-	// Record.
+	// CedarType is the Cedar type of the setting in the form of
+	// facts.Fact.ValueType: Bool, Long, Set<String> or a record such as
+	// {seconds: Long, tokens: Long}.
 	CedarType string
 	// About says what the setting is and which decision adds it.
 	About string
@@ -30,9 +31,10 @@ type Setting struct {
 func Settings() []Setting {
 	return []Setting{
 		{"maxAttempts", "Long", "The attempts a gate gets before it escalates to a person (decision 0044)."},
-		{"requiredOutsideChecks", "Set<String>", "The checks Pumi does not run that must pass on the head commit, for the response being decided (decision 0140)."},
+		{"outsideChecksEnforced", "Set<String>", "The required outside checks whose response is enforce: checks Pumi does not run that must pass on the head commit (decision 0140)."},
+		{"outsideChecksWarned", "Set<String>", "The required outside checks whose response is warn (decision 0140)."},
 		{"reviewers", "Long", "The independent passing verdicts a model-judgment gate needs (decision 0138)."},
-		{"usageBudget", "Record", "The gate's token, cost and time budget, under the hard caps (decision 0044)."},
+		{"usageBudget", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The gate's token, cost and time budget, under the hard caps (decision 0044)."},
 		{"warningsCap", "Long", "The open warnings before warned gates enforce again (decision 0044)."},
 	}
 }

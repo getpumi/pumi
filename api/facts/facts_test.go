@@ -406,6 +406,28 @@ func TestFromMessagesRefusesADuplicateName(t *testing.T) {
 	}
 }
 
+func TestFromMessagesRefusesADuplicateAttribute(t *testing.T) {
+	a, b := opts(), opts()
+	a.Name, b.Name = "plan.reviewCount", "planReview.count"
+	mds := []protoreflect.MessageDescriptor{
+		synthetic(t, "First", a, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false}),
+		synthetic(t, "Second", b, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false}),
+	}
+	_, err := FromMessages(mds)
+	if err == nil || !strings.Contains(err.Error(), "planReviewCount") {
+		t.Errorf("FromMessages() = %v, want an error that names planReviewCount", err)
+	}
+}
+
+func TestDescribeRefusesANameThatIsNoCedarIdentifier(t *testing.T) {
+	for _, name := range []string{"head.up-to-date", "1st.fact", "a..b", ".a", "a b"} {
+		o := opts()
+		o.Name = name
+		md := synthetic(t, "Bad"+fmt.Sprint(len(name)), o, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false})
+		refuses(t, md, "Cedar")
+	}
+}
+
 func TestAttributeIsTheCedarContextName(t *testing.T) {
 	for name, want := range map[string]string{
 		"verify.passed":      "verifyPassed",

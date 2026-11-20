@@ -10,6 +10,7 @@ package facts
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -33,6 +34,10 @@ const (
 	options = "FactOptions"
 )
 
+// name is the form of a fact's name: parts joined by dots, each a Cedar
+// identifier, so that Attribute is a Cedar identifier too.
+var name = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
+
 // Fact is one fact of the catalog.
 type Fact struct {
 	// Name is the fact's name, such as verify.passed.
@@ -54,7 +59,8 @@ type Fact struct {
 
 // Catalog returns the facts of the pumi.facts.v1 package, sorted by name. It
 // fails when a message of the package other than FactOptions is not a valid
-// fact, when two facts share a name, or when there are more than Budget.
+// fact, when two facts share a name or a Cedar context name, or when there
+// are more than Budget.
 func Catalog() ([]Fact, error) {
 	mds := []protoreflect.MessageDescriptor{}
 	protoregistry.GlobalFiles.RangeFilesByPackage(pkg, func(fd protoreflect.FileDescriptor) bool {
@@ -72,13 +78,14 @@ func Catalog() ([]Fact, error) {
 }
 
 // FromMessages returns the facts that mds describe, sorted by name, with the
-// checks of Catalog.
+// checks of Catalog. Two facts may not have the same Attribute either.
 func FromMessages(mds []protoreflect.MessageDescriptor) ([]Fact, error) {
 	if len(mds) > Budget {
 		return nil, fmt.Errorf("%d facts, more than the budget of %d (decision 0017)", len(mds), Budget)
 	}
 	facts := make([]Fact, 0, len(mds))
 	seen := map[string]protoreflect.FullName{}
+	attributes := map[string]protoreflect.FullName{}
 	for _, md := range mds {
 		f, err := Describe(md)
 		if err != nil {
@@ -88,6 +95,10 @@ func FromMessages(mds []protoreflect.MessageDescriptor) ([]Fact, error) {
 			return nil, fmt.Errorf("%s and %s are both the fact %s", other, md.FullName(), f.Name)
 		}
 		seen[f.Name] = md.FullName()
+		if other, ok := attributes[f.Attribute()]; ok {
+			return nil, fmt.Errorf("%s and %s both have the Cedar context name %s", other, md.FullName(), f.Attribute())
+		}
+		attributes[f.Attribute()] = md.FullName()
 		facts = append(facts, f)
 	}
 	slices.SortFunc(facts, func(a, b Fact) int {
@@ -103,7 +114,8 @@ func FromMessages(mds []protoreflect.MessageDescriptor) ([]Fact, error) {
 }
 
 // Describe reads the fact that md is. It fails when md has no fact option,
-// when the option has no name, producer or source, when a field has no role
+// when the option has no name, producer or source, when the name's parts are
+// not Cedar identifiers, when a field has no role
 // or one that is not key or value, when a key field is not a single string
 // without explicit presence, when there is no key field or not exactly one
 // value field, or when the value field does not have the option's Cedar type.
@@ -115,6 +127,8 @@ func Describe(md protoreflect.MessageDescriptor) (Fact, error) {
 	switch {
 	case opts.GetName() == "":
 		return Fact{}, fmt.Errorf("%s: the fact has no name", md.FullName())
+	case !name.MatchString(opts.GetName()):
+		return Fact{}, fmt.Errorf("%s: the fact name %q is not dot-separated parts that make a Cedar identifier", md.FullName(), opts.GetName())
 	case opts.GetProducer() == "":
 		return Fact{}, fmt.Errorf("%s: the fact has no producer", md.FullName())
 	case opts.GetSource() == factsv1.Source_SOURCE_UNSPECIFIED:
@@ -251,6 +265,8 @@ func (f Fact) Attribute() string {
 // ValueType returns the Cedar type of the fact's value as the Cedar schema
 // writes it, with the attributes of a record sorted by name and named by
 // the JSON names of the message's fields, such as {fail: Long, pass: Long}.
+// Every attribute is required, a message field too, so the producer sets
+// every field of a record. ValueType is for a Fact that Describe returned.
 func (f Fact) ValueType() string {
 	return fieldType(f.Message.Fields().ByName(protoreflect.Name(f.Value)))
 }

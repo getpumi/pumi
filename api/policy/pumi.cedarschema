@@ -182,7 +182,9 @@ namespace Pumi {
   };
 
   // Required outside checks: each required check passed on the head commit
-  // (decision 0140).
+  // (decision 0140). The enforced and the warned checks are separate sets,
+  // so that a policy for each can tell the control plane which response a
+  // missing check gets.
   action outsideChecks appliesTo {
     principal: [Kernel],
     resource: [Plan],
@@ -190,8 +192,9 @@ namespace Pumi {
       attempts: Long,
       maxAttempts: Long,
       outsideChecks: Set<String>,
+      outsideChecksEnforced: Set<String>,
+      outsideChecksWarned: Set<String>,
       overrides: Set<String>,
-      requiredOutsideChecks: Set<String>,
       usage: Usage,
       usageBudget: Usage,
       warningsCap: Long,
@@ -205,7 +208,13 @@ namespace Pumi {
     resource: [Plan],
     context: {
       approvedBy: Set<String>,
+      attempts: Long,
+      maxAttempts: Long,
+      overrides: Set<String>,
       usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
     },
   };
 
@@ -228,8 +237,10 @@ namespace Pumi {
   };
 
   // The permissions. Each reads only usage, for the hard caps (decision
-  // 0142), and names more principals than may act, so that the invariants
-  // can deny the others.
+  // 0142). approve and override name every principal, so that the
+  // invariant people-decide, not request validation, denies one that is not
+  // a person, and the decision names it. writeVerdict names every runner, so
+  // that verdicts-by-gate-role denies one in the agent role.
 
   // Writing a verdict, which only a runner in the gate role may do.
   action writeVerdict appliesTo {

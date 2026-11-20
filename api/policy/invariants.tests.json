@@ -1,0 +1,1918 @@
+[
+  {
+    "name": "a merge that meets every invariant is allowed",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "verifyPassed": true,
+        "pathsProtected": [],
+        "headState": {
+          "commit": "c1",
+          "tree": "t1",
+          "upToDate": true
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [
+      "permit-all"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a merge without VERIFY is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "verifyPassed": false,
+        "pathsProtected": [],
+        "headState": {
+          "commit": "c1",
+          "tree": "t1",
+          "upToDate": true
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.verify"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a merge that touches a protected path is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "verifyPassed": true,
+        "pathsProtected": [
+          ".github/workflows/ci.yml"
+        ],
+        "headState": {
+          "commit": "c1",
+          "tree": "t1",
+          "upToDate": true
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.protected-paths"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a merge of a head that is not up to date is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "verifyPassed": true,
+        "pathsProtected": [],
+        "headState": {
+          "commit": "c1",
+          "tree": "t1",
+          "upToDate": false
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.approved-head"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a merge of a head whose tree is not the facts' tree is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "verifyPassed": true,
+        "pathsProtected": [],
+        "headState": {
+          "commit": "c1",
+          "tree": "t2",
+          "upToDate": true
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.approved-head"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a merge over the token cap is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 5000001,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "verifyPassed": true,
+        "pathsProtected": [],
+        "headState": {
+          "commit": "c1",
+          "tree": "t1",
+          "upToDate": true
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a merge over the cost cap is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 50000001,
+          "seconds": 60
+        },
+        "verifyPassed": true,
+        "pathsProtected": [],
+        "headState": {
+          "commit": "c1",
+          "tree": "t1",
+          "upToDate": true
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a merge over the time cap is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"merge\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 14401
+        },
+        "verifyPassed": true,
+        "pathsProtected": [],
+        "headState": {
+          "commit": "c1",
+          "tree": "t1",
+          "upToDate": true
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a gate decision over a cap is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"spec\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 1,
+        "maxAttempts": 3,
+        "overrides": [],
+        "usage": {
+          "tokens": 5000001,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "usageBudget": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "warningsCap": 10,
+        "warningsOpen": 0,
+        "specValid": true
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a gate decision under the caps is allowed",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"spec\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 1,
+        "maxAttempts": 3,
+        "overrides": [],
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "usageBudget": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "warningsCap": 10,
+        "warningsOpen": 0,
+        "specValid": true
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [
+      "permit-all"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a verdict from a runner in the gate role is allowed",
+    "request": {
+      "principal": "Pumi::Runner::\"gate-runner\"",
+      "action": "Pumi::Action::\"writeVerdict\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [
+      "permit-all"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a verdict from a runner in the agent role is denied",
+    "request": {
+      "principal": "Pumi::Runner::\"agent-runner\"",
+      "action": "Pumi::Action::\"writeVerdict\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.verdicts-by-gate-role"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "an approval by a person is allowed",
+    "request": {
+      "principal": "Pumi::Person::\"michael\"",
+      "action": "Pumi::Action::\"approve\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [
+      "permit-all"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "an approval by an agent is denied",
+    "request": {
+      "principal": "Pumi::Agent::\"claude\"",
+      "action": "Pumi::Action::\"approve\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.people-decide"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "an override by a person is allowed",
+    "request": {
+      "principal": "Pumi::Person::\"michael\"",
+      "action": "Pumi::Action::\"override\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [
+      "permit-all"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "an override attempted by an agent is denied",
+    "request": {
+      "principal": "Pumi::Agent::\"claude\"",
+      "action": "Pumi::Action::\"override\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.people-decide"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "an override attempted by a runner is denied",
+    "request": {
+      "principal": "Pumi::Runner::\"gate-runner\"",
+      "action": "Pumi::Action::\"override\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.people-decide"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "an override attempted by the kernel is denied",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"override\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        }
+      }
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "deny",
+    "reason": [
+      "invariant.people-decide"
+    ],
+    "num_errors": 0
+  }
+]

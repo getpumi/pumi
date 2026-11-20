@@ -140,7 +140,7 @@ func TestEveryContextAttributeIsAFactOrASetting(t *testing.T) {
 		byAttribute[f.Attribute()] = f
 	}
 	settings := map[string]policy.Setting{}
-	for _, s := range policy.Settings() {
+	for _, s := range slices.Concat(policy.Settings(), policy.ReleaseValues()) {
 		settings[s.Name] = s
 	}
 	read := map[string]bool{}
@@ -179,7 +179,7 @@ func checkAttribute(name string, attr resolved.Attribute, byAttribute map[string
 	}
 	s, ok := settings[name]
 	if !ok {
-		return "the context attribute " + name + " is neither a fact of the catalog nor a profile setting"
+		return "the context attribute " + name + " is neither a fact of the catalog, a profile setting nor a release value"
 	}
 	if got != s.CedarType {
 		return "the setting " + name + " is " + got + " in the schema, want " + s.CedarType
@@ -187,12 +187,14 @@ func checkAttribute(name string, attr resolved.Attribute, byAttribute map[string
 	return ""
 }
 
-func TestEveryActionReadsUsage(t *testing.T) {
+func TestEveryActionReadsUsageAndTheHardCaps(t *testing.T) {
 	// invariant.caps forbids any action when usage is over the hard caps
 	// (decision 0142).
 	for action, ctx := range contexts(t) {
-		if _, ok := ctx["usage"]; !ok {
-			t.Errorf("%s: the context does not declare usage", action)
+		for _, name := range []cedartypes.String{"usage", "hardCaps"} {
+			if _, ok := ctx[name]; !ok {
+				t.Errorf("%s: the context does not declare %s", action, name)
+			}
 		}
 	}
 }

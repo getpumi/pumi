@@ -68,6 +68,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       specValid: Bool,
@@ -85,6 +86,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       planReview: Counts,
@@ -106,6 +108,7 @@ namespace Pumi {
         second: Opinion,
       },
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -121,6 +124,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       pathsOutside: Set<String>,
@@ -138,6 +142,7 @@ namespace Pumi {
     context: {
       attempts: Long,
       budgetsBreached: Set<String>,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -155,6 +160,7 @@ namespace Pumi {
     context: {
       attempts: Long,
       conformanceAudit: Counts,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       reviewers: Long,
@@ -172,6 +178,7 @@ namespace Pumi {
     context: {
       attempts: Long,
       dcoSigned: Bool,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -190,6 +197,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       outsideChecks: Set<String>,
       outsideChecksEnforced: Set<String>,
@@ -209,6 +217,7 @@ namespace Pumi {
     context: {
       approvedBy: Set<String>,
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -225,6 +234,7 @@ namespace Pumi {
     principal: [Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       headState: {
         commit: String,
         tree: String,
@@ -247,6 +257,7 @@ namespace Pumi {
     principal: [Runner],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };
@@ -256,6 +267,7 @@ namespace Pumi {
     principal: [Person, Agent, Runner, Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };
@@ -265,6 +277,7 @@ namespace Pumi {
     principal: [Person, Agent, Runner, Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };
@@ -274,6 +287,7 @@ namespace Pumi {
     principal: [Person, Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };

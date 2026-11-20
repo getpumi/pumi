@@ -4,6 +4,7 @@
 package policy
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -58,5 +59,37 @@ func TestUsageBudgetHasTheShapeOfUsage(t *testing.T) {
 		if s.Name == "usageBudget" && s.CedarType != usage {
 			t.Errorf("usageBudget is %q, want %q, the type of usage", s.CedarType, usage)
 		}
+	}
+}
+
+func TestInvariantsAreEmbedded(t *testing.T) {
+	if !strings.HasPrefix(Invariants, "// SPDX-License-Identifier: Apache-2.0\n") {
+		t.Errorf("Invariants does not start with the SPDX lines: %.80q", Invariants)
+	}
+	if !strings.Contains(Invariants, `@id("invariant.verify")`) {
+		t.Error("Invariants has no invariant.verify")
+	}
+}
+
+func TestHardCaps(t *testing.T) {
+	if HardCaps.Tokens <= 0 || HardCaps.CostMicrodollars <= 0 || HardCaps.Seconds <= 0 {
+		t.Errorf("HardCaps = %+v, want every cap above zero", HardCaps)
+	}
+	values := ReleaseValues()
+	if len(values) != 1 || values[0].Name != "hardCaps" {
+		t.Fatalf("ReleaseValues() = %+v, want hardCaps only", values)
+	}
+	catalog, err := facts.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range catalog {
+		if f.Name == "usage" && values[0].CedarType != f.ValueType() {
+			t.Errorf("hardCaps is %q, want %q, the type of usage", values[0].CedarType, f.ValueType())
+		}
+	}
+	want := map[string]int64{"tokens": HardCaps.Tokens, "costMicrodollars": HardCaps.CostMicrodollars, "seconds": HardCaps.Seconds}
+	if got := HardCaps.Context(); !maps.Equal(got, want) {
+		t.Errorf("HardCaps.Context() = %v, want %v", got, want)
 	}
 }

@@ -12,6 +12,50 @@ import (
 //go:embed pumi.cedarschema
 var Schema string
 
+// Invariants are the core invariants of decision 0142, invariants.cedar.
+//
+//go:embed invariants.cedar
+var Invariants string
+
+// Caps are hard caps on usage. They are the only floor under every profile
+// (decision 0012).
+type Caps struct {
+	// Tokens is the most tokens.
+	Tokens int64
+	// CostMicrodollars is the most cost, in microdollars.
+	CostMicrodollars int64
+	// Seconds is the most time.
+	Seconds int64
+}
+
+// HardCaps are the hard caps of this release, which invariant.caps reads as
+// context.hardCaps and the model gateway enforces as well (decision 0142).
+// The values are placeholders until profiling sets them (decision 0046):
+// five million tokens, 50 dollars and four hours.
+var HardCaps = Caps{
+	Tokens:           5_000_000,
+	CostMicrodollars: 50_000_000,
+	Seconds:          4 * 60 * 60,
+}
+
+// Context returns the caps as the record that the hardCaps context
+// attribute holds, by attribute name.
+func (c Caps) Context() map[string]int64 {
+	return map[string]int64{
+		"tokens":           c.Tokens,
+		"costMicrodollars": c.CostMicrodollars,
+		"seconds":          c.Seconds,
+	}
+}
+
+// ReleaseValues returns the values that the release, not the profile, puts
+// in the context of every action.
+func ReleaseValues() []Setting {
+	return []Setting{
+		{"hardCaps", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The hard caps on usage of this release, HardCaps (decision 0142)."},
+	}
+}
+
 // Setting is a profile setting that an action's context declares.
 type Setting struct {
 	// Name is the setting's name in the context, such as reviewers.

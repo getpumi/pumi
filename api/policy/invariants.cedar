@@ -33,8 +33,8 @@ forbid (
 unless
 { context.headState.upToDate && context.headState.tree == resource.tree };
 
-// No action once usage is over a hard cap. The caps come from the release,
-// not from the profile.
+// No action once usage is over a hard cap. The caps come from the project
+// configuration, set during bootstrapping, not from the profile.
 @id("invariant.caps")
 forbid (principal, action, resource)
 when

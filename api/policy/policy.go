@@ -28,13 +28,16 @@ type Caps struct {
 	Seconds int64
 }
 
-// HardCaps returns the hard caps of this release, which invariant.caps
-// reads as context.hardCaps and the model gateway enforces as well
-// (decisions 0012 and 0142). It returns a copy, so no importer can change
-// them. The values are placeholders until profiling replaces them, as the
-// first profile drafts' budgets and caps are: five million tokens, 50
-// dollars and four hours.
-func HardCaps() Caps {
+// DefaultHardCaps returns the default hard caps of this release. The
+// adopter sets a project's hard caps during bootstrapping, and the
+// bootstrapping interview offers these values (decision 0147);
+// invariant.caps reads the project's caps as context.hardCaps, and the
+// model gateway enforces them as well (decisions 0012 and 0142). It
+// returns a copy, so no importer can change them. The values are
+// placeholders until profiling replaces them, as the first profile
+// drafts' budgets and caps are: five million tokens, 50 dollars and four
+// hours.
+func DefaultHardCaps() Caps {
 	return Caps{
 		Tokens:           5_000_000,
 		CostMicrodollars: 50_000_000,
@@ -52,11 +55,11 @@ func (c Caps) Context() map[string]int64 {
 	}
 }
 
-// ReleaseValues returns the values that the release, not the profile, puts
-// in the context of every action.
-func ReleaseValues() []Setting {
+// ProjectValues returns the values that the project configuration, not
+// the profile, puts in the context of every action.
+func ProjectValues() []Setting {
 	return []Setting{
-		{"hardCaps", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The hard caps on usage of this release, from HardCaps (decision 0142)."},
+		{"hardCaps", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The project's hard caps on usage, set during bootstrapping from DefaultHardCaps (decisions 0142 and 0147)."},
 	}
 }
 

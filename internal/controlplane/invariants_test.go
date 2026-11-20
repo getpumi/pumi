@@ -239,7 +239,7 @@ func TestInvariantsDecideTheRunTestsCasesWithAPermitAllLayer(t *testing.T) {
 	set := policySet(t, "invariants.cedar and permit-all.cedar", policy.Invariants+"\n"+string(permitAll))
 	v := validate.New(resolvedSchema(t), validate.WithStrict())
 	capsMap := cedartypes.RecordMap{}
-	for name, value := range policy.HardCaps().Context() {
+	for name, value := range policy.DefaultHardCaps().Context() {
 		capsMap[cedartypes.String(name)] = cedartypes.Long(value)
 	}
 	caps := cedartypes.NewRecord(capsMap)
@@ -255,7 +255,7 @@ func TestInvariantsDecideTheRunTestsCasesWithAPermitAllLayer(t *testing.T) {
 }
 
 // checkCase checks that the request of tt validates, carries the release's
-// caps and gets the decision, reasons and errors that tt expects.
+// default caps and gets the decision, reasons and errors that tt expects.
 func checkCase(t *testing.T, set *cedar.PolicySet, v *validate.Validator, caps cedartypes.Record, tt runTest) {
 	t.Helper()
 	req := cedar.Request{
@@ -265,7 +265,7 @@ func checkCase(t *testing.T, set *cedar.PolicySet, v *validate.Validator, caps c
 		Context:   tt.Request.Context,
 	}
 	if got, ok := tt.Request.Context.Get("hardCaps"); !ok || !got.Equal(caps) {
-		t.Errorf("the case's hardCaps are %v, want the release's %v", got, caps)
+		t.Errorf("the case's hardCaps are %v, want the release's defaults %v", got, caps)
 	}
 	if err := v.Request(req); err != nil {
 		t.Errorf("the request does not validate against the schema: %v", err)

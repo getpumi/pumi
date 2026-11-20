@@ -140,7 +140,7 @@ func TestEveryContextAttributeIsAFactOrASetting(t *testing.T) {
 		byAttribute[f.Attribute()] = f
 	}
 	settings := map[string]policy.Setting{}
-	for _, s := range slices.Concat(policy.Settings(), policy.ReleaseValues()) {
+	for _, s := range slices.Concat(policy.Settings(), policy.ProjectValues()) {
 		settings[s.Name] = s
 	}
 	read := map[string]bool{}
@@ -179,7 +179,7 @@ func checkAttribute(name string, attr resolved.Attribute, byAttribute map[string
 	}
 	s, ok := settings[name]
 	if !ok {
-		return "the context attribute " + name + " is neither a fact of the catalog, a profile setting nor a release value"
+		return "the context attribute " + name + " is neither a fact of the catalog, a profile setting nor a project value"
 	}
 	if got != s.CedarType {
 		return "the setting " + name + " is " + got + " in the schema, want " + s.CedarType

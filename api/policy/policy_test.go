@@ -71,14 +71,14 @@ func TestInvariantsAreEmbedded(t *testing.T) {
 	}
 }
 
-func TestHardCaps(t *testing.T) {
-	caps := HardCaps()
+func TestDefaultHardCaps(t *testing.T) {
+	caps := DefaultHardCaps()
 	if caps.Tokens <= 0 || caps.CostMicrodollars <= 0 || caps.Seconds <= 0 {
-		t.Errorf("HardCaps() = %+v, want every cap above zero", caps)
+		t.Errorf("DefaultHardCaps() = %+v, want every cap above zero", caps)
 	}
-	values := ReleaseValues()
+	values := ProjectValues()
 	if len(values) != 1 || values[0].Name != "hardCaps" {
-		t.Fatalf("ReleaseValues() = %+v, want hardCaps only", values)
+		t.Fatalf("ProjectValues() = %+v, want hardCaps only", values)
 	}
 	catalog, err := facts.Catalog()
 	if err != nil {
@@ -98,6 +98,6 @@ func TestHardCaps(t *testing.T) {
 	}
 	want := map[string]int64{"tokens": caps.Tokens, "costMicrodollars": caps.CostMicrodollars, "seconds": caps.Seconds}
 	if got := caps.Context(); !maps.Equal(got, want) {
-		t.Errorf("HardCaps().Context() = %v, want %v", got, want)
+		t.Errorf("DefaultHardCaps().Context() = %v, want %v", got, want)
 	}
 }

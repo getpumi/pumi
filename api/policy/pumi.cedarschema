@@ -4,8 +4,8 @@
 // The Cedar schema of Pumi (decision 0141). Facts are passed in the request
 // context, not as entities: each action's context declares exactly the
 // facts and the profile settings its gate reads, and every context also
-// declares hardCaps, the release's hard caps (decision 0142), which are
-// neither a fact nor a profile setting. A fact's context name is
+// declares hardCaps, the project's hard caps (decisions 0142 and 0147),
+// which are neither a fact nor a profile setting. A fact's context name is
 // its catalog name without the dots, such as verifyPassed for verify.passed,
 // and its type is the type of its value in getpumi.dev/pumi/api/facts. The
 // profile settings are listed in getpumi.dev/pumi/api/policy.

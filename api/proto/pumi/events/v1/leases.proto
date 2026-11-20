@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.events.v1;
+
+import "google/protobuf/duration.proto";
+
+// LeaseGranted is the data of dev.getpumi.lease.granted (decision 0020).
+message LeaseGranted {
+  // The lease.
+  string lease = 1;
+  // The holder of the lease.
+  string holder = 2;
+  // The lease number, which fences out late results (decision 0035).
+  int64 number = 3;
+  // How long the lease lasts unless its holder renews it.
+  google.protobuf.Duration timeout = 4;
+}
+
+// LeaseReleased is the data of dev.getpumi.lease.released: the holder gave
+// the lease back.
+message LeaseReleased {
+  // The lease.
+  string lease = 1;
+  // The lease number.
+  int64 number = 2;
+}
+
+// LeaseExpired is the data of dev.getpumi.lease.expired: the holder did not
+// renew the lease in time.
+message LeaseExpired {
+  // The lease.
+  string lease = 1;
+  // The lease number.
+  int64 number = 2;
+}

@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.events.v1;
+
+// VerdictRecorded is the data of dev.getpumi.verdict.recorded: a gate's
+// verdict, written only under the gate role.
+message VerdictRecorded {
+  // Verdict is the gate's verdict.
+  enum Verdict {
+    VERDICT_UNSPECIFIED = 0;
+    VERDICT_PASS = 1;
+    VERDICT_FAIL = 2;
+  }
+
+  // The gate.
+  string gate = 1;
+  // The version of the gate.
+  string gate_version = 2;
+  // The tree the verdict is about.
+  string tree = 3;
+  // Pass or fail.
+  Verdict verdict = 4;
+  // The model that gave a model-judgment verdict, or empty for a verdict
+  // from a machine (decision 0137).
+  string model = 5;
+  // The plan the verdict is for. The review facts are keyed by plan and tree
+  // (decision 0136).
+  string plan = 6;
+  // The invocation that gave the verdict, so that a verdict from the
+  // invocation that wrote the work is not counted as independent (decision
+  // 0137).
+  string invocation = 7;
+}
+
+// WarningRaised is the data of dev.getpumi.warning.raised: a warned gate's
+// warning.
+message WarningRaised {
+  // The gate.
+  string gate = 1;
+  // The tree the warning is about.
+  string tree = 2;
+  // What the gate warns about.
+  string message = 3;
+  // The project. The warnings.open fact is keyed by project (decision 0136).
+  string project = 4;
+}
+
+// WarningReviewed is the data of dev.getpumi.warning.reviewed: a person's
+// review of a warning.
+message WarningReviewed {
+  // The id of the dev.getpumi.warning.raised event.
+  string warning = 1;
+  // The person who reviewed it.
+  string person = 2;
+}

@@ -116,12 +116,19 @@ func TestModelFactsRecordTheirModels(t *testing.T) {
 // namesModels reports whether md or a message in it has a field named model
 // or models.
 func namesModels(md protoreflect.MessageDescriptor) bool {
-	if md == nil {
+	return namesModelsIn(md, map[protoreflect.FullName]bool{})
+}
+
+// namesModelsIn is namesModels that skips the messages in seen, so that a
+// recursive message ends the walk.
+func namesModelsIn(md protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool) bool {
+	if md == nil || seen[md.FullName()] {
 		return false
 	}
+	seen[md.FullName()] = true
 	for i := range md.Fields().Len() {
 		fd := md.Fields().Get(i)
-		if fd.Name() == "model" || fd.Name() == "models" || namesModels(fd.Message()) {
+		if fd.Name() == "model" || fd.Name() == "models" || namesModelsIn(fd.Message(), seen) {
 			return true
 		}
 	}
@@ -138,43 +145,37 @@ func TestCatalogVersionAndBudget(t *testing.T) {
 	}
 }
 
-// field is a field of a synthetic fact message.
+// field is a field of a synthetic fact message. A message field has the type
+// typeName, or pumi.facts.v1.FactOptions when typeName is empty. An optional
+// field has explicit presence.
 type field struct {
 	name     string
 	typ      descriptorpb.FieldDescriptorProto_Type
 	repeated bool
 	role     factsv1.Role
+	typeName string
+	optional bool
 }
 
 // synthetic builds a message named name in its own file of package
 // pumi.facts.test, with the fact option opts, or none when opts is nil.
 func synthetic(t *testing.T, name string, opts *factsv1.FactOptions, fields ...field) protoreflect.MessageDescriptor {
 	t.Helper()
-	msg := &descriptorpb.DescriptorProto{Name: proto.String(name)}
+	return syntheticWith(t, name, opts, nil, fields...)
+}
+
+// syntheticWith is synthetic with the nested messages nested.
+func syntheticWith(t *testing.T, name string, opts *factsv1.FactOptions, nested []*descriptorpb.DescriptorProto, fields ...field) protoreflect.MessageDescriptor {
+	t.Helper()
+	msg := &descriptorpb.DescriptorProto{Name: proto.String(name), NestedType: nested}
 	if opts != nil {
 		msg.Options = &descriptorpb.MessageOptions{}
 		proto.SetExtension(msg.Options, factsv1.E_Fact, opts)
 	}
-	for i, f := range fields {
-		label := descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL
-		if f.repeated {
-			label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED
-		}
-		fdp := &descriptorpb.FieldDescriptorProto{
-			Name:     proto.String(f.name),
-			Number:   proto.Int32(int32(i + 1)),
-			Label:    label.Enum(),
-			Type:     f.typ.Enum(),
-			JsonName: proto.String(f.name),
-		}
-		if f.typ == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
-			fdp.TypeName = proto.String(".pumi.facts.v1.FactOptions")
-		}
-		if f.role != factsv1.Role_ROLE_UNSPECIFIED {
-			fdp.Options = &descriptorpb.FieldOptions{}
-			proto.SetExtension(fdp.Options, factsv1.E_Role, f.role)
-		}
-		msg.Field = append(msg.Field, fdp)
+	var number int32
+	for _, f := range fields {
+		number++
+		msg.Field = append(msg.Field, fieldProto(msg, number, f))
 	}
 	file := &descriptorpb.FileDescriptorProto{
 		Name:        proto.String("pumi/facts/test/" + strings.ToLower(name) + ".proto"),
@@ -188,6 +189,42 @@ func synthetic(t *testing.T, name string, opts *factsv1.FactOptions, fields ...f
 		t.Fatal(err)
 	}
 	return fd.Messages().Get(0)
+}
+
+// fieldProto returns the field f of msg with the field number number, and
+// adds the oneof that an optional field needs.
+func fieldProto(msg *descriptorpb.DescriptorProto, number int32, f field) *descriptorpb.FieldDescriptorProto {
+	label := descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL
+	if f.repeated {
+		label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED
+	}
+	fdp := &descriptorpb.FieldDescriptorProto{
+		Name:     proto.String(f.name),
+		Number:   proto.Int32(number),
+		Label:    label.Enum(),
+		Type:     f.typ.Enum(),
+		JsonName: proto.String(f.name),
+	}
+	if f.typ == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		fdp.TypeName = proto.String(".pumi.facts.v1.FactOptions")
+		if f.typeName != "" {
+			fdp.TypeName = proto.String(f.typeName)
+		}
+	}
+	if f.optional {
+		fdp.Proto3Optional = proto.Bool(true)
+		var index int32
+		for range msg.OneofDecl {
+			index++
+		}
+		fdp.OneofIndex = proto.Int32(index)
+		msg.OneofDecl = append(msg.OneofDecl, &descriptorpb.OneofDescriptorProto{Name: proto.String("_" + f.name)})
+	}
+	if f.role != factsv1.Role_ROLE_UNSPECIFIED {
+		fdp.Options = &descriptorpb.FieldOptions{}
+		proto.SetExtension(fdp.Options, factsv1.E_Role, f.role)
+	}
+	return fdp
 }
 
 var (
@@ -205,7 +242,7 @@ func opts() *factsv1.FactOptions {
 }
 
 func TestDescribeReadsAFact(t *testing.T) {
-	md := synthetic(t, "Good", opts(), field{"tree", tString, false, key}, field{"value", tBool, false, val})
+	md := synthetic(t, "Good", opts(), field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false})
 	f, err := Describe(md)
 	if err != nil {
 		t.Fatal(err)
@@ -222,8 +259,8 @@ func TestDescribeRefuses(t *testing.T) {
 		change(o)
 		return o
 	}
-	keyField := field{"tree", tString, false, key}
-	boolValue := field{"value", tBool, false, val}
+	keyField := field{"tree", tString, false, key, "", false}
+	boolValue := field{"value", tBool, false, val, "", false}
 	tests := []struct {
 		name   string
 		opts   *factsv1.FactOptions
@@ -236,28 +273,103 @@ func TestDescribeRefuses(t *testing.T) {
 		{"NoSource", with(func(o *factsv1.FactOptions) { o.Source = factsv1.Source_SOURCE_UNSPECIFIED }), []field{keyField, boolValue}, "no source"},
 		{"NoKey", opts(), []field{boolValue}, "no key"},
 		{"NoValue", opts(), []field{keyField}, "one value"},
-		{"TwoValues", opts(), []field{keyField, boolValue, {"other", tBool, false, val}}, "one value"},
-		{"FieldWithoutRole", opts(), []field{keyField, boolValue, {"extra", tString, false, factsv1.Role_ROLE_UNSPECIFIED}}, "extra"},
-		{"RepeatedKey", opts(), []field{{"trees", tString, true, key}, boolValue}, "trees"},
-		{"BoolNotBool", opts(), []field{keyField, {"value", tInt64, false, val}}, "Bool"},
+		{"TwoValues", opts(), []field{keyField, boolValue, {"other", tBool, false, val, "", false}}, "one value"},
+		{"FieldWithoutRole", opts(), []field{keyField, boolValue, {"extra", tString, false, factsv1.Role_ROLE_UNSPECIFIED, "", false}}, "extra"},
+		{"RepeatedKey", opts(), []field{{"trees", tString, true, key, "", false}, boolValue}, "trees"},
+		{"BoolNotBool", opts(), []field{keyField, {"value", tInt64, false, val, "", false}}, "Bool"},
 		{"LongNotLong", with(func(o *factsv1.FactOptions) { o.CedarType = "Long" }), []field{keyField, boolValue}, "Long"},
-		{"SetNotRepeated", with(func(o *factsv1.FactOptions) { o.CedarType = "Set<String>" }), []field{keyField, {"value", tString, false, val}}, "Set<String>"},
+		{"SetNotRepeated", with(func(o *factsv1.FactOptions) { o.CedarType = "Set<String>" }), []field{keyField, {"value", tString, false, val, "", false}}, "Set<String>"},
 		{"RecordNotMessage", with(func(o *factsv1.FactOptions) { o.CedarType = "Record" }), []field{keyField, boolValue}, "Record"},
-		{"RecordRepeated", with(func(o *factsv1.FactOptions) { o.CedarType = "Record" }), []field{keyField, {"value", tMsg, true, val}}, "Record"},
+		{"RecordRepeated", with(func(o *factsv1.FactOptions) { o.CedarType = "Record" }), []field{keyField, {"value", tMsg, true, val, "", false}}, "Record"},
 		{"UnknownCedarType", with(func(o *factsv1.FactOptions) { o.CedarType = "Decimal" }), []field{keyField, boolValue}, "Decimal"},
+		{"UnknownRole", opts(), []field{keyField, boolValue, {name: "extra", typ: tString, role: factsv1.Role(3)}}, "extra"},
+		{"OptionalKey", opts(), []field{{name: "tree", typ: tString, role: key, optional: true}, boolValue}, "tree"},
+		// A record whose field is an enum: FactOptions has the enum source.
+		{"RecordWithEnum", record(), []field{keyField, {"value", tMsg, false, val, "", false}}, "source"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			md := synthetic(t, tt.name, tt.opts, tt.fields...)
-			f, err := Describe(md)
-			if err == nil {
-				t.Fatalf("Describe() = %+v, want an error", f)
-			}
-			if !strings.Contains(err.Error(), tt.want) {
-				t.Errorf("Describe() error = %q, want it to name %q", err, tt.want)
-			}
+			refuses(t, synthetic(t, tt.name, tt.opts, tt.fields...), tt.want)
 		})
 	}
+}
+
+// refuses checks that Describe fails on md with an error that names want.
+func refuses(t *testing.T, md protoreflect.MessageDescriptor, want string) {
+	t.Helper()
+	f, err := Describe(md)
+	if err == nil {
+		t.Fatalf("Describe() = %+v, want an error", f)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("Describe() error = %q, want it to name %q", err, want)
+	}
+}
+
+// record returns fact options for a valid Record fact from a machine.
+func record() *factsv1.FactOptions {
+	o := opts()
+	o.CedarType = "Record"
+	return o
+}
+
+// nestedMessage returns a message named name with the fields fields.
+func nestedMessage(name string, fields ...field) *descriptorpb.DescriptorProto {
+	msg := &descriptorpb.DescriptorProto{Name: proto.String(name)}
+	var number int32
+	for _, f := range fields {
+		number++
+		msg.Field = append(msg.Field, fieldProto(msg, number, f))
+	}
+	return msg
+}
+
+func TestDescribeReadsARecord(t *testing.T) {
+	inner := nestedMessage("Inner", field{name: "ok", typ: tBool})
+	totals := nestedMessage("Totals",
+		field{name: "count", typ: tInt64},
+		field{name: "label", typ: tString},
+		field{name: "flag", typ: tBool},
+		field{name: "limit", typ: tInt64, optional: true},
+		field{name: "models", typ: tString, repeated: true},
+		field{name: "inner", typ: tMsg, typeName: ".pumi.facts.test.GoodRecord.Inner"},
+	)
+	md := syntheticWith(t, "GoodRecord", record(), []*descriptorpb.DescriptorProto{totals, inner},
+		field{name: "tree", typ: tString, role: key},
+		field{name: "value", typ: tMsg, role: val, typeName: ".pumi.facts.test.GoodRecord.Totals"})
+	if _, err := Describe(md); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDescribeRefusesARecordCedarCannotHold(t *testing.T) {
+	entry := nestedMessage("ValueEntry", field{name: "key", typ: tString}, field{name: "value", typ: tInt64})
+	entry.Options = &descriptorpb.MessageOptions{MapEntry: proto.Bool(true)}
+	tests := []struct {
+		name  string
+		inner *descriptorpb.DescriptorProto
+		want  string
+	}{
+		{"RecordWithDouble", nestedMessage("Totals", field{name: "cost", typ: descriptorpb.FieldDescriptorProto_TYPE_DOUBLE}), "cost"},
+		{"RecordWithUint64", nestedMessage("Totals", field{name: "tokens", typ: descriptorpb.FieldDescriptorProto_TYPE_UINT64}), "tokens"},
+		{"RecordWithBytes", nestedMessage("Totals", field{name: "blob", typ: descriptorpb.FieldDescriptorProto_TYPE_BYTES}), "blob"},
+		{"RecordWithRepeatedLong", nestedMessage("Totals", field{name: "counts", typ: tInt64, repeated: true}), "counts"},
+		{"RecordWithSelf", nestedMessage("Totals", field{name: "parent", typ: tMsg, typeName: ".pumi.facts.test.RecordWithSelf.Totals"}), "parent"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md := syntheticWith(t, tt.name, record(), []*descriptorpb.DescriptorProto{tt.inner},
+				field{name: "tree", typ: tString, role: key},
+				field{name: "value", typ: tMsg, role: val, typeName: ".pumi.facts.test." + tt.name + ".Totals"})
+			refuses(t, md, tt.want)
+		})
+	}
+	t.Run("RecordIsMap", func(t *testing.T) {
+		md := syntheticWith(t, "RecordIsMap", record(), []*descriptorpb.DescriptorProto{entry},
+			field{name: "tree", typ: tString, role: key},
+			field{name: "value", typ: tMsg, repeated: true, role: val, typeName: ".pumi.facts.test.RecordIsMap.ValueEntry"})
+		refuses(t, md, "Record")
+	})
 }
 
 // facts returns n valid synthetic facts with distinct names.
@@ -267,7 +379,7 @@ func facts(t *testing.T, n int) []protoreflect.MessageDescriptor {
 	for i := range n {
 		o := opts()
 		o.Name = fmt.Sprintf("test.fact%d", i)
-		mds = append(mds, synthetic(t, fmt.Sprintf("Fact%d", i), o, field{"tree", tString, false, key}, field{"value", tBool, false, val}))
+		mds = append(mds, synthetic(t, fmt.Sprintf("Fact%d", i), o, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false}))
 	}
 	return mds
 }
@@ -286,7 +398,7 @@ func TestFromMessagesRefusesADuplicateName(t *testing.T) {
 	mds := facts(t, 2)
 	o := opts()
 	o.Name = "test.fact0"
-	mds = append(mds, synthetic(t, "Again", o, field{"tree", tString, false, key}, field{"value", tBool, false, val}))
+	mds = append(mds, synthetic(t, "Again", o, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false}))
 	_, err := FromMessages(mds)
 	if err == nil || !strings.Contains(err.Error(), "test.fact0") {
 		t.Errorf("FromMessages() = %v, want an error that names test.fact0", err)

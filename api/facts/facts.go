@@ -102,10 +102,10 @@ func FromMessages(mds []protoreflect.MessageDescriptor) ([]Fact, error) {
 }
 
 // Describe reads the fact that md is. It fails when md has no fact option,
-// when the option has no name, producer or source, when a field has no role,
-// when a key field is not a single string, when there is no key field or not
-// exactly one value field, or when the value field does not have the option's
-// Cedar type.
+// when the option has no name, producer or source, when a field has no role
+// or one that is not key or value, when a key field is not a single string
+// without explicit presence, when there is no key field or not exactly one
+// value field, or when the value field does not have the option's Cedar type.
 func Describe(md protoreflect.MessageDescriptor) (Fact, error) {
 	opts, ok := proto.GetExtension(md.Options(), factsv1.E_Fact).(*factsv1.FactOptions)
 	if !ok || opts == nil || !proto.HasExtension(md.Options(), factsv1.E_Fact) {
@@ -145,14 +145,16 @@ func fields(md protoreflect.MessageDescriptor, f *Fact) (protoreflect.FieldDescr
 		role, _ := proto.GetExtension(fd.Options(), factsv1.E_Role).(factsv1.Role)
 		switch role {
 		case factsv1.Role_ROLE_KEY:
-			if fd.Kind() != protoreflect.StringKind || fd.IsList() {
-				return nil, fmt.Errorf("%s: the key field %s is not a single string", md.FullName(), fd.Name())
+			if fd.Kind() != protoreflect.StringKind || fd.IsList() || fd.HasPresence() {
+				return nil, fmt.Errorf("%s: the key field %s is not a single string without explicit presence", md.FullName(), fd.Name())
 			}
 			f.Keys = append(f.Keys, string(fd.Name()))
 		case factsv1.Role_ROLE_VALUE:
 			values = append(values, fd)
 		case factsv1.Role_ROLE_UNSPECIFIED:
 			return nil, fmt.Errorf("%s: the field %s has no role", md.FullName(), fd.Name())
+		default:
+			return nil, fmt.Errorf("%s: the field %s has the role %d, which is not key or value", md.FullName(), fd.Name(), role)
 		}
 	}
 	if len(f.Keys) == 0 {
@@ -167,7 +169,7 @@ func fields(md protoreflect.MessageDescriptor, f *Fact) (protoreflect.FieldDescr
 
 // checkCedarType checks that the value field fits the Cedar type: Bool a
 // single bool, Long a single int64, Set<String> a repeated string and Record
-// a single message.
+// a single message that is not a map and that checkRecord accepts.
 func checkCedarType(cedarType string, value protoreflect.FieldDescriptor) error {
 	var ok bool
 	switch cedarType {
@@ -178,12 +180,55 @@ func checkCedarType(cedarType string, value protoreflect.FieldDescriptor) error 
 	case "Set<String>":
 		ok = value.Kind() == protoreflect.StringKind && value.IsList()
 	case "Record":
-		ok = value.Kind() == protoreflect.MessageKind && !value.IsList()
+		ok = value.Kind() == protoreflect.MessageKind && !value.IsList() && !value.IsMap()
+		if ok {
+			return checkRecord(value.Message(), map[protoreflect.FullName]bool{})
+		}
 	default:
 		return fmt.Errorf("the Cedar type %q is not Bool, Long, Set<String> or Record", cedarType)
 	}
 	if !ok {
 		return errors.New("the value field " + string(value.Name()) + " does not fit the Cedar type " + cedarType)
+	}
+	return nil
+}
+
+// checkRecord checks that every field of the record md can be an attribute
+// of a Cedar record: a single bool, int64 or string, a repeated string, or a
+// single message that checkRecord accepts. Cedar has no floating-point,
+// unsigned or byte type, which is why decision 0136 gives cost in
+// microdollars as a Long. A record that holds itself, directly or through
+// another record, fails, because its Cedar type would have no end. open holds
+// the records being checked.
+func checkRecord(md protoreflect.MessageDescriptor, open map[protoreflect.FullName]bool) error {
+	if open[md.FullName()] {
+		return fmt.Errorf("the record %s holds itself", md.FullName())
+	}
+	open[md.FullName()] = true
+	defer delete(open, md.FullName())
+	for i := range md.Fields().Len() {
+		fd := md.Fields().Get(i)
+		if err := checkAttribute(fd, open); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkAttribute checks one field of a record for checkRecord.
+func checkAttribute(fd protoreflect.FieldDescriptor, open map[protoreflect.FullName]bool) error {
+	kind := fd.Kind()
+	if fd.IsMap() || (fd.IsList() && kind != protoreflect.StringKind) {
+		return fmt.Errorf("the record field %s is a map or a repeated field that is not string", fd.FullName())
+	}
+	if kind == protoreflect.MessageKind {
+		if err := checkRecord(fd.Message(), open); err != nil {
+			return fmt.Errorf("the record field %s: %w", fd.FullName(), err)
+		}
+		return nil
+	}
+	if kind != protoreflect.BoolKind && kind != protoreflect.Int64Kind && kind != protoreflect.StringKind {
+		return fmt.Errorf("the record field %s is %s, which is not bool, int64, string or a message", fd.FullName(), kind)
 	}
 	return nil
 }

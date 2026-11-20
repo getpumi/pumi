@@ -76,6 +76,10 @@ var exemptPaths = map[string]bool{
 	// It holds only the import of AGENTS.md (decision 0091), which Check
 	// checks.
 	claudeFile: true,
+	// The CloudEvents protobuf envelope (decision 0132), kept unchanged from
+	// the CloudEvents specification, which has no header in it. It is
+	// Apache-2.0; the README.md beside it gives its source.
+	"api/proto/io/cloudevents/v1/cloudevents.proto": true,
 }
 
 // claudeFile is the file that holds only the import of AGENTS.md, and
@@ -113,6 +117,8 @@ var extensionStyles = map[string]Style{
 	".yaml": Hash,
 	".sh":   Hash,
 	".md":   HTML,
+	// The protobuf schemas in api/proto (decision 0090).
+	".proto": Slash,
 	// go.sum and the tools' .sum files are written by the go command.
 	".sum": Exempt,
 	// JSON has no comments, and the files in .pumi/ are plain JSON

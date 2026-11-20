@@ -1,0 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The package does not match the directory, which the STANDARD rules report
+// outside the vendored directory.
+package elsewhere;
+
+message vendored_message {
+  string Name = 1;
+}

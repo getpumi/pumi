@@ -147,3 +147,24 @@ jobs:
     steps:
       - *checkout
       - run: make license
+
+  buf:
+    name: buf
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions: *check-permissions
+    container: *devcontainer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # buf breaking compares the schema with the one in the first parent,
+          # so the check needs two commits, as in the spdx job.
+          fetch-depth: 2
+      # Marks the workspace safe, as in the dco job.
+      - *safe-directory
+      # The first parent is the commit that a pull request merges into, or
+      # the previous commit of main after a merge (decision 0090). main takes
+      # only merges of pull requests (decision 0114), so the first parent of
+      # each new commit of main is the main that the pull request merged into.
+      - run: make buf AGAINST=HEAD^1

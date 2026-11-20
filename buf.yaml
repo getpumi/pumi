@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The buf configuration of the api module's protobuf schema (decision 0090).
+# The tests in internal/checks/bufconfig run it on fixtures.
+
+version: v2
+
+modules:
+  - path: api/proto
+
+# A module that has a lint block of its own uses only that block, so the whole
+# lint configuration is here.
+lint:
+  use:
+    - STANDARD
+  # Schemas kept unchanged from another project, such as the CloudEvents
+  # envelope, follow that project's rules, not ours.
+  ignore:
+    - api/proto/io
+
+breaking:
+  # FILE is buf's default, named here so the choice is visible. It is buf's
+  # strictest category: it also reports changes that break generated code
+  # without breaking the wire format, such as a message moved to another file
+  # (decision 0041).
+  use:
+    - FILE

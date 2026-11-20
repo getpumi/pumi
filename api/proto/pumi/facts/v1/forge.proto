@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.facts.v1;
+
+import "pumi/facts/v1/options.proto";
+
+// HeadState is head.state: the head of the change, as the forge reports it.
+message HeadState {
+  option (fact) = {
+    name: "head.state"
+    cedar_type: "Record"
+    producer: "forge adapter"
+    source: SOURCE_MACHINE
+  };
+
+  // State is the head's state.
+  message State {
+    // The head commit.
+    string commit = 1;
+    // Its tree.
+    string tree = 2;
+    // Whether the head is up to date with the target branch.
+    bool up_to_date = 3;
+  }
+
+  // The change, such as a pull request.
+  string change = 1 [(role) = ROLE_KEY];
+  // The state.
+  State value = 2 [(role) = ROLE_VALUE];
+}
+
+// OutsideChecks is outside.checks: the checks that Pumi does not run that
+// passed on the head commit (decision 0140).
+message OutsideChecks {
+  option (fact) = {
+    name: "outside.checks"
+    cedar_type: "Set<String>"
+    producer: "check.ingested"
+    source: SOURCE_MACHINE
+  };
+
+  // The head commit.
+  string head_commit = 1 [(role) = ROLE_KEY];
+  // The names of the checks that passed.
+  repeated string value = 2 [(role) = ROLE_VALUE];
+}

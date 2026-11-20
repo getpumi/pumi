@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.facts.v1;
+
+import "pumi/facts/v1/options.proto";
+
+// ApprovedBy is approved.by: the people who approved the tree.
+message ApprovedBy {
+  option (fact) = {
+    name: "approved.by"
+    cedar_type: "Set<String>"
+    producer: "approval.recorded"
+    source: SOURCE_PERSON
+  };
+
+  // The tree.
+  string tree = 1 [(role) = ROLE_KEY];
+  // The people.
+  repeated string value = 2 [(role) = ROLE_VALUE];
+}
+
+// Attempts is attempts: how many times the plan has entered the gate.
+message Attempts {
+  option (fact) = {
+    name: "attempts"
+    cedar_type: "Long"
+    producer: "counted from transition.fired"
+    source: SOURCE_MACHINE
+  };
+
+  // The plan.
+  string plan = 1 [(role) = ROLE_KEY];
+  // The gate.
+  string gate = 2 [(role) = ROLE_KEY];
+  // The number of attempts.
+  int64 value = 3 [(role) = ROLE_VALUE];
+}
+
+// WarningsOpen is warnings.open: the warnings of the project not yet
+// reviewed.
+message WarningsOpen {
+  option (fact) = {
+    name: "warnings.open"
+    cedar_type: "Long"
+    producer: "warning.raised minus warning.reviewed"
+    source: SOURCE_MACHINE
+  };
+
+  // The project.
+  string project = 1 [(role) = ROLE_KEY];
+  // The number of open warnings.
+  int64 value = 2 [(role) = ROLE_VALUE];
+}
+
+// Usage is usage: what an invocation used.
+message Usage {
+  option (fact) = {
+    name: "usage"
+    cedar_type: "Record"
+    producer: "invocation.result"
+    source: SOURCE_MACHINE
+  };
+
+  // Totals are the usage.
+  message Totals {
+    // The tokens used.
+    int64 tokens = 1;
+    // The cost in microdollars, because Cedar has no floating-point type
+    // (decision 0136).
+    int64 cost_microdollars = 2;
+    // The seconds the invocation ran.
+    int64 seconds = 3;
+  }
+
+  // The invocation.
+  string invocation = 1 [(role) = ROLE_KEY];
+  // The plan.
+  string plan = 2 [(role) = ROLE_KEY];
+  // The usage.
+  Totals value = 3 [(role) = ROLE_VALUE];
+}
+
+// Overrides is overrides: the gates a person overrode for the plan and tree
+// (decision 0139).
+message Overrides {
+  option (fact) = {
+    name: "overrides"
+    cedar_type: "Set<String>"
+    producer: "override.recorded"
+    source: SOURCE_PERSON
+  };
+
+  // The plan.
+  string plan = 1 [(role) = ROLE_KEY];
+  // The tree.
+  string tree = 2 [(role) = ROLE_KEY];
+  // The gates.
+  repeated string value = 3 [(role) = ROLE_VALUE];
+}

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	factsv1 "getpumi.dev/pumi/api/gen/pumi/facts/v1"
 	"google.golang.org/protobuf/proto"
@@ -231,4 +232,53 @@ func checkAttribute(fd protoreflect.FieldDescriptor, open map[protoreflect.FullN
 		return fmt.Errorf("the record field %s is %s, which is not bool, int64, string or a message", fd.FullName(), kind)
 	}
 	return nil
+}
+
+// Attribute returns the name of the fact in the context of a Cedar request:
+// its name with the dots taken out and each part after the first starting
+// with a capital letter, such as verifyPassed for verify.passed (decision
+// 0141).
+func (f Fact) Attribute() string {
+	parts := strings.Split(f.Name, ".")
+	for i := 1; i < len(parts); i++ {
+		if parts[i] != "" {
+			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		}
+	}
+	return strings.Join(parts, "")
+}
+
+// ValueType returns the Cedar type of the fact's value as the Cedar schema
+// writes it, with the attributes of a record sorted by name and named by
+// the JSON names of the message's fields, such as {fail: Long, pass: Long}.
+func (f Fact) ValueType() string {
+	return fieldType(f.Message.Fields().ByName(protoreflect.Name(f.Value)))
+}
+
+// fieldType returns the Cedar type of a field that Describe accepts, in the
+// form of ValueType.
+func fieldType(fd protoreflect.FieldDescriptor) string {
+	single := map[protoreflect.Kind]string{
+		protoreflect.BoolKind:   "Bool",
+		protoreflect.Int64Kind:  "Long",
+		protoreflect.StringKind: "String",
+	}[fd.Kind()]
+	if fd.Kind() == protoreflect.MessageKind {
+		single = recordType(fd.Message())
+	}
+	if fd.IsList() {
+		return "Set<" + single + ">"
+	}
+	return single
+}
+
+// recordType returns the Cedar record type of md for fieldType.
+func recordType(md protoreflect.MessageDescriptor) string {
+	attributes := make([]string, 0, md.Fields().Len())
+	for i := range md.Fields().Len() {
+		fd := md.Fields().Get(i)
+		attributes = append(attributes, fd.JSONName()+": "+fieldType(fd))
+	}
+	slices.Sort(attributes)
+	return "{" + strings.Join(attributes, ", ") + "}"
 }

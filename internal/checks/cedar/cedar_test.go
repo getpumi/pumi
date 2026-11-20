@@ -5,7 +5,10 @@ package cedar
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,7 +32,8 @@ func repoFile(t *testing.T, name string) string {
 
 // newRepo writes a repository with the repository's schema, invariants and
 // Dockerfile, and the files in changes, to a temporary directory and returns
-// it. An empty value in changes leaves the file out.
+// it, as the files of a git repository. An empty value in changes leaves
+// the file out.
 func newRepo(t *testing.T, changes map[string]string) string {
 	t.Helper()
 	files := map[string]string{
@@ -42,18 +46,38 @@ func newRepo(t *testing.T, changes map[string]string) string {
 	}
 	dir := t.TempDir()
 	for name, src := range files {
-		if src == "" {
-			continue
-		}
-		p := filepath.Join(dir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(src), 0o600); err != nil {
-			t.Fatal(err)
+		if src != "" {
+			write(t, dir, name, src)
 		}
 	}
+	gitAddAll(t, dir)
 	return dir
+}
+
+// write writes a file to the directory dir.
+func write(t *testing.T, dir, name, src string) {
+	t.Helper()
+	p := filepath.Join(dir, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// gitAddAll makes dir a git repository that tracks every file in it.
+func gitAddAll(t *testing.T, dir string) {
+	t.Helper()
+	for _, cmd := range []*exec.Cmd{
+		exec.CommandContext(t.Context(), "git", "init", "--quiet"),
+		exec.CommandContext(t.Context(), "git", "add", "--all"),
+	} {
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %v\n%s", cmd.Args, err, out)
+		}
+	}
 }
 
 // check runs Check on dir and returns its output and error.
@@ -99,10 +123,18 @@ func mergeTests(verifyPassed string) string {
 	return strings.Replace(mergeTest, "%s", verifyPassed, 1)
 }
 
-func TestCheckPassesOnTheRepository(t *testing.T) {
-	out, err := check(t, root)
+// TestCheckPassesOnTheRepositorysPolicies runs the check on a copy of the
+// repository's policy files, in a new git repository: in CI's container
+// git does not read the workspace, which belongs to another user, without
+// the safe.directory setting that the cedar job makes.
+func TestCheckPassesOnTheRepositorysPolicies(t *testing.T) {
+	const lower = "api/policy/testdata/permit-all"
+	out, err := check(t, newRepo(t, map[string]string{
+		lower + ".cedar":      repoFile(t, lower+".cedar"),
+		lower + ".tests.json": repoFile(t, lower+".tests.json"),
+	}))
 	if err != nil {
-		t.Fatalf("Check(repository) = %v; output:\n%s", err, out)
+		t.Fatalf("Check() = %v; output:\n%s", err, out)
 	}
 	for _, want := range []string{
 		"cedar: format " + Invariants + ": ok",
@@ -111,7 +143,7 @@ func TestCheckPassesOnTheRepository(t *testing.T) {
 		"cedar: run-tests api/policy/testdata/permit-all.tests.json: ok",
 	} {
 		if !strings.Contains(out, want+"\n") {
-			t.Errorf("Check(repository) output does not have %q:\n%s", want, out)
+			t.Errorf("Check() output does not have %q:\n%s", want, out)
 		}
 	}
 }
@@ -173,6 +205,18 @@ func TestCheckFails(t *testing.T) {
 			map[string]string{Invariants: ""},
 			Invariants,
 		},
+		"a set with a validation warning": {
+			map[string]string{"x/lower.cedar": "@id(\"x\")\npermit (principal, action, resource)\nwhen { false };\n"},
+			"policy is impossible",
+		},
+		"a pin that is not a version": {
+			map[string]string{Dockerfile: strings.Replace(repoFile(t, Dockerfile), "ARG CEDAR_VERSION=4.15.0", "ARG CEDAR_VERSION=\"4.15.0\"", 1)},
+			"is not a version such as 1.2.3",
+		},
+		"an empty pin": {
+			map[string]string{Dockerfile: strings.Replace(repoFile(t, Dockerfile), "ARG CEDAR_VERSION=4.15.0", "ARG CEDAR_VERSION=", 1)},
+			"is not a version such as 1.2.3",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			out, err := check(t, newRepo(t, c.changes))
@@ -195,5 +239,60 @@ func TestCheckReportsEveryFinding(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Check() = %v, want it to name %q", err, want)
 		}
+	}
+}
+
+func TestCheckNamesWhereTheLowerSetStarts(t *testing.T) {
+	_, err := check(t, newRepo(t, map[string]string{
+		"x/lower.cedar": "@id(\"x\")\nforbid (principal, action, resource)\nwhen { context.nothing };\n",
+	}))
+	lines := strings.Count(repoFile(t, Invariants), "\n")
+	want := fmt.Sprintf("policies.cedar is %s followed by x/lower.cedar from line %d", Invariants, lines+2)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Errorf("Check() = %v, want it to say %q", err, want)
+	}
+}
+
+func TestCheckReadsOnlyTrackedFiles(t *testing.T) {
+	dir := newRepo(t, map[string]string{"x/lower.cedar": permitAll})
+	write(t, dir, "worktree/old.cedar", "@id(\"a\") permit(principal,action,resource);\n")
+	out, err := check(t, dir)
+	if err != nil {
+		t.Fatalf("Check() = %v; output:\n%s", err, out)
+	}
+	if strings.Contains(out, "worktree/old.cedar") {
+		t.Errorf("Check() checked an untracked file:\n%s", out)
+	}
+}
+
+func TestCheckInlinesEntitiesFiles(t *testing.T) {
+	var cases []map[string]any
+	if err := json.Unmarshal([]byte(mergeTests("true")), &cases); err != nil {
+		t.Fatal(err)
+	}
+	entities, err := json.Marshal(cases[0]["entities"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases[0]["entities"] = "lower.entities.json"
+	tests, err := json.Marshal(cases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := check(t, newRepo(t, map[string]string{
+		"x/lower.cedar":         permitAll,
+		"x/lower.tests.json":    string(tests),
+		"x/lower.entities.json": string(entities),
+	}))
+	if err != nil || !strings.Contains(out, "cedar: run-tests x/lower.tests.json: ok\n") {
+		t.Errorf("Check() = %v, want the cases to pass with the entities file; output:\n%s", err, out)
+	}
+}
+
+func TestCheckEntitiesFileMissing(t *testing.T) {
+	tests := strings.Replace(mergeTests("true"), `"entities": [`, `"entities": "none.json", "x": [`, 1)
+	_, err := check(t, newRepo(t, map[string]string{"x/lower.cedar": permitAll, "x/lower.tests.json": tests}))
+	if err == nil || !strings.Contains(err.Error(), "x/none.json") {
+		t.Errorf("Check() = %v, want an error that names x/none.json", err)
 	}
 }

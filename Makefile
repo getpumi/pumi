@@ -121,12 +121,12 @@ buf:
 		echo "make buf: $(AGAINST) has no .proto files in api/proto, so buf breaking has nothing to compare" >&2; \
 	fi
 
-# cedar runs the pinned Rust Cedar CLI on the Cedar policies (decision
-# 0146): cedar format --check on every policy file, cedar validate in strict
-# mode on the core invariants and on every other policy set together with
-# them, and cedar run-tests on every x.tests.json file, with the policies of
-# x.cedar beside it. It fails when the cedar on the PATH is not the version
-# pinned in .devcontainer/Dockerfile.
+# cedar runs the pinned Rust Cedar CLI on the Cedar policies that git tracks
+# (decision 0146): cedar format --check on every policy file, cedar validate
+# in strict mode, with warnings as failures, on the core invariants and on
+# every other policy set together with them, and cedar run-tests on every
+# x.tests.json file, with the policies of x.cedar beside it. It fails when
+# the cedar on the PATH is not the version pinned in .devcontainer/Dockerfile.
 cedar:
 	go run ./internal/checks/cmd/cedar
 

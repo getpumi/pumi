@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -30,6 +32,9 @@ const (
 	// build argument.
 	Dockerfile = ".devcontainer/Dockerfile"
 )
+
+// versionPattern matches a release version of the Cedar CLI.
+var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // versionArg is the line of Dockerfile that pins the Cedar CLI, without the
 // version.
@@ -48,14 +53,15 @@ const (
 // x.tests.json run on the policy file x.cedar beside it.
 const testsSuffix = ".tests.json"
 
-// Check runs the pinned Cedar CLI on the repository at root and writes one
-// line for each step to out. Every policy file is checked with cedar format
-// --check. The core invariants are validated in strict mode against the
-// schema, and so is every other policy file together with the invariants,
-// since a lower set always runs with them. Each file of run-tests cases runs
-// on its policy file, together with the invariants unless the file is the
-// invariants. Check runs every step and returns Findings that name each
-// one that fails, or another error when it cannot run.
+// Check runs the pinned Cedar CLI on the files that git tracks in the
+// repository at root and writes one line for each step to out. Every policy
+// file is checked with cedar format --check. The core invariants are
+// validated in strict mode, with warnings as failures, against the schema,
+// and so is every other policy file together with the invariants, since a
+// lower set always runs with them. Each file of run-tests cases runs on its
+// policy file, together with the invariants unless the file is the
+// invariants. Check runs every step and returns Findings that name each one
+// that fails, or another error when it cannot run.
 func Check(ctx context.Context, root string, out io.Writer) error {
 	repo := os.DirFS(root)
 	if err := checkVersion(ctx, repo); err != nil {
@@ -69,7 +75,7 @@ func Check(ctx context.Context, root string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	policies, tests, err := find(repo)
+	policies, tests, err := find(ctx, root)
 	if err != nil {
 		return err
 	}
@@ -115,11 +121,11 @@ func (c *checker) policy(name string) {
 		return
 	}
 	c.report("format "+name, c.run(map[string][]byte{policiesFile: src}, formatCheck))
-	step, set := "validate "+Invariants, c.invariants
+	step, set, note := "validate "+Invariants, c.invariants, ""
 	if name != Invariants {
-		step, set = step+" with "+name, join(c.invariants, src)
+		step, set, note = step+" with "+name, join(c.invariants, src), c.joinNote(name)
 	}
-	c.report(step, c.run(map[string][]byte{schemaFile: c.schema, policiesFile: set}, validate))
+	c.report(step, withNote(c.run(map[string][]byte{schemaFile: c.schema, policiesFile: set}, validate), note))
 }
 
 // tests runs the cases in the file name on the policy file beside it.
@@ -130,8 +136,13 @@ func (c *checker) tests(name string) {
 		c.report(step, err)
 		return
 	}
+	cases, err = c.inlineEntities(name, cases)
+	if err != nil {
+		c.report(step, err)
+		return
+	}
 	policyName := strings.TrimSuffix(name, testsSuffix) + ".cedar"
-	set := c.invariants
+	set, note := c.invariants, ""
 	if policyName != Invariants {
 		src, err := c.read(policyName)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -142,9 +153,9 @@ func (c *checker) tests(name string) {
 			c.report(step, err)
 			return
 		}
-		set = join(c.invariants, src)
+		set, note = join(c.invariants, src), c.joinNote(policyName)
 	}
-	c.report(step, c.run(map[string][]byte{schemaFile: c.schema, policiesFile: set, testsFile: cases}, runTests))
+	c.report(step, withNote(c.run(map[string][]byte{schemaFile: c.schema, policiesFile: set, testsFile: cases}, runTests), note))
 }
 
 func (c *checker) read(name string) ([]byte, error) {
@@ -160,6 +171,52 @@ func (c *checker) report(step string, err error) {
 	}
 	_, _ = fmt.Fprintf(c.out, "cedar: %s: fails\n", step)
 	c.findings = append(c.findings, step+": "+err.Error())
+}
+
+// joinNote says where the lower set name starts in the file that join
+// writes, so that a line in the CLI's output can be found in it.
+func (c *checker) joinNote(name string) string {
+	start := bytes.Count(join(c.invariants, nil), []byte("\n")) + 1
+	return fmt.Sprintf("%s is %s followed by %s from line %d", policiesFile, Invariants, name, start)
+}
+
+// withNote adds the note to a failure.
+func withNote(err error, note string) error {
+	if err == nil || note == "" {
+		return err
+	}
+	return fmt.Errorf("%w\n%s", err, note)
+}
+
+// inlineEntities returns the cases of the run-tests file name with each
+// "entities" value that names a file replaced by that file's content. The
+// CLI reads such a file relative to the tests file, which runs from another
+// directory.
+func (c *checker) inlineEntities(name string, data []byte) ([]byte, error) {
+	var cases []map[string]json.RawMessage
+	if err := json.Unmarshal(data, &cases); err != nil {
+		return nil, fmt.Errorf("%s: %w", name, err)
+	}
+	changed := false
+	for _, tc := range cases {
+		var file string
+		if json.Unmarshal(tc["entities"], &file) != nil {
+			continue
+		}
+		p := path.Join(path.Dir(name), file)
+		entities, err := c.read(p)
+		if err != nil {
+			return nil, fmt.Errorf("%s: entities file %s: %w", name, p, err)
+		}
+		if !json.Valid(entities) {
+			return nil, fmt.Errorf("%s: entities file %s is not JSON", name, p)
+		}
+		tc["entities"], changed = entities, true
+	}
+	if !changed {
+		return data, nil
+	}
+	return json.Marshal(cases)
 }
 
 // join returns the policy set made of the invariants followed by a lower
@@ -183,7 +240,7 @@ func formatCheck(ctx context.Context, dir string) *exec.Cmd {
 }
 
 func validate(ctx context.Context, dir string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "cedar", "validate", "--schema", schemaFile, "--policies", policiesFile, "--validation-mode", "strict")
+	cmd := exec.CommandContext(ctx, "cedar", "validate", "--schema", schemaFile, "--policies", policiesFile, "--validation-mode", "strict", "--deny-warnings")
 	cmd.Dir = dir
 	return cmd
 }
@@ -215,27 +272,28 @@ func (c *checker) run(files map[string][]byte, cmd command) error {
 }
 
 // find returns the policy files other than the invariants and the files of
-// run-tests cases in the repository, each sorted by path. It skips the .git
-// directory.
-func find(repo fs.FS) (policies, tests []string, err error) {
-	err = fs.WalkDir(repo, ".", func(p string, d fs.DirEntry, err error) error {
+// run-tests cases that git tracks in the repository at root, each sorted by
+// path. Files that git does not track, such as another checkout inside the
+// working tree, are not part of the repository.
+func find(ctx context.Context, root string) (policies, tests []string, err error) {
+	cmd := exec.CommandContext(ctx, "git", "ls-files", "-z", "--", "*.cedar", "*"+testsSuffix)
+	cmd.Dir = root
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, nil, fmt.Errorf("git ls-files: %w", err)
+	}
+	for _, p := range strings.Split(string(output), "\x00") {
 		switch {
-		case err != nil:
-			return err
-		case d.IsDir() && d.Name() == ".git":
-			return fs.SkipDir
-		case d.IsDir():
-			return nil
+		case p == "" || p == Invariants:
 		case strings.HasSuffix(p, testsSuffix):
 			tests = append(tests, p)
-		case path.Ext(p) == ".cedar" && p != Invariants:
+		default:
 			policies = append(policies, p)
 		}
-		return nil
-	})
+	}
 	slices.Sort(policies)
 	slices.Sort(tests)
-	return policies, tests, err
+	return policies, tests, nil
 }
 
 // checkVersion fails when the cedar on the PATH is not the version that
@@ -273,8 +331,11 @@ func PinnedVersion(dockerfile []byte) (string, error) {
 	if err := sc.Err(); err != nil {
 		return "", err
 	}
-	if len(versions) != 1 || versions[0] == "" {
-		return "", fmt.Errorf("%s: want one %s line with a version, got %d", Dockerfile, versionArg, len(versions))
+	if len(versions) != 1 {
+		return "", fmt.Errorf("%s: want one %s line, got %d", Dockerfile, versionArg, len(versions))
+	}
+	if !versionPattern.MatchString(versions[0]) {
+		return "", fmt.Errorf("%s: %s%s: %q is not a version such as 1.2.3", Dockerfile, versionArg, versions[0], versions[0])
 	}
 	return versions[0], nil
 }

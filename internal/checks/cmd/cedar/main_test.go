@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,7 +21,7 @@ const root = "../../../.."
 
 // copyRepo copies the schema, the invariants and the Dockerfile of the
 // repository, and the extra files, to a temporary directory and makes it the
-// working directory.
+// working directory, as the files of a new git repository.
 func copyRepo(t *testing.T, extra map[string]string) {
 	t.Helper()
 	files := map[string]string{}
@@ -41,6 +42,14 @@ func copyRepo(t *testing.T, extra map[string]string) {
 		}
 		if err := os.WriteFile(name, []byte(src), 0o600); err != nil {
 			t.Fatal(err)
+		}
+	}
+	for _, cmd := range []*exec.Cmd{
+		exec.CommandContext(t.Context(), "git", "init", "--quiet"),
+		exec.CommandContext(t.Context(), "git", "add", "--all"),
+	} {
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v: %v\n%s", cmd.Args, err, out)
 		}
 	}
 }

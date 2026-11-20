@@ -177,4 +177,7 @@ jobs:
     container: *devcontainer
     steps:
       - *checkout
+      # The check lists the policy files with git ls-files. Marks the
+      # workspace safe, as in the dco job.
+      - *safe-directory
       - run: make cedar

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The code generation of the api module (decision 0090). Each plugin is a tool
+# pinned in tools/ and run with go tool, so generation uses neither the Buf
+# Schema Registry nor remote plugins. make generate runs it.
+
+version: v2
+
+clean: true
+
+managed:
+  enabled: true
+  # The Go package of every schema follows from its directory, including a
+  # schema kept unchanged from another project with its own go_package.
+  override:
+    - file_option: go_package_prefix
+      value: getpumi.dev/pumi/api/gen
+
+plugins:
+  - local: ["go", "tool", "-modfile=tools/protoc-gen-go.mod", "protoc-gen-go"]
+    out: api/gen
+    opt: paths=source_relative
+  - local: ["go", "tool", "-modfile=tools/protoc-gen-connect-go.mod", "protoc-gen-connect-go"]
+    out: api/gen
+    opt: paths=source_relative

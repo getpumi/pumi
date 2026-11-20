@@ -1,5 +1,7 @@
 {
-  "api": {"path": "api", "modules": []},
+  "api": {"path": "api", "modules": [
+    {"module": "google.golang.org/protobuf", "reason": "The runtime of the Go code that protoc-gen-go generates from the protobuf schema in api/proto (decisions 0090 and 0132)."}
+  ]},
   "components": [
     {"name": "kernel", "path": "internal/kernel", "modules": []},
     {"name": "control plane", "path": "internal/controlplane", "modules": []},

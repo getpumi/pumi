@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.sample.v1;
+
+// Sample is the base message without its name field.
+message Sample {
+  reserved 1;
+  reserved "name";
+
+  // Size stays.
+  int64 size = 2;
+}

@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.sample.v1;
+
+// Sample is the base message, unchanged, in a file of another name. The FILE
+// category reports the move, and the PACKAGE category would not.
+message Sample {
+  // Name stays.
+  string name = 1;
+  // Size stays.
+  int64 size = 2;
+}

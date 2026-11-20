@@ -29,7 +29,15 @@ RANGE ?= origin/main..HEAD
 # tree. CI sets it to the base commit of the pull request.
 BASE ?=
 
-.PHONY: build test lint dco spdx imports license notices pins image
+# AGAINST is the commit whose protobuf schema make buf compares with the
+# working tree's in buf breaking (decision 0090). CI sets it to the first
+# parent of the commit it checks.
+AGAINST ?= origin/main
+
+# BUF runs the pinned buf (decision 0086).
+BUF := go tool -modfile=tools/buf.mod buf
+
+.PHONY: build test lint dco spdx imports license notices pins image generate buf
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -91,6 +99,27 @@ notices:
 # only in the weekly pins workflow.
 pins:
 	go run ./internal/checks/cmd/pins
+
+# generate writes the Go code of the protobuf schema in api/proto to api/gen
+# with the pinned buf and plugins, without the Buf Schema Registry (decision
+# 0090). The generated code is committed, and a test in
+# internal/checks/bufconfig fails when it is not what generate writes.
+generate:
+	$(BUF) generate
+
+# buf runs buf lint on the protobuf schema and buf breaking against the schema
+# at AGAINST (decisions 0041 and 0090). buf fails on a side with no .proto
+# files, so when AGAINST has none in api/proto, buf breaking has nothing to
+# compare and is skipped; a name that is not a commit fails.
+buf:
+	$(BUF) lint
+	@git rev-parse --quiet --verify "$(AGAINST)^{commit}" >/dev/null || { echo "make buf: AGAINST=$(AGAINST) is not a commit" >&2; exit 1; }
+	@if git ls-tree -r --name-only "$(AGAINST)" -- api/proto | grep -q '\.proto$$'; then \
+		echo "$(BUF) breaking --against .git#ref=$(AGAINST)"; \
+		$(BUF) breaking --against ".git#ref=$(AGAINST)"; \
+	else \
+		echo "make buf: $(AGAINST) has no .proto files in api/proto, so buf breaking has nothing to compare" >&2; \
+	fi
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

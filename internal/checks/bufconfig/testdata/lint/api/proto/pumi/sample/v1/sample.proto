@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.sample.v1;
+
+// sample_message breaks the MESSAGE_PASCAL_CASE rule.
+message sample_message {
+  // Name is a field whose name breaks the FIELD_LOWER_SNAKE_CASE rule.
+  string Name = 1;
+}
+
+// Color breaks ENUM_ZERO_VALUE_SUFFIX and ENUM_VALUE_PREFIX, which are in the
+// STANDARD rules and not in the BASIC ones.
+enum Color {
+  NONE = 0;
+}

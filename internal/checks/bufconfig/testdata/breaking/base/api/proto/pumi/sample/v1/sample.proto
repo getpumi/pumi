@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.sample.v1;
+
+// Sample is a message in the base schema.
+message Sample {
+  // Name is the field that the head schema deletes.
+  string name = 1;
+  // Size stays.
+  int64 size = 2;
+}

@@ -12,6 +12,57 @@ import (
 //go:embed pumi.cedarschema
 var Schema string
 
+// Invariants are the core invariants of decision 0142, invariants.cedar.
+//
+//go:embed invariants.cedar
+var Invariants string
+
+// Caps are hard caps on usage. They are the only floor under every profile
+// (decision 0012).
+type Caps struct {
+	// Tokens is the most tokens.
+	Tokens int64
+	// CostMicrodollars is the most cost, in microdollars.
+	CostMicrodollars int64
+	// Seconds is the most time.
+	Seconds int64
+}
+
+// DefaultHardCaps returns the default hard caps of this release. The
+// adopter sets a project's hard caps during bootstrapping, and the
+// bootstrapping interview offers these values (decision 0147);
+// invariant.caps reads the project's caps as context.hardCaps, and the
+// model gateway enforces them as well (decisions 0012 and 0142). It
+// returns a copy, so no importer can change them. The values are
+// placeholders until profiling replaces them, as the first profile
+// drafts' budgets and caps are: five million tokens, 50 dollars and four
+// hours.
+func DefaultHardCaps() Caps {
+	return Caps{
+		Tokens:           5_000_000,
+		CostMicrodollars: 50_000_000,
+		Seconds:          4 * 60 * 60,
+	}
+}
+
+// Context returns the caps as the record that the hardCaps context
+// attribute holds, by attribute name.
+func (c Caps) Context() map[string]int64 {
+	return map[string]int64{
+		"tokens":           c.Tokens,
+		"costMicrodollars": c.CostMicrodollars,
+		"seconds":          c.Seconds,
+	}
+}
+
+// ProjectValues returns the values that the project configuration, not
+// the profile, puts in the context of every action.
+func ProjectValues() []Setting {
+	return []Setting{
+		{"hardCaps", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The project's hard caps on usage, set during bootstrapping from DefaultHardCaps (decisions 0142 and 0147)."},
+	}
+}
+
 // Setting is a profile setting that an action's context declares.
 type Setting struct {
 	// Name is the setting's name in the context, such as reviewers.

@@ -3,13 +3,15 @@
 
 // The Cedar schema of Pumi (decision 0141). Facts are passed in the request
 // context, not as entities: each action's context declares exactly the
-// facts and the profile settings its gate reads. A fact's context name is
+// facts and the profile settings its gate reads, and every context also
+// declares hardCaps, the project's hard caps (decisions 0142 and 0147),
+// which are neither a fact nor a profile setting. A fact's context name is
 // its catalog name without the dots, such as verifyPassed for verify.passed,
 // and its type is the type of its value in getpumi.dev/pumi/api/facts. The
 // profile settings are listed in getpumi.dev/pumi/api/policy.
 namespace Pumi {
-  // The tokens, cost in microdollars and seconds of usage, and of a budget
-  // for it (decisions 0136 and 0044).
+  // The tokens, cost in microdollars and seconds of usage, of a budget for
+  // it (decisions 0136 and 0044), and of the hard caps (decision 0142).
   type Usage = {
     costMicrodollars: Long,
     seconds: Long,
@@ -59,8 +61,8 @@ namespace Pumi {
 
   // The settable gates (decision 0044). Besides its own facts, each reads the
   // gates a person overrode for the plan and tree (decision 0139), its
-  // attempts and their limit, its usage and budget, and the open warnings
-  // and their cap.
+  // attempts and their limit, its usage, budget and the hard caps, and the
+  // open warnings and their cap.
 
   // The spec gate: the spec is valid.
   action spec appliesTo {
@@ -68,6 +70,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       specValid: Bool,
@@ -85,6 +88,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       planReview: Counts,
@@ -106,6 +110,7 @@ namespace Pumi {
         second: Opinion,
       },
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -121,6 +126,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       pathsOutside: Set<String>,
@@ -138,6 +144,7 @@ namespace Pumi {
     context: {
       attempts: Long,
       budgetsBreached: Set<String>,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -155,6 +162,7 @@ namespace Pumi {
     context: {
       attempts: Long,
       conformanceAudit: Counts,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       reviewers: Long,
@@ -172,6 +180,7 @@ namespace Pumi {
     context: {
       attempts: Long,
       dcoSigned: Bool,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -190,6 +199,7 @@ namespace Pumi {
     resource: [Plan],
     context: {
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       outsideChecks: Set<String>,
       outsideChecksEnforced: Set<String>,
@@ -209,6 +219,7 @@ namespace Pumi {
     context: {
       approvedBy: Set<String>,
       attempts: Long,
+      hardCaps: Usage,
       maxAttempts: Long,
       overrides: Set<String>,
       usage: Usage,
@@ -225,6 +236,7 @@ namespace Pumi {
     principal: [Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       headState: {
         commit: String,
         tree: String,
@@ -236,8 +248,8 @@ namespace Pumi {
     },
   };
 
-  // The permissions. Each reads only usage, for the hard caps (decision
-  // 0142). approve and override name every principal, so that the
+  // The permissions. Each reads only usage and hardCaps, for the hard caps
+  // (decision 0142). approve and override name every principal, so that the
   // invariant people-decide, not request validation, denies one that is not
   // a person, and the decision names it. writeVerdict names every runner, so
   // that verdicts-by-gate-role denies one in the agent role.
@@ -247,6 +259,7 @@ namespace Pumi {
     principal: [Runner],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };
@@ -256,6 +269,7 @@ namespace Pumi {
     principal: [Person, Agent, Runner, Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };
@@ -265,6 +279,7 @@ namespace Pumi {
     principal: [Person, Agent, Runner, Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };
@@ -274,6 +289,7 @@ namespace Pumi {
     principal: [Person, Kernel],
     resource: [Plan],
     context: {
+      hardCaps: Usage,
       usage: Usage,
     },
   };

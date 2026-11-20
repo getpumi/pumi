@@ -4,6 +4,7 @@
 package policy
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -58,5 +59,45 @@ func TestUsageBudgetHasTheShapeOfUsage(t *testing.T) {
 		if s.Name == "usageBudget" && s.CedarType != usage {
 			t.Errorf("usageBudget is %q, want %q, the type of usage", s.CedarType, usage)
 		}
+	}
+}
+
+func TestInvariantsAreEmbedded(t *testing.T) {
+	if !strings.HasPrefix(Invariants, "// SPDX-License-Identifier: Apache-2.0\n") {
+		t.Errorf("Invariants does not start with the SPDX lines: %.80q", Invariants)
+	}
+	if !strings.Contains(Invariants, `@id("invariant.verify")`) {
+		t.Error("Invariants has no invariant.verify")
+	}
+}
+
+func TestDefaultHardCaps(t *testing.T) {
+	caps := DefaultHardCaps()
+	if caps.Tokens <= 0 || caps.CostMicrodollars <= 0 || caps.Seconds <= 0 {
+		t.Errorf("DefaultHardCaps() = %+v, want every cap above zero", caps)
+	}
+	values := ProjectValues()
+	if len(values) != 1 || values[0].Name != "hardCaps" {
+		t.Fatalf("ProjectValues() = %+v, want hardCaps only", values)
+	}
+	catalog, err := facts.Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, f := range catalog {
+		if f.Name == "usage" {
+			found = true
+			if values[0].CedarType != f.ValueType() {
+				t.Errorf("hardCaps is %q, want %q, the type of usage", values[0].CedarType, f.ValueType())
+			}
+		}
+	}
+	if !found {
+		t.Error("the catalog has no usage fact to compare hardCaps with")
+	}
+	want := map[string]int64{"tokens": caps.Tokens, "costMicrodollars": caps.CostMicrodollars, "seconds": caps.Seconds}
+	if got := caps.Context(); !maps.Equal(got, want) {
+		t.Errorf("DefaultHardCaps().Context() = %v, want %v", got, want)
 	}
 }

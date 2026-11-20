@@ -51,6 +51,7 @@ func TestClassify(t *testing.T) {
 		{"api/proto/pumi/events/v1/basis.proto", Slash},
 		{"internal/checks/bufconfig/testdata/lint/api/proto/pumi/x/v1/x.proto", Slash},
 		{"api/policy/pumi.cedarschema", Slash},
+		{"api/policy/invariants.cedar", Slash},
 		{"api/proto/io/cloudevents/v1/cloudevents.proto", Exempt},
 		{"internal/checks/bufconfig/testdata/io/cloudevents/v1/cloudevents.proto", Slash},
 		{".pumi/agent-identities.json", Exempt},

@@ -19,12 +19,16 @@ var recorded = time.Date(2026, 11, 19, 22, 0, 0, 0, time.UTC)
 
 var due127 = time.Date(2026, 9, 28, 16, 20, 6, 0, time.UTC)
 
+// cedarStage is the stage of the Dockerfile that builds the Cedar CLI at the
+// newest release in the recorded data.
+const cedarStage = "FROM rust:1.100.0-trixie@sha256:223c AS cedar\nARG CEDAR_VERSION=4.15.0\n\n"
+
 // currentFiles are the pinning files of a repository whose pins were all
 // current when the data was recorded.
 func currentFiles() map[string]string {
 	return map[string]string{
 		InstallScript: "#!/bin/sh\nset -eu\n\nGOLANGCI_LINT_VERSION=2.15.0\nGOLANGCI_LINT_SHA256_AMD64=abc\n\nTRIVY_VERSION=0.76.2\n",
-		Dockerfile:    "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\nRUN true\n",
+		Dockerfile:    "FROM rust:1.100.0-trixie@sha256:223c AS cedar\nARG CEDAR_VERSION=4.15.0\n\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\nRUN true\n",
 		CoreModFile:   "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.4\n",
 		APIModFile:    "module getpumi.dev/pumi/api\n\ngo 1.26.0\n\ntoolchain go1.27.4\n",
 	}
@@ -55,7 +59,7 @@ func newRepo(t *testing.T, files, changes map[string]string) string {
 
 func runAt(t *testing.T, changes map[string]string, overrides map[string]response, now time.Time) []Pin {
 	t.Helper()
-	pins, err := Run(t.Context(), newRepo(t, currentFiles(), changes), newProxy(t, overrides), now)
+	pins, err := Run(t.Context(), newRepo(t, currentFiles(), changes), sources(t, overrides), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +83,7 @@ func TestRunAllCurrent(t *testing.T) {
 	want := []string{
 		"golangci-lint 2.15.0 in .devcontainer/install-tools.sh: current",
 		"Trivy 0.76.2 in .devcontainer/install-tools.sh: current",
+		"cedar-policy-cli 4.15.0 in .devcontainer/Dockerfile: current",
 		"go line 1.27.0 in go.mod: current",
 		"toolchain go1.27.4 in go.mod: current",
 		"go line 1.26.0 in api/go.mod: current",
@@ -112,6 +117,25 @@ func TestRunNewerRelease(t *testing.T) {
 	}
 }
 
+func TestRunNewerCedar(t *testing.T) {
+	pins := runAt(t, map[string]string{
+		Dockerfile: "FROM rust:1.100.0-trixie@sha256:223c AS cedar\nARG CEDAR_VERSION=4.14.1\n\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n",
+	}, nil, recorded)
+	want := "cedar-policy-cli 4.14.1 in .devcontainer/Dockerfile: out of date, newest 4.15.0"
+	if p := find(t, pins, "cedar-policy-cli", Dockerfile); !p.OutOfDate || p.String() != want {
+		t.Errorf("cedar-policy-cli = %q (out of date %v), want %q", p.String(), p.OutOfDate, want)
+	}
+}
+
+func TestRunCedarCrateUnknown(t *testing.T) {
+	_, err := Run(t.Context(), newRepo(t, currentFiles(), nil), sources(t, map[string]response{
+		"/api/v1/crates/cedar-policy-cli": {404, `{"errors":[{"detail":"crate does not exist"}]}`},
+	}), recorded)
+	if err == nil || !strings.Contains(err.Error(), "cedar-policy-cli") {
+		t.Errorf("Run() error = %v, want one that names the crate", err)
+	}
+}
+
 func TestRunNewMajorVersion(t *testing.T) {
 	pins := runAt(t, nil, map[string]response{
 		"/github.com/golangci/golangci-lint/v3/@latest": {200, `{"Version":"v3.0.1","Time":"2026-11-18T10:00:00Z"}`},
@@ -130,7 +154,7 @@ func TestRunNewMajorVersion(t *testing.T) {
 func TestRunNewerGoPatch(t *testing.T) {
 	pins := runAt(t, map[string]string{
 		CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.3\n",
-		Dockerfile:  "FROM golang:1.27.3-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.10\n",
+		Dockerfile:  cedarStage + "FROM golang:1.27.3-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.10\n",
 	}, nil, recorded)
 	for _, c := range []struct{ name, file, newest string }{
 		{"toolchain", CoreModFile, "go1.27.4"},
@@ -150,7 +174,7 @@ func TestRunNewerGoPatch(t *testing.T) {
 // on126 are the changes that put the repository on Go 1.26, with 1.25 as the
 // older release, on the newest patch releases of both.
 var on126 = map[string]string{
-	Dockerfile:  "FROM golang:1.26.11-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.25.14\n",
+	Dockerfile:  cedarStage + "FROM golang:1.26.11-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.25.14\n",
 	CoreModFile: "module getpumi.dev/pumi\n\ngo 1.26.0\n\ntoolchain go1.26.11\n",
 	APIModFile:  "module getpumi.dev/pumi/api\n\ngo 1.25.0\n\ntoolchain go1.26.11\n",
 }
@@ -206,7 +230,7 @@ func TestRunGoMinorWithoutPatchRelease(t *testing.T) {
 func TestRunOlderGoTooOld(t *testing.T) {
 	pins := runAt(t, map[string]string{
 		APIModFile: "module getpumi.dev/pumi/api\n\ngo 1.25.0\n\ntoolchain go1.27.4\n",
-		Dockerfile: "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.25.14\n",
+		Dockerfile: cedarStage + "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.25.14\n",
 	}, nil, recorded)
 	for _, c := range []struct{ name, file, newest string }{
 		{"go line", APIModFile, "1.26.0"},
@@ -247,15 +271,15 @@ require github.com/spf13/cobra v1.10.1 // indirect
 	if !p.OutOfDate || p.Newest != "v1.75.0" {
 		t.Errorf("buf = %+v, want out of date with newest v1.75.0", p)
 	}
-	if len(pins) != 9 {
-		t.Errorf("Run() = %v, want the 8 pins and buf", pins)
+	if len(pins) != 10 {
+		t.Errorf("Run() = %v, want the 9 pins and buf", pins)
 	}
 }
 
 func TestRunToolWithoutModule(t *testing.T) {
 	_, err := Run(t.Context(), newRepo(t, currentFiles(), map[string]string{
 		"tools/x.mod": "module getpumi.dev/pumi/tools/x\n\ntool example.com/x/cmd/x\n",
-	}), newProxy(t, nil), recorded)
+	}), sources(t, nil), recorded)
 	if err == nil || !strings.Contains(err.Error(), "example.com/x/cmd/x") {
 		t.Errorf("Run() error = %v, want one that names the tool", err)
 	}
@@ -265,16 +289,19 @@ func TestRunMissingPins(t *testing.T) {
 	for name, changes := range map[string]map[string]string{
 		"no Trivy":         {InstallScript: "GOLANGCI_LINT_VERSION=2.15.0\n"},
 		"two Trivy":        {InstallScript: "GOLANGCI_LINT_VERSION=2.15.0\nTRIVY_VERSION=0.76.2\nTRIVY_VERSION=0.76.1\n"},
-		"no base image":    {Dockerfile: "FROM debian\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
-		"no older Go":      {Dockerfile: "FROM golang:1.27.4-trixie@sha256:f18c\n"},
+		"no base image":    {Dockerfile: cedarStage + "FROM debian\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"no older Go":      {Dockerfile: cedarStage + "FROM golang:1.27.4-trixie@sha256:f18c\n"},
 		"no toolchain":     {CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n"},
 		"no api module":    {APIModFile: ""},
 		"unknown release":  {CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.9\n"},
-		"bad Go version":   {Dockerfile: "FROM golang:1.27-trixie\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"bad Go version":   {Dockerfile: cedarStage + "FROM golang:1.27-trixie\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
 		"bad tool version": {InstallScript: "GOLANGCI_LINT_VERSION=latest\nTRIVY_VERSION=0.76.2\n"},
+		"no Cedar":         {Dockerfile: "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"two Cedar":        {Dockerfile: "ARG CEDAR_VERSION=4.15.0\nARG CEDAR_VERSION=4.14.0\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"bad Cedar":        {Dockerfile: "ARG CEDAR_VERSION=4\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Run(t.Context(), newRepo(t, currentFiles(), changes), newProxy(t, nil), recorded); err == nil {
+			if _, err := Run(t.Context(), newRepo(t, currentFiles(), changes), sources(t, nil), recorded); err == nil {
 				t.Error("Run() returned no error")
 			}
 		})
@@ -295,7 +322,7 @@ var due128 = time.Date(2026, 12, 12, 9, 0, 0, 0, time.UTC)
 func TestRunGoPatchBehindBeforeNewMinorDue(t *testing.T) {
 	pins := runAt(t, map[string]string{
 		CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.3\n",
-		Dockerfile:  "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.10\n",
+		Dockerfile:  cedarStage + "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.10\n",
 	}, map[string]response{
 		"/golang.org/toolchain/@v/list":                             {200, list128},
 		"/golang.org/toolchain/@v/v0.0.1-go1.28.1.linux-amd64.info": {200, `{"Version":"v0.0.1-go1.28.1.linux-amd64","Time":"2026-11-12T09:00:00Z"}`},

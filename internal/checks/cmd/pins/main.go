@@ -4,8 +4,9 @@
 // Command pins is the pin report (decision 0115) on the repository in the
 // working directory, which is what make pins does. It asks the Go module
 // proxy, proxy.golang.org unless -proxy names another, about newer releases
-// of golangci-lint, Trivy, Go and the tool modules, and prints one line for
-// each pin. It exits with status 1 when a pin is out of date, and with
+// of golangci-lint, Trivy, Go and the tool modules, and the crates.io API,
+// crates.io unless -crates names another, about newer releases of the Cedar
+// CLI, and prints one line for each pin. It exits with status 1 when a pin is out of date, and with
 // status 2 when it cannot run.
 package main
 
@@ -22,7 +23,7 @@ import (
 	"getpumi.dev/pumi/internal/checks/pins"
 )
 
-// timeout limits each request to the proxy.
+// timeout limits each request to the proxy and to crates.io.
 const timeout = 30 * time.Second
 
 func main() {
@@ -31,7 +32,7 @@ func main() {
 
 // errUsage is returned for wrong arguments. run prints it without the
 // "pins: " prefix.
-var errUsage = errors.New("usage: pins [-proxy url]")
+var errUsage = errors.New("usage: pins [-proxy url] [-crates url]")
 
 // run returns the exit status: 0 when every pin is current or not yet due, 1
 // when any is out of date, and 2 when the report cannot run. The messages on
@@ -59,11 +60,16 @@ func report(ctx context.Context, args []string, stdout io.Writer) (int, error) {
 	flags := flag.NewFlagSet("pins", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	proxyURL := flags.String("proxy", pins.DefaultProxy, "")
+	cratesURL := flags.String("crates", pins.DefaultCrates, "")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
 		return 0, errUsage
 	}
-	proxy := &pins.Proxy{BaseURL: *proxyURL, Client: &http.Client{Timeout: timeout}}
-	list, err := pins.Run(ctx, ".", proxy, time.Now())
+	client := &http.Client{Timeout: timeout}
+	src := pins.Sources{
+		Proxy:  &pins.Proxy{BaseURL: *proxyURL, Client: client},
+		Crates: &pins.Crates{BaseURL: *cratesURL, Client: client},
+	}
+	list, err := pins.Run(ctx, ".", src, time.Now())
 	if err != nil {
 		return 0, err
 	}

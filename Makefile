@@ -37,7 +37,7 @@ AGAINST ?= origin/main
 # BUF runs the pinned buf (decision 0086).
 BUF := go tool -modfile=tools/buf.mod buf
 
-.PHONY: build test lint dco spdx imports license notices pins image generate buf
+.PHONY: build test lint dco spdx imports license notices pins image generate buf cedar
 
 # build compiles every package in both modules and writes the five binaries
 # to bin/.
@@ -120,6 +120,15 @@ buf:
 	else \
 		echo "make buf: $(AGAINST) has no .proto files in api/proto, so buf breaking has nothing to compare" >&2; \
 	fi
+
+# cedar runs the pinned Rust Cedar CLI on the Cedar policies that git tracks
+# (decision 0146): cedar format --check on every policy file, cedar validate
+# in strict mode, with warnings as failures, on the core invariants and on
+# every other policy set together with them, and cedar run-tests on every
+# x.tests.json file, with the policies of x.cedar beside it. It fails when
+# the cedar on the PATH is not the version pinned in .devcontainer/Dockerfile.
+cedar:
+	go run ./internal/checks/cmd/cedar
 
 # image prints the reference by digest of the devcontainer image for the
 # committed content of .devcontainer/, which it tags with the git tree hash of

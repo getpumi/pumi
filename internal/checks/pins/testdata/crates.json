@@ -1,0 +1,10 @@
+{
+ "recorded": "2026-11-20 from https://crates.io",
+ "note": "Responses of the crates.io API, by request path. Each body keeps only the crate object of the full response, without its list of version ids.",
+ "responses": {
+  "/api/v1/crates/cedar-policy-cli": {
+   "status": 200,
+   "body": "{\"crate\":{\"id\":\"cedar-policy-cli\",\"name\":\"cedar-policy-cli\",\"updated_at\":\"2026-11-16T19:48:47.302500Z\",\"keywords\":[\"authorization\",\"security\",\"policy\",\"cedar\"],\"categories\":[\"compilers\",\"config\"],\"badges\":[],\"created_at\":\"2023-05-10T11:37:03.927838Z\",\"downloads\":155403,\"recent_downloads\":38355,\"default_version\":\"4.15.0\",\"num_versions\":83,\"yanked\":false,\"max_version\":\"4.15.0\",\"newest_version\":\"4.15.0\",\"max_stable_version\":\"4.15.0\",\"description\":\"CLI interface for the Cedar Policy language.\",\"homepage\":\"https://cedarpolicy.com\",\"documentation\":null,\"repository\":\"https://github.com/cedar-policy/cedar\",\"links\":{\"version_downloads\":\"/api/v1/crates/cedar-policy-cli/downloads\",\"versions\":null,\"owners\":\"/api/v1/crates/cedar-policy-cli/owners\",\"owner_team\":\"/api/v1/crates/cedar-policy-cli/owner_team\",\"owner_user\":\"/api/v1/crates/cedar-policy-cli/owner_user\",\"reverse_dependencies\":\"/api/v1/crates/cedar-policy-cli/reverse_dependencies\"},\"exact_match\":false,\"trustpub_only\":false}}"
+  }
+ }
+}

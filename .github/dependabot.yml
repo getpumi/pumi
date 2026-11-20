@@ -3,7 +3,7 @@
 
 # Dependabot updates the pins it supports (decision 0115): the SHAs of the
 # GitHub Actions, the go.mod files of the core and api modules and the golang
-# base image of the devcontainer. make pins, run by the weekly pins workflow,
+# and rust base images of the devcontainer. make pins, run by the weekly pins workflow,
 # reports the other pins. Each update is a pull request of its own (decision
 # 0116).
 

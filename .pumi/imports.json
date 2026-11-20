@@ -4,7 +4,9 @@
   ]},
   "components": [
     {"name": "kernel", "path": "internal/kernel", "modules": []},
-    {"name": "control plane", "path": "internal/controlplane", "modules": []},
+    {"name": "control plane", "path": "internal/controlplane", "modules": [
+      {"module": "github.com/cedar-policy/cedar-go", "reason": "Validates and authorizes each Cedar request at runtime (decision 0146); its tests parse and resolve the Cedar schema of the api module (decision 0141)."}
+    ]},
     {"name": "runner", "path": "internal/runner", "modules": []},
     {"name": "gateway", "path": "internal/gateway", "modules": []},
     {"name": "CLI", "path": "internal/cli", "modules": []}

@@ -5,6 +5,7 @@ package facts
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -402,5 +403,68 @@ func TestFromMessagesRefusesADuplicateName(t *testing.T) {
 	_, err := FromMessages(mds)
 	if err == nil || !strings.Contains(err.Error(), "test.fact0") {
 		t.Errorf("FromMessages() = %v, want an error that names test.fact0", err)
+	}
+}
+
+func TestFromMessagesRefusesADuplicateAttribute(t *testing.T) {
+	a, b := opts(), opts()
+	a.Name, b.Name = "plan.reviewCount", "planReview.count"
+	mds := []protoreflect.MessageDescriptor{
+		synthetic(t, "First", a, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false}),
+		synthetic(t, "Second", b, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false}),
+	}
+	_, err := FromMessages(mds)
+	if err == nil || !strings.Contains(err.Error(), "planReviewCount") {
+		t.Errorf("FromMessages() = %v, want an error that names planReviewCount", err)
+	}
+}
+
+func TestDescribeRefusesANameThatIsNoCedarIdentifier(t *testing.T) {
+	for _, name := range []string{"head.up-to-date", "1st.fact", "a..b", ".a", "a b"} {
+		o := opts()
+		o.Name = name
+		md := synthetic(t, "Bad"+fmt.Sprint(len(name)), o, field{"tree", tString, false, key, "", false}, field{"value", tBool, false, val, "", false})
+		refuses(t, md, "Cedar")
+	}
+}
+
+func TestAttributeIsTheCedarContextName(t *testing.T) {
+	for name, want := range map[string]string{
+		"verify.passed":      "verifyPassed",
+		"ambiguity.opinions": "ambiguityOpinions",
+		"head.state":         "headState",
+		"attempts":           "attempts",
+		"a.b.c":              "aBC",
+	} {
+		if got := (Fact{Name: name}).Attribute(); got != want {
+			t.Errorf("Fact{Name: %q}.Attribute() = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestValueTypeIsTheCedarType(t *testing.T) {
+	catalog, err := Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"verify.passed":      "Bool",
+		"attempts":           "Long",
+		"approved.by":        "Set<String>",
+		"plan.review":        "{fail: Long, models: Set<String>, pass: Long}",
+		"ambiguity.opinions": "{first: {answer: String, model: String}, second: {answer: String, model: String}}",
+		"usage":              "{costMicrodollars: Long, seconds: Long, tokens: Long}",
+		"head.state":         "{commit: String, tree: String, upToDate: Bool}",
+	}
+	for _, f := range catalog {
+		if w, ok := want[f.Name]; ok {
+			if got := f.ValueType(); got != w {
+				t.Errorf("%s: ValueType() = %q, want %q", f.Name, got, w)
+			}
+			delete(want, f.Name)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("the catalog has none of %q", slices.Collect(maps.Keys(want)))
 	}
 }

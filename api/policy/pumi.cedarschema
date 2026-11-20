@@ -1,0 +1,280 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+// The Cedar schema of Pumi (decision 0141). Facts are passed in the request
+// context, not as entities: each action's context declares exactly the
+// facts and the profile settings its gate reads. A fact's context name is
+// its catalog name without the dots, such as verifyPassed for verify.passed,
+// and its type is the type of its value in getpumi.dev/pumi/api/facts. The
+// profile settings are listed in getpumi.dev/pumi/api/policy.
+namespace Pumi {
+  // The tokens, cost in microdollars and seconds of usage, and of a budget
+  // for it (decisions 0136 and 0044).
+  type Usage = {
+    costMicrodollars: Long,
+    seconds: Long,
+    tokens: Long,
+  };
+
+  // The passing and failing independent verdicts of a model-judgment gate,
+  // with the model of each (decision 0137).
+  type Counts = {
+    fail: Long,
+    models: Set<String>,
+    pass: Long,
+  };
+
+  // One opinion of the ambiguity escalation, with its model.
+  type Opinion = {
+    answer: String,
+    model: String,
+  };
+
+  // A person, with their roles.
+  entity Person = {
+    roles: Set<String>,
+  };
+
+  // An agent.
+  entity Agent;
+
+  // A runner, with its role: gate or agent (decision 0024).
+  entity Runner = {
+    role: String,
+  };
+
+  // The kernel, which asks for the decision of each workflow transition.
+  entity Kernel;
+
+  // A project, with its protected path patterns.
+  entity Project = {
+    protectedPaths: Set<String>,
+  };
+
+  // A plan, in its project, with the tree that the facts of a request are
+  // keyed to (decision 0016).
+  entity Plan in [Project] = {
+    tree: String,
+  };
+
+  // The settable gates (decision 0044). Besides its own facts, each reads the
+  // gates a person overrode for the plan and tree (decision 0139), its
+  // attempts and their limit, its usage and budget, and the open warnings
+  // and their cap.
+
+  // The spec gate: the spec is valid.
+  action spec appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      specValid: Bool,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // Plan review: enough independent passing verdicts and no failing one
+  // (decisions 0137 and 0138).
+  action planReview appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      planReview: Counts,
+      reviewers: Long,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // Ambiguity escalation: the two independent opinions.
+  action ambiguity appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      ambiguityOpinions: {
+        first: Opinion,
+        second: Opinion,
+      },
+      attempts: Long,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // The scope gate: no changed path outside the plan's declared paths.
+  action scope appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      pathsOutside: Set<String>,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // Coupling and size budgets: no metric over the profile's threshold.
+  action budgets appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      budgetsBreached: Set<String>,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // The conformance audit: enough independent passing verdicts and no
+  // failing one (decisions 0137 and 0138).
+  action conformance appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      conformanceAudit: Counts,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      reviewers: Long,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // The DCO gate: the head commit is signed off.
+  action dco appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      dcoSigned: Bool,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // Required outside checks: each required check passed on the head commit
+  // (decision 0140). The enforced and the warned checks are separate sets,
+  // so that a policy for each can tell the control plane which response a
+  // missing check gets.
+  action outsideChecks appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      maxAttempts: Long,
+      outsideChecks: Set<String>,
+      outsideChecksEnforced: Set<String>,
+      outsideChecksWarned: Set<String>,
+      overrides: Set<String>,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // Merge approval: a person approved the tree.
+  action mergeApproval appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      approvedBy: Set<String>,
+      attempts: Long,
+      maxAttempts: Long,
+      overrides: Set<String>,
+      usage: Usage,
+      usageBudget: Usage,
+      warningsCap: Long,
+      warningsOpen: Long,
+    },
+  };
+
+  // The merge, which the invariants guard: VERIFY passed, no protected path
+  // changed, and the head is up to date at the tree the facts are keyed to
+  // (decision 0142).
+  action merge appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      headState: {
+        commit: String,
+        tree: String,
+        upToDate: Bool,
+      },
+      pathsProtected: Set<String>,
+      usage: Usage,
+      verifyPassed: Bool,
+    },
+  };
+
+  // The permissions. Each reads only usage, for the hard caps (decision
+  // 0142). approve and override name every principal, so that the
+  // invariant people-decide, not request validation, denies one that is not
+  // a person, and the decision names it. writeVerdict names every runner, so
+  // that verdicts-by-gate-role denies one in the agent role.
+
+  // Writing a verdict, which only a runner in the gate role may do.
+  action writeVerdict appliesTo {
+    principal: [Runner],
+    resource: [Plan],
+    context: {
+      usage: Usage,
+    },
+  };
+
+  // Approving, which only a person may do.
+  action approve appliesTo {
+    principal: [Person, Agent, Runner, Kernel],
+    resource: [Plan],
+    context: {
+      usage: Usage,
+    },
+  };
+
+  // Overriding a settable gate, which only a person may do (decision 0139).
+  action override appliesTo {
+    principal: [Person, Agent, Runner, Kernel],
+    resource: [Plan],
+    context: {
+      usage: Usage,
+    },
+  };
+
+  // Cancelling an invocation.
+  action cancel appliesTo {
+    principal: [Person, Kernel],
+    resource: [Plan],
+    context: {
+      usage: Usage,
+    },
+  };
+}

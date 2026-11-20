@@ -119,6 +119,8 @@ var extensionStyles = map[string]Style{
 	".md":   HTML,
 	// The protobuf schemas in api/proto (decision 0090).
 	".proto": Slash,
+	// The Cedar schema in the api module (decision 0141).
+	".cedarschema": Slash,
 	// go.sum and the tools' .sum files are written by the go command.
 	".sum": Exempt,
 	// JSON has no comments, and the files in .pumi/ are plain JSON

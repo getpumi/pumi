@@ -3,11 +3,15 @@
 
 // Package pins is the pin report (decision 0115). It reads the pins that
 // Dependabot does not update, or does not update together, and asks the Go
-// module proxy for newer releases:
+// module proxy, or crates.io for a Rust crate, for newer releases:
 //
 //   - golangci-lint and Trivy, pinned in .devcontainer/install-tools.sh
 //     (decision 0086). Both are Go modules, so the proxy lists their release
 //     tags, without authentication.
+//   - The Rust Cedar CLI, cedar-policy-cli, built in a stage of
+//     .devcontainer/Dockerfile at the version of its CEDAR_VERSION build
+//     argument (decision 0146). crates.io reports its newest stable
+//     release.
 //   - Go: the go and toolchain lines of the core and api go.mod files, the
 //     golang base image in .devcontainer/Dockerfile and the older release in
 //     its PUMI_GO_OLDER (decision 0085). The proxy lists the Go releases as

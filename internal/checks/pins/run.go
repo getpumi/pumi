@@ -71,8 +71,9 @@ var releaseTools = []struct {
 
 // Run reads the pins of the repository at root and asks proxy about newer
 // releases, as of now. It returns the pins in a fixed order: the release
-// tools, the Go pins and the tool modules by file.
-func Run(ctx context.Context, root string, proxy *Proxy, now time.Time) ([]Pin, error) {
+// tools, the Cedar CLI, the Go pins and the tool modules by file.
+func Run(ctx context.Context, root string, src Sources, now time.Time) ([]Pin, error) {
+	proxy := src.Proxy
 	dir := os.DirFS(root)
 	read := func(name string) ([]byte, error) {
 		return fs.ReadFile(dir, name)
@@ -89,6 +90,15 @@ func Run(ctx context.Context, root string, proxy *Proxy, now time.Time) ([]Pin, 
 		}
 		pins = append(pins, p)
 	}
+	dockerfile, err := read(Dockerfile)
+	if err != nil {
+		return nil, err
+	}
+	cedar, err := cratePin(ctx, src.Crates, dockerfile, cedarCrate, cedarVariable)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", Dockerfile, err)
+	}
+	pins = append(pins, cedar)
 	specs, err := readGoPins(read)
 	if err != nil {
 		return nil, err
@@ -103,6 +113,32 @@ func Run(ctx context.Context, root string, proxy *Proxy, now time.Time) ([]Pin, 
 		return nil, err
 	}
 	return append(pins, toolPins...), nil
+}
+
+// The Rust Cedar CLI is built from its crate in a stage of Dockerfile, at
+// the version of the build argument cedarVariable (decision 0146).
+const (
+	cedarCrate    = "cedar-policy-cli"
+	cedarVariable = "ARG CEDAR_VERSION"
+)
+
+// cratePin reads the version of a crate from the line `variable=version` of
+// the Dockerfile and compares it with the newest stable release on
+// crates.io.
+func cratePin(ctx context.Context, crates *Crates, dockerfile []byte, crate, variable string) (Pin, error) {
+	v, err := shellVariable(dockerfile, variable)
+	if err != nil {
+		return Pin{}, err
+	}
+	newest, err := crates.MaxStableVersion(ctx, crate)
+	if err != nil {
+		return Pin{}, fmt.Errorf("%s: %w", crate, err)
+	}
+	p := Pin{Name: crate, File: Dockerfile, Current: v}
+	if compareSemver("v"+newest, "v"+v) > 0 {
+		p.Newest, p.OutOfDate = newest, true
+	}
+	return p, nil
 }
 
 // releaseToolPin reads the version of one release tool from the install

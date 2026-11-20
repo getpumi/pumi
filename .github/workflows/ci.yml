@@ -168,3 +168,13 @@ jobs:
       # only merges of pull requests (decision 0114), so the first parent of
       # each new commit of main is the main that the pull request merged into.
       - run: make buf AGAINST=HEAD^1
+
+  cedar:
+    name: cedar
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions: *check-permissions
+    container: *devcontainer
+    steps:
+      - *checkout
+      - run: make cedar

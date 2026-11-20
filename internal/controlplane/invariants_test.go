@@ -190,7 +190,7 @@ forbid (principal, action, resource) when { context == {} };
 	}
 }
 
-// runTest is one case of invariants.tests.json, in the format of
+// runTest is one case of testdata/permit-all.tests.json, in the format of
 // cedar run-tests.
 type runTest struct {
 	Name    string `json:"name"`
@@ -206,16 +206,17 @@ type runTest struct {
 	NumErrors int                  `json:"num_errors"`
 }
 
-// runTests reads the cases of invariants.tests.json.
+// runTests reads the cases of testdata/permit-all.tests.json, which
+// cedar run-tests runs on invariants.cedar followed by permit-all.cedar.
 func runTests(t *testing.T) []runTest {
 	t.Helper()
-	b, err := fs.ReadFile(os.DirFS("../../api/policy"), "invariants.tests.json")
+	b, err := fs.ReadFile(os.DirFS("../../api/policy/testdata"), "permit-all.tests.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	var tests []runTest
 	if err := json.Unmarshal(b, &tests); err != nil {
-		t.Fatalf("cannot read invariants.tests.json: %v", err)
+		t.Fatalf("cannot read permit-all.tests.json: %v", err)
 	}
 	return tests
 }
@@ -237,14 +238,14 @@ func TestInvariantsDecideTheRunTestsCasesWithAPermitAllLayer(t *testing.T) {
 	}
 	set := policySet(t, "invariants.cedar and permit-all.cedar", policy.Invariants+"\n"+string(permitAll))
 	v := validate.New(resolvedSchema(t), validate.WithStrict())
-	caps := cedartypes.NewRecord(cedartypes.RecordMap{
-		"tokens":           cedartypes.Long(policy.HardCaps.Tokens),
-		"costMicrodollars": cedartypes.Long(policy.HardCaps.CostMicrodollars),
-		"seconds":          cedartypes.Long(policy.HardCaps.Seconds),
-	})
+	capsMap := cedartypes.RecordMap{}
+	for name, value := range policy.HardCaps().Context() {
+		capsMap[cedartypes.String(name)] = cedartypes.Long(value)
+	}
+	caps := cedartypes.NewRecord(capsMap)
 	tests := runTests(t)
 	if len(tests) == 0 {
-		t.Fatal("invariants.tests.json has no cases")
+		t.Fatal("permit-all.tests.json has no cases")
 	}
 	for _, tt := range tests {
 		t.Run(tt.Name, func(t *testing.T) {
@@ -268,6 +269,9 @@ func checkCase(t *testing.T, set *cedar.PolicySet, v *validate.Validator, caps c
 	}
 	if err := v.Request(req); err != nil {
 		t.Errorf("the request does not validate against the schema: %v", err)
+	}
+	if err := v.Entities(tt.Entities); err != nil {
+		t.Errorf("the entities do not validate against the schema: %v", err)
 	}
 	decision, diag := cedar.Authorize(set, tt.Entities, req)
 	want := cedar.Deny

@@ -28,14 +28,18 @@ type Caps struct {
 	Seconds int64
 }
 
-// HardCaps are the hard caps of this release, which invariant.caps reads as
-// context.hardCaps and the model gateway enforces as well (decision 0142).
-// The values are placeholders until profiling sets them (decision 0046):
-// five million tokens, 50 dollars and four hours.
-var HardCaps = Caps{
-	Tokens:           5_000_000,
-	CostMicrodollars: 50_000_000,
-	Seconds:          4 * 60 * 60,
+// HardCaps returns the hard caps of this release, which invariant.caps
+// reads as context.hardCaps and the model gateway enforces as well
+// (decisions 0012 and 0142). It returns a copy, so no importer can change
+// them. The values are placeholders until profiling replaces them, as the
+// first profile drafts' budgets and caps are: five million tokens, 50
+// dollars and four hours.
+func HardCaps() Caps {
+	return Caps{
+		Tokens:           5_000_000,
+		CostMicrodollars: 50_000_000,
+		Seconds:          4 * 60 * 60,
+	}
 }
 
 // Context returns the caps as the record that the hardCaps context
@@ -52,7 +56,7 @@ func (c Caps) Context() map[string]int64 {
 // in the context of every action.
 func ReleaseValues() []Setting {
 	return []Setting{
-		{"hardCaps", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The hard caps on usage of this release, HardCaps (decision 0142)."},
+		{"hardCaps", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The hard caps on usage of this release, from HardCaps (decision 0142)."},
 	}
 }
 

@@ -72,8 +72,9 @@ func TestInvariantsAreEmbedded(t *testing.T) {
 }
 
 func TestHardCaps(t *testing.T) {
-	if HardCaps.Tokens <= 0 || HardCaps.CostMicrodollars <= 0 || HardCaps.Seconds <= 0 {
-		t.Errorf("HardCaps = %+v, want every cap above zero", HardCaps)
+	caps := HardCaps()
+	if caps.Tokens <= 0 || caps.CostMicrodollars <= 0 || caps.Seconds <= 0 {
+		t.Errorf("HardCaps() = %+v, want every cap above zero", caps)
 	}
 	values := ReleaseValues()
 	if len(values) != 1 || values[0].Name != "hardCaps" {
@@ -83,13 +84,20 @@ func TestHardCaps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	found := false
 	for _, f := range catalog {
-		if f.Name == "usage" && values[0].CedarType != f.ValueType() {
-			t.Errorf("hardCaps is %q, want %q, the type of usage", values[0].CedarType, f.ValueType())
+		if f.Name == "usage" {
+			found = true
+			if values[0].CedarType != f.ValueType() {
+				t.Errorf("hardCaps is %q, want %q, the type of usage", values[0].CedarType, f.ValueType())
+			}
 		}
 	}
-	want := map[string]int64{"tokens": HardCaps.Tokens, "costMicrodollars": HardCaps.CostMicrodollars, "seconds": HardCaps.Seconds}
-	if got := HardCaps.Context(); !maps.Equal(got, want) {
-		t.Errorf("HardCaps.Context() = %v, want %v", got, want)
+	if !found {
+		t.Error("the catalog has no usage fact to compare hardCaps with")
+	}
+	want := map[string]int64{"tokens": caps.Tokens, "costMicrodollars": caps.CostMicrodollars, "seconds": caps.Seconds}
+	if got := caps.Context(); !maps.Equal(got, want) {
+		t.Errorf("HardCaps().Context() = %v, want %v", got, want)
 	}
 }

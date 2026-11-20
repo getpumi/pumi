@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The v1 fact catalog (decisions 0136 and 0137). Each top-level message other
+// than FactOptions is one fact: its fact option names it and gives its Cedar
+// type, producer and source, and its fields are marked as the fact's key or
+// its value, so that code can read the catalog from the schema. The Go
+// package getpumi.dev/pumi/api/facts reads it.
+package pumi.facts.v1;
+
+import "google/protobuf/descriptor.proto";
+
+// Source is where a fact comes from (decision 0137).
+enum Source {
+  SOURCE_UNSPECIFIED = 0;
+  // A deterministic check or a count from the event log.
+  SOURCE_MACHINE = 1;
+  // Model judgment. Invariants never read these facts.
+  SOURCE_MODEL = 2;
+  // A person.
+  SOURCE_PERSON = 3;
+}
+
+// Role is the part of a fact that a field holds.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  // A field of the fact's key.
+  ROLE_KEY = 1;
+  // The fact's value.
+  ROLE_VALUE = 2;
+}
+
+// FactOptions describes one fact of the catalog.
+message FactOptions {
+  // The fact's name, such as verify.passed.
+  string name = 1;
+  // The Cedar type of the value: Bool, Long, Set<String> or Record.
+  string cedar_type = 2;
+  // What produces the fact.
+  string producer = 3;
+  // Where the fact comes from.
+  Source source = 4;
+}
+
+extend google.protobuf.MessageOptions {
+  // The fact a message is.
+  FactOptions fact = 50000;
+}
+
+extend google.protobuf.FieldOptions {
+  // The part of the fact a field holds.
+  Role role = 50001;
+}

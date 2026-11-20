@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.facts.v1;
+
+import "pumi/facts/v1/options.proto";
+
+// VerifyPassed is verify.passed: whether VERIFY passed on the tree.
+message VerifyPassed {
+  option (fact) = {
+    name: "verify.passed"
+    cedar_type: "Bool"
+    producer: "VERIFY check"
+    source: SOURCE_MACHINE
+  };
+
+  // The tree.
+  string tree = 1 [(role) = ROLE_KEY];
+  // The version of the gate.
+  string gate_version = 2 [(role) = ROLE_KEY];
+  // Whether VERIFY passed.
+  bool value = 3 [(role) = ROLE_VALUE];
+}
+
+// PathsProtected is paths.protected: the changed paths that match the
+// project's protected patterns.
+message PathsProtected {
+  option (fact) = {
+    name: "paths.protected"
+    cedar_type: "Set<String>"
+    producer: "diff check"
+    source: SOURCE_MACHINE
+  };
+
+  // The base tree.
+  string base_tree = 1 [(role) = ROLE_KEY];
+  // The head tree.
+  string head_tree = 2 [(role) = ROLE_KEY];
+  // The paths.
+  repeated string value = 3 [(role) = ROLE_VALUE];
+}
+
+// PathsOutside is paths.outside: the changed paths outside the plan's
+// declared paths.
+message PathsOutside {
+  option (fact) = {
+    name: "paths.outside"
+    cedar_type: "Set<String>"
+    producer: "diff check"
+    source: SOURCE_MACHINE
+  };
+
+  // The plan.
+  string plan = 1 [(role) = ROLE_KEY];
+  // The base tree.
+  string base_tree = 2 [(role) = ROLE_KEY];
+  // The head tree.
+  string head_tree = 3 [(role) = ROLE_KEY];
+  // The paths.
+  repeated string value = 4 [(role) = ROLE_VALUE];
+}
+
+// SpecValid is spec.valid: whether the spec adapter accepts the tree's spec.
+message SpecValid {
+  option (fact) = {
+    name: "spec.valid"
+    cedar_type: "Bool"
+    producer: "spec adapter"
+    source: SOURCE_MACHINE
+  };
+
+  // The tree.
+  string tree = 1 [(role) = ROLE_KEY];
+  // The version of the spec adapter.
+  string spec_adapter_version = 2 [(role) = ROLE_KEY];
+  // Whether the spec is valid.
+  bool value = 3 [(role) = ROLE_VALUE];
+}
+
+// BudgetsBreached is budgets.breached: the names of the metrics over the
+// profile's thresholds.
+message BudgetsBreached {
+  option (fact) = {
+    name: "budgets.breached"
+    cedar_type: "Set<String>"
+    producer: "budgets check"
+    source: SOURCE_MACHINE
+  };
+
+  // The tree.
+  string tree = 1 [(role) = ROLE_KEY];
+  // The version of the metrics adapter.
+  string metrics_adapter_version = 2 [(role) = ROLE_KEY];
+  // The metric names.
+  repeated string value = 3 [(role) = ROLE_VALUE];
+}
+
+// DcoSigned is dco.signed: whether every commit has the sign-off the DCO
+// check requires.
+message DcoSigned {
+  option (fact) = {
+    name: "dco.signed"
+    cedar_type: "Bool"
+    producer: "DCO check"
+    source: SOURCE_MACHINE
+  };
+
+  // The head commit.
+  string head_commit = 1 [(role) = ROLE_KEY];
+  // Whether the commits are signed off.
+  bool value = 2 [(role) = ROLE_VALUE];
+}

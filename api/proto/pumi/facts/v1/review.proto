@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.facts.v1;
+
+import "pumi/facts/v1/options.proto";
+
+// PlanReview is plan.review: the passing and failing independent reviewer
+// verdicts on the plan (decision 0137).
+message PlanReview {
+  option (fact) = {
+    name: "plan.review"
+    cedar_type: "Record"
+    producer: "independent reviewer verdicts"
+    source: SOURCE_MODEL
+  };
+
+  // Counts are the verdicts counted.
+  message Counts {
+    // The passing verdicts.
+    int64 pass = 1;
+    // The failing verdicts.
+    int64 fail = 2;
+    // The model of each counted verdict, so a policy can require a
+    // different model later.
+    repeated string models = 3;
+  }
+
+  // The plan.
+  string plan = 1 [(role) = ROLE_KEY];
+  // The tree.
+  string tree = 2 [(role) = ROLE_KEY];
+  // The counts.
+  Counts value = 3 [(role) = ROLE_VALUE];
+}
+
+// AmbiguityOpinions is ambiguity.opinions: the two independent opinions on a
+// question.
+message AmbiguityOpinions {
+  option (fact) = {
+    name: "ambiguity.opinions"
+    cedar_type: "Record"
+    producer: "two independent opinions"
+    source: SOURCE_MODEL
+  };
+
+  // Opinion is one opinion.
+  message Opinion {
+    // The opinion.
+    string answer = 1;
+    // The model that gave it.
+    string model = 2;
+  }
+
+  // Opinions are the two opinions.
+  message Opinions {
+    // The first opinion.
+    Opinion first = 1;
+    // The second opinion.
+    Opinion second = 2;
+  }
+
+  // The plan.
+  string plan = 1 [(role) = ROLE_KEY];
+  // The question.
+  string question = 2 [(role) = ROLE_KEY];
+  // The opinions.
+  Opinions value = 3 [(role) = ROLE_VALUE];
+}
+
+// ConformanceAudit is conformance.audit: the passing and failing independent
+// auditor verdicts on the tree (decision 0137).
+message ConformanceAudit {
+  option (fact) = {
+    name: "conformance.audit"
+    cedar_type: "Record"
+    producer: "independent auditor verdicts"
+    source: SOURCE_MODEL
+  };
+
+  // Counts are the verdicts counted.
+  message Counts {
+    // The passing verdicts.
+    int64 pass = 1;
+    // The failing verdicts.
+    int64 fail = 2;
+    // The model of each counted verdict, so a policy can require a
+    // different model later.
+    repeated string models = 3;
+  }
+
+  // The plan.
+  string plan = 1 [(role) = ROLE_KEY];
+  // The tree.
+  string tree = 2 [(role) = ROLE_KEY];
+  // The counts.
+  Counts value = 3 [(role) = ROLE_VALUE];
+}

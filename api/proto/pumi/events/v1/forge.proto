@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.events.v1;
+
+// MergePerformed is the data of dev.getpumi.merge.performed.
+message MergePerformed {
+  // Trailer is one trailer of the merge commit.
+  message Trailer {
+    // The trailer's key, such as Signed-off-by.
+    string key = 1;
+    // The trailer's value.
+    string value = 2;
+  }
+
+  // The merge commit.
+  string commit = 1;
+  // Its trailers, in order.
+  repeated Trailer trailers = 2;
+}
+
+// TrunkUnattested is the data of dev.getpumi.trunk.unattested: the trunk
+// check found a commit without an attestation.
+message TrunkUnattested {
+  // The commit.
+  string commit = 1;
+}
+
+// CheckIngested is the data of dev.getpumi.check.ingested: the result of a
+// check that Pumi does not run (decision 0140).
+message CheckIngested {
+  // Result is the check's result.
+  enum Result {
+    RESULT_UNSPECIFIED = 0;
+    RESULT_PASSED = 1;
+    RESULT_FAILED = 2;
+    RESULT_PENDING = 3;
+  }
+
+  // The name of the check.
+  string check = 1;
+  // The head commit the result is for.
+  string commit = 2;
+  // The result.
+  Result result = 3;
+}

@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.events.v1;
+
+import "pumi/events/v1/basis.proto";
+
+// InvocationRequested is the data of dev.getpumi.invocation.requested: the
+// kernel's intent to invoke a harness.
+message InvocationRequested {
+  // The invocation.
+  string invocation = 1;
+  // The idempotency key.
+  string idempotency_key = 2;
+  // The hash of the invocation document.
+  string document_hash = 3;
+}
+
+// InvocationStarted is the data of dev.getpumi.invocation.started: the
+// runner's intent to run the invocation.
+message InvocationStarted {
+  // The invocation.
+  string invocation = 1;
+  // The runner.
+  string runner = 2;
+  // The number of the lease the runner holds (decision 0035).
+  int64 lease_number = 3;
+}
+
+// InvocationResult is the data of dev.getpumi.invocation.result: what the
+// invocation produced.
+message InvocationResult {
+  // OutputFile is one output file, stored as a blob.
+  message OutputFile {
+    // The path of the file.
+    string path = 1;
+    // The hash of the blob that holds it.
+    string blob_hash = 2;
+  }
+
+  // Usage is the usage summary of the invocation.
+  message Usage {
+    // The tokens used.
+    int64 tokens = 1;
+    // The cost in microdollars (decision 0136).
+    int64 cost_microdollars = 2;
+    // The seconds the invocation ran.
+    int64 seconds = 3;
+  }
+
+  // The invocation.
+  string invocation = 1;
+  // The output files.
+  repeated OutputFile output_files = 2;
+  // The hash of the blob that holds the full log (decision 0034).
+  string log_blob_hash = 3;
+  // The usage summary.
+  Usage usage = 4;
+}
+
+// InvocationFinished is the data of dev.getpumi.invocation.finished: the
+// confirmation that the invocation ended.
+message InvocationFinished {
+  // Outcome is how the invocation ended.
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_SUCCEEDED = 1;
+    OUTCOME_FAILED = 2;
+    OUTCOME_CANCELLED = 3;
+    OUTCOME_CAP_REACHED = 4;
+    OUTCOME_RESOLVED_ON_RECOVERY = 5;
+  }
+
+  // The invocation.
+  string invocation = 1;
+  // The outcome.
+  Outcome outcome = 2;
+}
+
+// CancelRequested is the data of dev.getpumi.cancel.requested (decision
+// 0035).
+message CancelRequested {
+  // The invocation to cancel.
+  string invocation = 1;
+  // Who asked for the cancellation.
+  string requested_by = 2;
+  // The facts behind the request.
+  Basis basis = 3;
+}

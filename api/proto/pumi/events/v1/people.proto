@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.events.v1;
+
+// ApprovalRecorded is the data of dev.getpumi.approval.recorded: a person
+// approves or rejects.
+message ApprovalRecorded {
+  // Answer is the person's answer.
+  enum Answer {
+    ANSWER_UNSPECIFIED = 0;
+    ANSWER_APPROVED = 1;
+    ANSWER_REJECTED = 2;
+  }
+
+  // The person.
+  string person = 1;
+  // The tree the answer is about.
+  string tree = 2;
+  // Approved or rejected.
+  Answer answer = 3;
+}
+
+// EscalationRaised is the data of dev.getpumi.escalation.raised: work
+// escalated to a person.
+message EscalationRaised {
+  // The plan.
+  string plan = 1;
+  // The question for the person.
+  string question = 2;
+}
+
+// EscalationResolved is the data of dev.getpumi.escalation.resolved: the
+// person's answer.
+message EscalationResolved {
+  // The id of the dev.getpumi.escalation.raised event.
+  string escalation = 1;
+  // The person who answered.
+  string person = 2;
+  // The answer.
+  string answer = 3;
+}
+
+// OverrideRecorded is the data of dev.getpumi.override.recorded: a person
+// overrides a settable gate for one tree (decision 0139).
+message OverrideRecorded {
+  // The person.
+  string person = 1;
+  // The id of the dev.getpumi.decision.made event it overrides.
+  string decision = 2;
+  // The gate.
+  string gate = 3;
+  // The tree the override is bound to.
+  string tree = 4;
+  // Why, which is required.
+  string reason = 5;
+  // The plan the override is for. The overrides fact is keyed by plan and
+  // tree (decision 0136).
+  string plan = 6;
+}

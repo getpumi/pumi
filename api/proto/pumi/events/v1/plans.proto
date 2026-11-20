@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.events.v1;
+
+import "pumi/events/v1/basis.proto";
+
+// PlanAdded is the data of dev.getpumi.plan.added: a plan joins a track,
+// including a plan split from another.
+message PlanAdded {
+  // The plan.
+  string plan = 1;
+  // The track the plan joins.
+  string track = 2;
+  // The plan this one was split from, or empty.
+  string split_from = 3;
+}
+
+// TransitionFired is the data of dev.getpumi.transition.fired: the workflow
+// moved.
+message TransitionFired {
+  // The plan whose workflow moved.
+  string plan = 1;
+  // The state the workflow left.
+  string from_state = 2;
+  // The state the workflow entered.
+  string to_state = 3;
+  // The trigger that fired the transition.
+  string trigger = 4;
+  // The id of the dev.getpumi.decision.made event that guarded it.
+  string decision = 5;
+  // The gate of the state the workflow entered, or empty. The attempts fact
+  // is counted per plan and gate (decision 0136).
+  string gate = 6;
+}
+
+// DecisionMade is the data of dev.getpumi.decision.made: a decision of the
+// control plane.
+message DecisionMade {
+  // Outcome is what the policies decided.
+  enum Outcome {
+    OUTCOME_UNSPECIFIED = 0;
+    OUTCOME_ALLOW = 1;
+    OUTCOME_DENY = 2;
+  }
+
+  // Mode says whether the decision was enforced or only recorded.
+  enum Mode {
+    MODE_UNSPECIFIED = 0;
+    MODE_ENFORCED = 1;
+    MODE_SHADOW = 2;
+  }
+
+  // The digest of the policy set that decided.
+  string policy_set_digest = 1;
+  // The outcome.
+  Outcome outcome = 2;
+  // The ids of the policies that determined the outcome.
+  repeated string determining_policies = 3;
+  // The facts the decision used.
+  Basis basis = 4;
+  // The hash of the log head the decision was made at.
+  string log_head = 5;
+  // Whether the decision was enforced or a shadow decision.
+  Mode mode = 6;
+}

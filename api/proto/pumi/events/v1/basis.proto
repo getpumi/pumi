@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The data of Pumi's v1 event types (decisions 0132 to 0135). Each top-level
+// message other than Basis is the data of one event type; the Go package
+// getpumi.dev/pumi/api/events maps the types to the messages.
+package pumi.events.v1;
+
+import "google/protobuf/any.proto";
+
+// Basis lists the facts that a decision or a request relied on (decision
+// 0134). Each fact is a message of the fact catalog (decision 0136).
+message Basis {
+  // The facts. Each is a message of the fact catalog, which holds the fact's
+  // key fields and its value.
+  repeated google.protobuf.Any facts = 1;
+}

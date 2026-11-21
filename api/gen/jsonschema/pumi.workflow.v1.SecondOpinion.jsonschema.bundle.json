@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.SecondOpinion.Answer.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Answer is the answer to one question.",
+      "patternProperties": {
+        "^(question_id)$": {
+          "default": "",
+          "description": "The id of the question in the planning output.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "answer": {
+          "default": "",
+          "description": "The answer.",
+          "type": "string"
+        },
+        "questionId": {
+          "default": "",
+          "description": "The id of the question in the planning output.",
+          "type": "string"
+        }
+      },
+      "title": "Answer",
+      "type": "object"
+    },
+    "pumi.workflow.v1.SecondOpinion.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "SecondOpinion is the structured output of the second opinion stage of the\n first workflow (decision 0171): an independent answer to each open\n question of the planning output.",
+      "properties": {
+        "answers": {
+          "description": "The answers, one for each question.",
+          "items": {
+            "$ref": "#/$defs/pumi.workflow.v1.SecondOpinion.Answer.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Second Opinion",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.SecondOpinion.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.SecondOpinion.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

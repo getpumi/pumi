@@ -1,0 +1,15 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.Final.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Final is an entry that finishes the plan.",
+      "properties": {},
+      "title": "Final",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.Final.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.Final.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

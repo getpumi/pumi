@@ -1,0 +1,75 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.PlanningOutput.Question.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Question is one open question.",
+      "patternProperties": {
+        "^(agent_answer)$": {
+          "default": "",
+          "description": "The agent's own answer.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "agentAnswer": {
+          "default": "",
+          "description": "The agent's own answer.",
+          "type": "string"
+        },
+        "id": {
+          "default": "",
+          "description": "The id of the question, unique in the output, by which the second\n opinion answers it.",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "description": "The question.",
+          "type": "string"
+        }
+      },
+      "title": "Question",
+      "type": "object"
+    },
+    "pumi.workflow.v1.PlanningOutput.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "PlanningOutput is the structured output of the planning stage of the first\n workflow (decision 0171): the plan, the paths it will change, and any open\n questions, each with the agent's own answer. The questions.open fact is\n projected from it.",
+      "patternProperties": {
+        "^(declared_paths)$": {
+          "description": "The paths the plan will change, as patterns relative to the root of the\n repository. The scope gate reads the changed paths outside them\n (paths.outside, decision 0136).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "declaredPaths": {
+          "description": "The paths the plan will change, as patterns relative to the root of the\n repository. The scope gate reads the changed paths outside them\n (paths.outside, decision 0136).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan, as Markdown.",
+          "type": "string"
+        },
+        "questions": {
+          "description": "The open questions. With none, the plan goes to plan review; with any,\n to a second opinion.",
+          "items": {
+            "$ref": "#/$defs/pumi.workflow.v1.PlanningOutput.Question.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Planning Output",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.PlanningOutput.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.PlanningOutput.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

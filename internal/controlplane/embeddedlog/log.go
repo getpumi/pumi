@@ -62,6 +62,9 @@ type Log struct {
 	// may no longer match what this Log holds.
 	broken error
 	closed bool
+	// changed is closed and replaced when an append commits, and closed
+	// when the Log closes, to wake the callers of Wait.
+	changed chan struct{}
 
 	// trace, when set, is called before each step of an append. Tests use
 	// it to see the order of the steps.
@@ -113,7 +116,10 @@ func Open(ctx context.Context, dir string) (*Log, error) {
 		}
 		return nil, fmt.Errorf("locking %s: %w", filepath.Join(pumi, lockName), err)
 	}
-	l := &Log{dir: pumi, root: root, lock: lock, bySubject: map[string][]uint64{}, byType: map[string][]uint64{}}
+	l := &Log{
+		dir: pumi, root: root, lock: lock,
+		bySubject: map[string][]uint64{}, byType: map[string][]uint64{}, changed: make(chan struct{}),
+	}
 	if err := l.load(); err != nil {
 		_ = l.release()
 		return nil, err
@@ -150,7 +156,30 @@ func (l *Log) Close() error {
 		return nil
 	}
 	l.closed = true
+	close(l.changed)
 	return l.release()
+}
+
+// Wait blocks until the head is after the position after, and returns nil.
+// It returns the error of ctx when ctx is done first, and ErrClosed when
+// the Log is closed. Subscribe waits with it for new events.
+func (l *Log) Wait(ctx context.Context, after uint64) error {
+	for {
+		l.mu.RLock()
+		closed, head, changed := l.closed, uint64(len(l.records)), l.changed
+		l.mu.RUnlock()
+		switch {
+		case closed:
+			return ErrClosed
+		case head > after:
+			return nil
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // release closes the log file, unlocks the lock, closes it and closes the
@@ -164,8 +193,8 @@ func (l *Log) release() error {
 	return errors.Join(errs...)
 }
 
-// errClosed is the error of every call on a closed Log.
-var errClosed = errors.New("the event log is closed")
+// ErrClosed is the error of every call on a closed Log.
+var ErrClosed = errors.New("the event log is closed")
 
 // Head returns the position of the last committed event, or 0 when the log
 // is empty.
@@ -214,7 +243,7 @@ func (l *Log) Read(f Filter) ([]Entry, uint64, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	if l.closed {
-		return nil, 0, errClosed
+		return nil, 0, ErrClosed
 	}
 	head := uint64(len(l.records))
 	entries := []Entry{}
@@ -297,7 +326,7 @@ func (l *Log) Append(evs []*cloudeventsv1.CloudEvent, check func(version func(su
 	defer l.mu.Unlock()
 	switch {
 	case l.closed:
-		return nil, errClosed
+		return nil, ErrClosed
 	case l.broken != nil:
 		return nil, l.broken
 	case len(evs) == 0:
@@ -415,6 +444,8 @@ func (l *Log) commit(records []record, hash string, size int64) []uint64 {
 	}
 	l.hash = hash
 	l.end += size
+	close(l.changed)
+	l.changed = make(chan struct{})
 	return positions
 }
 

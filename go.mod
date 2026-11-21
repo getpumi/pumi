@@ -8,6 +8,7 @@ go 1.27.0
 toolchain go1.27.4
 
 require (
+	connectrpc.com/connect/v2 v2.0.2
 	getpumi.dev/pumi/api v0.0.0
 	github.com/cedar-policy/cedar-go v1.9.3
 	golang.org/x/sys v0.50.0

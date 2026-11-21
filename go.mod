@@ -10,6 +10,7 @@ toolchain go1.27.4
 require (
 	getpumi.dev/pumi/api v0.0.0
 	github.com/cedar-policy/cedar-go v1.9.3
+	golang.org/x/sys v0.50.0
 	google.golang.org/protobuf v1.36.12
 )
 

@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.workflow.v1;
+
+// PlanningOutput is the structured output of the planning stage of the first
+// workflow (decision 0171): the plan, the paths it will change, and any open
+// questions, each with the agent's own answer. The questions.open fact is
+// projected from it.
+message PlanningOutput {
+  // Question is one open question.
+  message Question {
+    // The id of the question, unique in the output, by which the second
+    // opinion answers it.
+    string id = 1;
+    // The question.
+    string text = 2;
+    // The agent's own answer.
+    string agent_answer = 3;
+  }
+
+  // The plan, as Markdown.
+  string plan = 1;
+  // The paths the plan will change, as patterns relative to the root of the
+  // repository. The scope gate reads the changed paths outside them
+  // (paths.outside, decision 0136).
+  repeated string declared_paths = 2;
+  // The open questions. With none, the plan goes to plan review; with any,
+  // to a second opinion.
+  repeated Question questions = 3;
+}
+
+// SecondOpinion is the structured output of the second opinion stage of the
+// first workflow (decision 0171): an independent answer to each open
+// question of the planning output.
+message SecondOpinion {
+  // Answer is the answer to one question.
+  message Answer {
+    // The id of the question in the planning output.
+    string question_id = 1;
+    // The answer.
+    string answer = 2;
+  }
+
+  // The answers, one for each question.
+  repeated Answer answers = 1;
+}

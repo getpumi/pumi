@@ -1,0 +1,15 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.Wait.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Wait is an entry that starts nothing: the state waits for an event.",
+      "properties": {},
+      "title": "Wait",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.Wait.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.Wait.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

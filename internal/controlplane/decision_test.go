@@ -1,0 +1,308 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+package controlplane
+
+import (
+	"bytes"
+	"errors"
+	"maps"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"testing"
+
+	"connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/proto"
+
+	"getpumi.dev/pumi/api/events"
+	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
+	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
+	factsv1 "getpumi.dev/pumi/api/gen/pumi/facts/v1"
+	"getpumi.dev/pumi/api/policy"
+	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
+	"getpumi.dev/pumi/internal/controlplane/projections"
+)
+
+// testConfig is a wiring with a lower set that permits every request.
+func testConfig() Config {
+	return Config{
+		Policies: []PolicyFile{{Name: "permit-all.cedar", Text: permitAllText}},
+		Settings: Settings{
+			MaxAttempts: 3, Reviewers: 1, WarningsCap: 5,
+			UsageBudget: policy.Caps{Tokens: 1_000_000, CostMicrodollars: 10_000_000, Seconds: 3600},
+		},
+		HardCaps: policy.DefaultHardCaps(),
+		Project:  Project{Name: "pumi", ProtectedPaths: []string{".github/**"}},
+	}
+}
+
+// testService returns a control plane on a new log, with testConfig.
+func testService(t *testing.T) *Service {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "main")
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range []*exec.Cmd{
+		exec.CommandContext(t.Context(), "git", "init", "--quiet", "--initial-branch=main"),
+		exec.CommandContext(t.Context(), "git", "commit", "--quiet", "--allow-empty", "--message=first"),
+	} {
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_AUTHOR_NAME=A", "GIT_AUTHOR_EMAIL=a@example.com", "GIT_COMMITTER_NAME=C", "GIT_COMMITTER_EMAIL=c@example.com")
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("%s: %v\n%s", cmd, err, stderr.String())
+		}
+	}
+	log, err := embeddedlog.Open(t.Context(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = log.Close() })
+	s, err := New(log, testConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// write appends events with data to the log directly, as the control
+// plane's own appends do.
+func write(t *testing.T, s *Service, subject string, data ...proto.Message) {
+	t.Helper()
+	evs := []*cloudeventsv1.CloudEvent{}
+	for _, d := range data {
+		e, err := events.New(d, events.Attributes{ID: newID(), Source: "/test", Subject: subject, Tenant: embeddedlog.Tenant})
+		if err != nil {
+			t.Fatal(err)
+		}
+		evs = append(evs, e)
+	}
+	if _, err := s.log.Append(evs, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// fixed is a projection of fact that gives msg once the log has a
+// plan.added event, and nothing before.
+func fixed(fact string, msg proto.Message) projections.Projection {
+	return projections.Projection{
+		Fact:  fact,
+		Types: []string{events.TypePlanAdded},
+		Project: func(_ projections.Keys, evs []*cloudeventsv1.CloudEvent) (proto.Message, error) {
+			if len(evs) == 0 {
+				return nil, nil
+			}
+			return msg, nil
+		},
+	}
+}
+
+// dcoFacts registers, beside attempts, a projection for every other fact
+// that the dco gate reads.
+func dcoFacts(s *Service) {
+	for _, p := range []projections.Projection{
+		fixed("dco.signed", &factsv1.DcoSigned{HeadCommit: "commit-1", Value: true}),
+		fixed("overrides", &factsv1.Overrides{Plan: "plan-a", Tree: "tree-1"}),
+		fixed("usage", &factsv1.Usage{Invocation: "i", Plan: "plan-a", Value: &factsv1.Usage_Totals{Tokens: 10, CostMicrodollars: 20, Seconds: 30}}),
+		fixed("warnings.open", &factsv1.WarningsOpen{Project: "pumi", Value: 0}),
+	} {
+		s.projections[p.Fact] = p
+	}
+}
+
+// decideDCO decides the dco gate of plan-a as the kernel at the head.
+func decideDCO(t *testing.T, s *Service) (decided, *eventsv1.DecisionMade) {
+	t.Helper()
+	at, hash := s.log.Snapshot()
+	d, err := s.decide(at, hash, principal{caller: CallerKernel, id: "kernel"}, question{
+		action: "dco", plan: "plan-a", keys: projections.Keys{HeadTree: "tree-1", HeadCommit: "commit-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data eventsv1.DecisionMade
+	if err := d.event.GetProtoData().UnmarshalTo(&data); err != nil {
+		t.Fatal(err)
+	}
+	if data.GetLogHead() != hash {
+		t.Errorf("the decision was made at %q, want the head's hash %q", data.GetLogHead(), hash)
+	}
+	return d, &data
+}
+
+// basisNames returns the full names of the messages in the basis.
+func basisNames(d *eventsv1.DecisionMade) []string {
+	out := []string{}
+	for _, f := range d.GetBasis().GetFacts() {
+		out = append(out, string(f.MessageName()))
+	}
+	return out
+}
+
+func TestSettingsGiveEverySettingOfTheSchema(t *testing.T) {
+	want := []string{}
+	for _, s := range policy.Settings() {
+		want = append(want, s.Name)
+	}
+	if got := slices.Sorted(maps.Keys(Settings{}.values())); !slices.Equal(got, want) {
+		t.Errorf("Settings gives %q, want the settings of policy.Settings %q", got, want)
+	}
+}
+
+func TestDecideAllowsWithEveryFactAndRecordsTheBasis(t *testing.T) {
+	s := testService(t)
+	dcoFacts(s)
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"},
+		&eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
+	d, data := decideDCO(t, s)
+	if !d.decision.Allow || data.GetOutcome() != eventsv1.DecisionMade_OUTCOME_ALLOW {
+		t.Fatalf("the decision is %+v, want allow", d.decision)
+	}
+	want := []string{"pumi.facts.v1.Attempts", "pumi.facts.v1.DcoSigned", "pumi.facts.v1.Overrides", "pumi.facts.v1.Usage", "pumi.facts.v1.WarningsOpen"}
+	if got := basisNames(data); !slices.Equal(got, want) {
+		t.Errorf("the basis holds %q, want %q, in the order of their context names", got, want)
+	}
+	if !slices.Equal(data.GetDeterminingPolicies(), []string{"permit-all"}) {
+		t.Errorf("the determining policies are %q, want permit-all", data.GetDeterminingPolicies())
+	}
+	if data.GetPolicySetDigest() != policySetDigest(policyFiles(testConfig())) {
+		t.Errorf("the policy set digest is %q", data.GetPolicySetDigest())
+	}
+}
+
+func TestDecideDeniesWithoutAFactAndLeavesItOutOfTheBasis(t *testing.T) {
+	s := testService(t)
+	dcoFacts(s)
+	delete(s.projections, "dco.signed")
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"},
+		&eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
+	d, data := decideDCO(t, s)
+	if d.decision.Allow || data.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY {
+		t.Fatalf("the decision is %+v, want deny", d.decision)
+	}
+	if slices.Contains(basisNames(data), "pumi.facts.v1.DcoSigned") || len(data.GetBasis().GetFacts()) != 4 {
+		t.Errorf("the basis holds %q, want the four facts other than dco.signed", basisNames(data))
+	}
+	if !slices.Contains(d.decision.Reasons, "the context lacks the attribute dcoSigned") {
+		t.Errorf("the reasons are %q, want the missing dcoSigned named", d.decision.Reasons)
+	}
+}
+
+func TestDecideReadsTheLogOnlyUpToTheHeadItDecidesAt(t *testing.T) {
+	s := testService(t)
+	write(t, s, "plan-a", &eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
+	at, hash := s.log.Snapshot()
+	write(t, s, "plan-a", &eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
+	d, err := s.decide(at, hash, principal{caller: CallerKernel, id: "kernel"}, question{action: "dco", plan: "plan-a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data eventsv1.DecisionMade
+	if err := d.event.GetProtoData().UnmarshalTo(&data); err != nil {
+		t.Fatal(err)
+	}
+	var a factsv1.Attempts
+	if len(data.GetBasis().GetFacts()) != 1 || data.GetBasis().GetFacts()[0].UnmarshalTo(&a) != nil || a.GetValue() != 1 {
+		t.Errorf("the basis is %v, want attempts 1, counted up to the head the decision was made at", data.GetBasis())
+	}
+}
+
+func TestAFailingOrWrongProjectionGivesNoFact(t *testing.T) {
+	s := testService(t)
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"})
+	for name, p := range map[string]projections.Projection{
+		"fails": {Fact: "attempts", Types: []string{events.TypePlanAdded},
+			Project: func(projections.Keys, []*cloudeventsv1.CloudEvent) (proto.Message, error) {
+				return &factsv1.Attempts{Plan: "plan-a", Gate: "dco", Value: 1}, errors.New("broken")
+			}},
+		"another fact's message": fixed("attempts", &factsv1.DcoSigned{HeadCommit: "c", Value: true}),
+	} {
+		s.projections["attempts"] = p
+		_, data := decideDCO(t, s)
+		if len(data.GetBasis().GetFacts()) != 0 || data.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY {
+			t.Errorf("a projection that %s: the decision is %v with the basis %q, want a deny with no facts",
+				name, data.GetOutcome(), basisNames(data))
+		}
+	}
+}
+
+// verdict returns a verdict.recorded event for plan-a, as a gate-role
+// invocation's Report writes it.
+func verdict(t *testing.T) *cloudeventsv1.CloudEvent {
+	t.Helper()
+	e, err := events.New(&eventsv1.VerdictRecorded{
+		Gate: "planReview", GateVersion: "1", Tree: "tree-1", Verdict: eventsv1.VerdictRecorded_VERDICT_PASS,
+		Plan: "plan-a", Invocation: "invocation-1",
+	}, events.Attributes{ID: newID(), Source: "/runner/r1", Subject: "invocation-1", Tenant: embeddedlog.Tenant})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+func TestAVerdictIsWrittenOnlyFromTheGateRole(t *testing.T) {
+	s := testService(t)
+	gate := principal{caller: CallerRunner, id: "r1", role: "gate"}
+	positions, err := s.appendAs(t.Context(), gate, []*cloudeventsv1.CloudEvent{verdict(t)}, nil)
+	if err != nil || !slices.Equal(positions, []uint64{2}) {
+		t.Fatalf("a verdict from the gate role: %v, %v; want it at 2, after its decision", positions, err)
+	}
+
+	agent := principal{caller: CallerRunner, id: "r2", role: "agent"}
+	_, err = s.appendAs(t.Context(), agent, []*cloudeventsv1.CloudEvent{verdict(t)}, nil)
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a verdict from the agent role: %v, want permission denied", err)
+	}
+	found, head, err := s.log.Read(embeddedlog.Filter{After: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head != 3 || len(found) != 1 || found[0].Event.GetType() != events.TypeDecisionMade {
+		t.Fatalf("after the refused verdict the log has the head %d and %d new events, want only its decision at 3", head, len(found))
+	}
+	var data eventsv1.DecisionMade
+	if err := found[0].Event.GetProtoData().UnmarshalTo(&data); err != nil {
+		t.Fatal(err)
+	}
+	if data.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY ||
+		!slices.Equal(data.GetDeterminingPolicies(), []string{"invariant.verdicts-by-gate-role"}) {
+		t.Errorf("the recorded decision is %v by %q, want a deny by invariant.verdicts-by-gate-role",
+			data.GetOutcome(), data.GetDeterminingPolicies())
+	}
+}
+
+func TestAPermissionIsDecidedAgainWhenTheHeadMoves(t *testing.T) {
+	s := testService(t)
+	moved := false
+	s.trace = func(string) {
+		if !moved {
+			moved = true
+			write(t, s, "plan-b", &eventsv1.PlanAdded{Plan: "plan-b", Track: "main"})
+		}
+	}
+	positions, err := s.appendAs(t.Context(), principal{caller: CallerRunner, id: "r1", role: "gate"},
+		[]*cloudeventsv1.CloudEvent{verdict(t)}, nil)
+	if err != nil || !slices.Equal(positions, []uint64{3}) {
+		t.Fatalf("appendAs = %v, %v; want the verdict at 3, after the event appended in between and its decision", positions, err)
+	}
+	found, _, err := s.log.Read(embeddedlog.Filter{Types: []string{events.TypeDecisionMade}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 || found[0].Position != 2 {
+		t.Fatalf("the log has %d decisions, want one, at 2", len(found))
+	}
+	hash := found[0].Event.GetAttributes()[events.ExtensionPrevHash].GetCeString()
+	var data eventsv1.DecisionMade
+	if err := found[0].Event.GetProtoData().UnmarshalTo(&data); err != nil {
+		t.Fatal(err)
+	}
+	if data.GetLogHead() != hash {
+		t.Errorf("the decision was made at %q, want the head after the event appended in between, %q", data.GetLogHead(), hash)
+	}
+}

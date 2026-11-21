@@ -235,7 +235,8 @@ var appenderOf = map[Caller]events.Appender{
 // appendFollowsTheTable: each caller may append the event types that the
 // table of decision 0156 gives it, and no others. The types that only the
 // control plane itself or a runner's RunnerService calls append are
-// refused to every caller of Append.
+// refused to every caller of Append. The decision.made events that the
+// control plane writes before a permission's event are not counted.
 func appendFollowsTheTable(t *testing.T, c Clients) {
 	written := uint64(0)
 	for _, caller := range Callers {
@@ -248,9 +249,25 @@ func appendFollowsTheTable(t *testing.T, c Clients) {
 	if written == 0 {
 		t.Fatal("no append was allowed")
 	}
-	if h := head(t, c); h != written {
-		t.Fatalf("the head is %d, want %d, the number of allowed appends", h, written)
+	if got := uint64(len(eventsExcept(t, c, events.TypeDecisionMade))); got != written {
+		t.Fatalf("the log holds %d events besides decisions, want %d, the number of allowed appends", got, written)
 	}
+}
+
+// eventsExcept returns the events of the log whose type is not typ.
+func eventsExcept(t *testing.T, c Clients, typ string) []*controlplanev1.Entry {
+	t.Helper()
+	res, err := c(Kernel).Query(t.Context(), &controlplanev1.QueryRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := []*controlplanev1.Entry{}
+	for _, e := range res.GetEvents() {
+		if e.GetEvent().GetType() != typ {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // appendOfType appends an event of typ as caller, checks that it is
@@ -284,6 +301,7 @@ func ofType(t *testing.T, typ string) *cloudeventsv1.CloudEvent {
 	data = proto.Clone(data)
 	if o, ok := data.(*eventsv1.OverrideRecorded); ok {
 		o.Reason = "the conformance suite"
+		o.Plan = "plan-of-" + typ
 	}
 	return build(t, data, "subject-of-"+typ)
 }

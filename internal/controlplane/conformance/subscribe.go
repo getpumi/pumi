@@ -129,7 +129,7 @@ func subscribeCatchesUpThenFollows(t *testing.T, c Clients) {
 	s.quiet(t)
 	log(t, c, Kernel, written, transitionFired(t, "b"))
 	equal(t, "the first new event", s.receive(t, 1, written), []uint64{4})
-	log(t, c, Person, written, approvalRecorded(t, "a"), approvalRecorded(t, "b"))
+	log(t, c, Person, written, warningReviewed(t, "a"), warningReviewed(t, "b"))
 	equal(t, "the next new events", s.receive(t, 2, written), []uint64{5, 6})
 	s.quiet(t)
 

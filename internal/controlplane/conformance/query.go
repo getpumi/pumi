@@ -12,24 +12,25 @@ import (
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 )
 
-// approvalRecorded returns a dev.getpumi.approval.recorded event about
-// plan.
-func approvalRecorded(t *testing.T, plan string) *cloudeventsv1.CloudEvent {
+// warningReviewed returns a dev.getpumi.warning.reviewed event about
+// plan: an event that a person appends and that no permission guards, so
+// the control plane writes nothing beside it.
+func warningReviewed(t *testing.T, plan string) *cloudeventsv1.CloudEvent {
 	t.Helper()
-	return build(t, &eventsv1.ApprovalRecorded{Person: "someone", Tree: "tree"}, plan)
+	return build(t, &eventsv1.WarningReviewed{Warning: "w", Person: "someone"}, plan)
 }
 
 // mixedLog appends seven events of three types about three plans:
 //
 //	1 plan.added a, 2 plan.added b, 3 transition.fired a,
 //	4 transition.fired b, 5 transition.fired a, 6 plan.added c,
-//	7 approval.recorded a
+//	7 warning.reviewed a
 func mixedLog(t *testing.T, c Clients) {
 	t.Helper()
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "a"), planAdded(t, "b")})
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{transitionFired(t, "a"), transitionFired(t, "b")})
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{transitionFired(t, "a"), planAdded(t, "c")})
-	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{approvalRecorded(t, "a")})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{warningReviewed(t, "a")})
 }
 
 // filterCase is a filter and the positions of mixedLog that it selects.
@@ -49,7 +50,7 @@ func filterCases() []filterCase {
 		{
 			"two types",
 			&controlplanev1.QueryRequest{Filter: &controlplanev1.Filter{
-				Types: []string{events.TypeApprovalRecorded, events.TypePlanAdded},
+				Types: []string{events.TypeWarningReviewed, events.TypePlanAdded},
 			}},
 			[]uint64{1, 2, 6, 7},
 		},

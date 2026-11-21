@@ -107,19 +107,26 @@ func TestEveryProjectionKeepsTheContract(t *testing.T) {
 			t.Errorf("two projections are registered for %s", p.Fact)
 		}
 		seen[p.Fact] = true
-		if len(p.Types) == 0 || p.Project == nil {
-			t.Errorf("the projection of %s reads no event types or has no function", p.Fact)
-		}
-		for _, typ := range p.Types {
-			if !slices.Contains(events.Types(), typ) {
-				t.Errorf("the projection of %s reads %q, which is not an event type", p.Fact, typ)
-			}
-		}
+		checkTypes(t, p)
 		// No source events: the fact is absent (decisions 0143 and 0155).
 		if got, err := p.Project(projections.Keys{Plan: "p", Gate: "g", HeadTree: "t"}, nil); err != nil || got != nil {
 			t.Errorf("the projection of %s with no events = %v, %v; want no fact", p.Fact, got, err)
 		}
 		checkMessage(t, p, f)
+	}
+}
+
+// checkTypes checks that p has a function and reads event types that
+// exist.
+func checkTypes(t *testing.T, p projections.Projection) {
+	t.Helper()
+	if len(p.Types) == 0 || p.Project == nil {
+		t.Errorf("the projection of %s reads no event types or has no function", p.Fact)
+	}
+	for _, typ := range p.Types {
+		if !slices.Contains(events.Types(), typ) {
+			t.Errorf("the projection of %s reads %q, which is not an event type", p.Fact, typ)
+		}
 	}
 }
 

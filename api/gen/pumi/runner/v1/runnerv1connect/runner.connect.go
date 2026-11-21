@@ -39,6 +39,8 @@ const (
 	RunnerServiceHeartbeatProcedure = "/pumi.runner.v1.RunnerService/Heartbeat"
 	// RunnerServiceReportProcedure is the procedure name of the RunnerService's Report RPC.
 	RunnerServiceReportProcedure = "/pumi.runner.v1.RunnerService/Report"
+	// RunnerServiceSendLogProcedure is the procedure name of the RunnerService's SendLog RPC.
+	RunnerServiceSendLogProcedure = "/pumi.runner.v1.RunnerService/SendLog"
 )
 
 var (
@@ -63,6 +65,13 @@ var (
 			Procedure:  RunnerServiceReportProcedure,
 		}
 	})
+	runnerServiceSendLogSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pumi_runner_v1_runner_proto.Services().ByName("RunnerService").Methods().ByName("SendLog"),
+			Procedure:  RunnerServiceSendLogProcedure,
+		}
+	})
 )
 
 // RunnerServiceClient is a client for the pumi.runner.v1.RunnerService service.
@@ -85,6 +94,13 @@ type RunnerServiceClient interface {
 	// (decision 0156). A lease number that is not the current one has the
 	// error code aborted, and nothing is written (decision 0035).
 	Report(context.Context, *v1.ReportRequest) (*v1.ReportResponse, error)
+	// SendLog sends a batch of an invocation's log output, about once a
+	// second (decisions 0034 and 0163). The runner masks the values of the
+	// credentials it was given before it sends a batch. The control plane
+	// keeps the recent output of running invocations outside the event log.
+	// A lease number that is not the current one has the error code aborted,
+	// and the batch is dropped.
+	SendLog(context.Context, *v1.SendLogRequest) (*v1.SendLogResponse, error)
 }
 
 // NewRunnerServiceClient constructs a client for the pumi.runner.v1.RunnerService service. Multiple
@@ -113,6 +129,13 @@ type RunnerServiceHandler interface {
 	// (decision 0156). A lease number that is not the current one has the
 	// error code aborted, and nothing is written (decision 0035).
 	Report(context.Context, *v1.ReportRequest) (*v1.ReportResponse, error)
+	// SendLog sends a batch of an invocation's log output, about once a
+	// second (decisions 0034 and 0163). The runner masks the values of the
+	// credentials it was given before it sends a batch. The control plane
+	// keeps the recent output of running invocations outside the event log.
+	// A lease number that is not the current one has the error code aborted,
+	// and the batch is dropped.
+	SendLog(context.Context, *v1.SendLogRequest) (*v1.SendLogResponse, error)
 }
 
 // RegisterRunnerServiceHandler registers svc as the pumi.runner.v1.RunnerService implementation on
@@ -123,6 +146,7 @@ func RegisterRunnerServiceHandler(server *connect.Server, svc RunnerServiceHandl
 		connect.Method{Spec: runnerServiceClaimSpec(), Handler: adapter.claim},
 		connect.Method{Spec: runnerServiceHeartbeatSpec(), Handler: adapter.heartbeat},
 		connect.Method{Spec: runnerServiceReportSpec(), Handler: adapter.report},
+		connect.Method{Spec: runnerServiceSendLogSpec(), Handler: adapter.sendLog},
 	)
 }
 
@@ -139,6 +163,10 @@ func (UnimplementedRunnerServiceHandler) Heartbeat(context.Context, *v1.Heartbea
 
 func (UnimplementedRunnerServiceHandler) Report(context.Context, *v1.ReportRequest) (*v1.ReportResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pumi.runner.v1.RunnerService.Report is not implemented")
+}
+
+func (UnimplementedRunnerServiceHandler) SendLog(context.Context, *v1.SendLogRequest) (*v1.SendLogResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pumi.runner.v1.RunnerService.SendLog is not implemented")
 }
 
 type runnerServiceClient struct {
@@ -164,6 +192,14 @@ func (c *runnerServiceClient) Heartbeat(ctx context.Context, req *v1.HeartbeatRe
 func (c *runnerServiceClient) Report(ctx context.Context, req *v1.ReportRequest) (*v1.ReportResponse, error) {
 	var res v1.ReportResponse
 	if err := c.client.CallUnary(ctx, runnerServiceReportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runnerServiceClient) SendLog(ctx context.Context, req *v1.SendLogRequest) (*v1.SendLogResponse, error) {
+	var res v1.SendLogResponse
+	if err := c.client.CallUnary(ctx, runnerServiceSendLogSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -201,6 +237,18 @@ func (h runnerServiceHandler) report(ctx context.Context, _ connect.Spec, stream
 		return err
 	}
 	res, err := h.svc.Report(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runnerServiceHandler) sendLog(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SendLogRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SendLog(ctx, &req)
 	if err != nil {
 		return err
 	}

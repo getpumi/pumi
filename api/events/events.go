@@ -261,6 +261,15 @@ func validateData(e *cloudeventsv1.CloudEvent, data proto.Message) error {
 // dataRules are the rules for the data of some types that the schema cannot
 // state.
 var dataRules = map[string]func(proto.Message) error{
+	// An invocation request carries its document, which matches its hash
+	// (decision 0165).
+	TypeInvocationRequested: func(m proto.Message) error {
+		if r, ok := m.(*eventsv1.InvocationRequested); ok {
+			_, err := Document(r)
+			return err
+		}
+		return nil
+	},
 	// An override needs a reason (decision 0139).
 	TypeOverrideRecorded: func(m proto.Message) error {
 		if o, ok := m.(*eventsv1.OverrideRecorded); ok && o.GetReason() == "" {

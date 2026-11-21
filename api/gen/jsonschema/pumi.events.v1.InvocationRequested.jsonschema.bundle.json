@@ -7,7 +7,7 @@
       "patternProperties": {
         "^(document_hash)$": {
           "default": "",
-          "description": "The hash of the invocation document.",
+          "description": "The hash of the invocation document: sha256: and the hex SHA-256 of\n document.",
           "type": "string"
         },
         "^(idempotency_key)$": {
@@ -17,9 +17,15 @@
         }
       },
       "properties": {
+        "document": {
+          "default": null,
+          "description": "The invocation document, as the binary protobuf of\n pumi.runner.v1.Invocation, which Claim returns to the runner that\n claims the invocation (decision 0165). It is bytes, not the message,\n because the runner protocol is versioned apart from the event schema\n (decision 0041) and pumi.runner.v1 imports this file.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
         "documentHash": {
           "default": "",
-          "description": "The hash of the invocation document.",
+          "description": "The hash of the invocation document: sha256: and the hex SHA-256 of\n document.",
           "type": "string"
         },
         "idempotencyKey": {

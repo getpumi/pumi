@@ -303,6 +303,12 @@ func ofType(t *testing.T, typ string) *cloudeventsv1.CloudEvent {
 		o.Reason = "the conformance suite"
 		o.Plan = "plan-of-" + typ
 	}
+	if typ == events.TypeInvocationRequested {
+		// A request carries a valid document (decision 0165).
+		if data, err = events.InvocationRequested(document("invocation-of-"+typ, Gate)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return build(t, data, "subject-of-"+typ)
 }
 

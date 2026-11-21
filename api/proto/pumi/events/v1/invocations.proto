@@ -14,8 +14,15 @@ message InvocationRequested {
   string invocation = 1;
   // The idempotency key.
   string idempotency_key = 2;
-  // The hash of the invocation document.
+  // The hash of the invocation document: sha256: and the hex SHA-256 of
+  // document.
   string document_hash = 3;
+  // The invocation document, as the binary protobuf of
+  // pumi.runner.v1.Invocation, which Claim returns to the runner that
+  // claims the invocation (decision 0165). It is bytes, not the message,
+  // because the runner protocol is versioned apart from the event schema
+  // (decision 0041) and pumi.runner.v1 imports this file.
+  bytes document = 4;
 }
 
 // InvocationStarted is the data of dev.getpumi.invocation.started: the

@@ -40,6 +40,14 @@ service RunnerService {
   // (decision 0156). A lease number that is not the current one has the
   // error code aborted, and nothing is written (decision 0035).
   rpc Report(ReportRequest) returns (ReportResponse);
+
+  // SendLog sends a batch of an invocation's log output, about once a
+  // second (decisions 0034 and 0163). The runner masks the values of the
+  // credentials it was given before it sends a batch. The control plane
+  // keeps the recent output of running invocations outside the event log.
+  // A lease number that is not the current one has the error code aborted,
+  // and the batch is dropped.
+  rpc SendLog(SendLogRequest) returns (SendLogResponse);
 }
 
 // ProtocolVersion is a version of the runner protocol. The service supports
@@ -164,3 +172,16 @@ message ReportResponse {
   // The position of each event written, in the order written.
   repeated uint64 positions = 1;
 }
+
+// SendLogRequest is the request of SendLog.
+message SendLogRequest {
+  // The invocation.
+  string invocation = 1;
+  // The lease number from Claim.
+  int64 lease_number = 2;
+  // The output since the last batch, masked.
+  bytes output = 3;
+}
+
+// SendLogResponse is the response of SendLog.
+message SendLogResponse {}

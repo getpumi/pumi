@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
@@ -19,6 +20,7 @@ import (
 	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
+	"getpumi.dev/pumi/api/gen/pumi/runner/v1/runnerv1connect"
 )
 
 // Caller is a kind of caller that the suite needs a client for (decision
@@ -44,12 +46,41 @@ var Callers = []Caller{Kernel, Person, Runner}
 // reaches the same control plane.
 type Clients func(Caller) controlplanev1connect.ControlPlaneServiceClient
 
+// Role is a role that a runner may run invocations in (decision 0024).
+type Role string
+
+// The roles of the invocation document.
+const (
+	// Gate is the gate role, the only one that may write verdicts.
+	Gate Role = "gate"
+	// Agent is the agent role.
+	Agent Role = "agent"
+)
+
+// Plane is a control plane under test, reached only through its clients.
+type Plane struct {
+	// Clients gives the clients of ControlPlaneService.
+	Clients Clients
+	// Runner returns a client of RunnerService that calls as the runner
+	// name, which takes invocations in the roles given. Each call with a
+	// name returns a client with the same identity.
+	Runner func(name string, roles ...Role) runnerv1connect.RunnerServiceClient
+	// RunnerServiceAs returns a client of RunnerService that calls with the
+	// identity of a caller that is not a runner.
+	RunnerServiceAs func(Caller) runnerv1connect.RunnerServiceClient
+	// Advance moves the control plane's clock forward by d and returns once
+	// everything that was due by then, such as the expiry of a lease, has
+	// been done. The control plane's time is injected, so the suite does
+	// not sleep.
+	Advance func(d time.Duration)
+}
+
 // Start starts a new control plane with an empty log for one test and
-// returns its clients. It stops the control plane when the test ends. The
-// control plane is wired with the core invariants and a lower policy set
-// that permits every request, so that only the invariants and the
-// validation of a request deny (decisions 0142 and 0143).
-type Start func(t *testing.T) Clients
+// returns it. It stops the control plane when the test ends. The control
+// plane is wired with the core invariants and a lower policy set that
+// permits every request, so that only the invariants and the validation of
+// a request deny (decisions 0142 and 0143).
+type Start func(t *testing.T) Plane
 
 // Run runs the suite against the control planes that start starts. Each
 // test starts its own.
@@ -82,6 +113,12 @@ func Run(t *testing.T, start Start) {
 		{"APermissionIsDecidedAndRecordedBeforeItsEvent", aPermissionIsDecidedAndRecordedBeforeItsEvent},
 	}
 	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tt.test(t, start(t).Clients)
+		})
+	}
+	for _, tt := range runnerTests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			tt.test(t, start(t))

@@ -1,0 +1,150 @@
+{
+  "$defs": {
+    "pumi.events.v1.InvocationResult.OutputFile.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "OutputFile is one output file, stored as a blob.",
+      "patternProperties": {
+        "^(blob_hash)$": {
+          "default": "",
+          "description": "The hash of the blob that holds it.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "blobHash": {
+          "default": "",
+          "description": "The hash of the blob that holds it.",
+          "type": "string"
+        },
+        "path": {
+          "default": "",
+          "description": "The path of the file.",
+          "type": "string"
+        }
+      },
+      "title": "Output File",
+      "type": "object"
+    },
+    "pumi.events.v1.InvocationResult.Usage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Usage is the usage summary of the invocation.",
+      "patternProperties": {
+        "^(cost_microdollars)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars (decision 0136)."
+        }
+      },
+      "properties": {
+        "costMicrodollars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars (decision 0136)."
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The seconds the invocation ran."
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens used."
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    },
+    "pumi.events.v1.InvocationResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationResult is the data of dev.getpumi.invocation.result: what the\n invocation produced.",
+      "patternProperties": {
+        "^(log_blob_hash)$": {
+          "default": "",
+          "description": "The hash of the blob that holds the full log (decision 0034).",
+          "type": "string"
+        },
+        "^(output_files)$": {
+          "description": "The output files.",
+          "items": {
+            "$ref": "#/$defs/pumi.events.v1.InvocationResult.OutputFile.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        },
+        "logBlobHash": {
+          "default": "",
+          "description": "The hash of the blob that holds the full log (decision 0034).",
+          "type": "string"
+        },
+        "output": {
+          "default": "",
+          "description": "The structured output, as the protojson of the message that the\n invocation document names, as the runner parsed it (decisions 0160 and\n 0162).",
+          "type": "string"
+        },
+        "outputFiles": {
+          "description": "The output files.",
+          "items": {
+            "$ref": "#/$defs/pumi.events.v1.InvocationResult.OutputFile.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree that the runner computed from the workspace after the adapter\n exited; empty when the invocation changes no code (decisions 0160 and\n 0162).",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/pumi.events.v1.InvocationResult.Usage.jsonschema.json",
+          "description": "The usage summary."
+        }
+      },
+      "title": "Invocation Result",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.InvocationResult.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.InvocationResult.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

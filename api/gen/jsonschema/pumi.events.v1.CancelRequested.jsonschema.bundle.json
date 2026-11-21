@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "google.protobuf.Any.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "title": "Any",
+      "type": "object"
+    },
+    "pumi.events.v1.Basis.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Basis lists the facts that a decision or a request relied on (decision\n 0134). Each fact is a message of the fact catalog (decision 0136).",
+      "properties": {
+        "facts": {
+          "description": "The facts. Each is a message of the fact catalog, which holds the fact's\n key fields and its value.",
+          "items": {
+            "$ref": "#/$defs/google.protobuf.Any.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Basis",
+      "type": "object"
+    },
+    "pumi.events.v1.CancelRequested.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "CancelRequested is the data of dev.getpumi.cancel.requested (decision\n 0035).",
+      "patternProperties": {
+        "^(requested_by)$": {
+          "default": "",
+          "description": "Who asked for the cancellation.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "basis": {
+          "$ref": "#/$defs/pumi.events.v1.Basis.jsonschema.json",
+          "description": "The facts behind the request."
+        },
+        "invocation": {
+          "default": "",
+          "description": "The invocation to cancel.",
+          "type": "string"
+        },
+        "requestedBy": {
+          "default": "",
+          "description": "Who asked for the cancellation.",
+          "type": "string"
+        }
+      },
+      "title": "Cancel Requested",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.CancelRequested.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.CancelRequested.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

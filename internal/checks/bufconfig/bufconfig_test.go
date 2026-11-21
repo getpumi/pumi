@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -194,8 +195,9 @@ func tree(t *testing.T, dir string) map[string]string {
 }
 
 // TestGeneratedCodeIsCurrent runs buf generate on a copy of the schema and
-// checks that the result is exactly the committed api/gen: no file differs,
-// is missing or is left over (decision 0090).
+// checks that the result is exactly the committed api/gen, the JSON Schemas
+// in api/gen/jsonschema included: no file differs, is missing or is left over
+// (decisions 0090 and 0160).
 func TestGeneratedCodeIsCurrent(t *testing.T) {
 	dir := t.TempDir()
 	copyInputs(t, dir)
@@ -206,6 +208,15 @@ func TestGeneratedCodeIsCurrent(t *testing.T) {
 	want := tree(t, filepath.Join(dir, "api", "gen"))
 	if len(want) == 0 {
 		t.Fatal("buf generate wrote no files to api/gen")
+	}
+	schemas := 0
+	for name := range want {
+		if strings.HasPrefix(name, "jsonschema/") && strings.HasSuffix(name, ".jsonschema.bundle.json") {
+			schemas++
+		}
+	}
+	if schemas == 0 {
+		t.Fatal("buf generate wrote no JSON Schemas to api/gen/jsonschema (decision 0160)")
 	}
 	got := tree(t, filepath.Join(root, "api", "gen"))
 	for name, content := range want {

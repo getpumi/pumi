@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "pumi.facts.v1.PathsOutside.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "PathsOutside is paths.outside: the changed paths outside the plan's\n declared paths.",
+      "patternProperties": {
+        "^(base_tree)$": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "^(head_tree)$": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "baseTree": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "headTree": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The paths.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Paths Outside",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.PathsOutside.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.PathsOutside.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

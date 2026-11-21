@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "pumi.events.v1.CheckIngested.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "CheckIngested is the data of dev.getpumi.check.ingested: the result of a\n check that Pumi does not run (decision 0140).",
+      "properties": {
+        "check": {
+          "default": "",
+          "description": "The name of the check.",
+          "type": "string"
+        },
+        "commit": {
+          "default": "",
+          "description": "The head commit the result is for.",
+          "type": "string"
+        },
+        "result": {
+          "anyOf": [
+            {
+              "pattern": "^RESULT_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "RESULT_PASSED",
+                "RESULT_FAILED",
+                "RESULT_PENDING"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The result.",
+          "title": "Result"
+        }
+      },
+      "title": "Check Ingested",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.CheckIngested.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.CheckIngested.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

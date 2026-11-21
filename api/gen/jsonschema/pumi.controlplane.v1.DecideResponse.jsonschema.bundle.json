@@ -1,0 +1,69 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.DecideResponse.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "DecideResponse is the response of Decide.",
+      "patternProperties": {
+        "^(determining_policies)$": {
+          "description": "The ids of the policies that determined the outcome.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "determiningPolicies": {
+          "description": "The ids of the policies that determined the outcome.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "pattern": "^OUTCOME_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "OUTCOME_ALLOW",
+                "OUTCOME_DENY"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "What the policies decided.",
+          "title": "Outcome"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The position of the decision.made event that records the decision."
+        }
+      },
+      "title": "Decide Response",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.DecideResponse.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.DecideResponse.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

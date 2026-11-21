@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "google.protobuf.Any.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "title": "Any",
+      "type": "object"
+    },
+    "pumi.events.v1.Basis.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Basis lists the facts that a decision or a request relied on (decision\n 0134). Each fact is a message of the fact catalog (decision 0136).",
+      "properties": {
+        "facts": {
+          "description": "The facts. Each is a message of the fact catalog, which holds the fact's\n key fields and its value.",
+          "items": {
+            "$ref": "#/$defs/google.protobuf.Any.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Basis",
+      "type": "object"
+    },
+    "pumi.events.v1.DecisionMade.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "DecisionMade is the data of dev.getpumi.decision.made: a decision of the\n control plane.",
+      "patternProperties": {
+        "^(determining_policies)$": {
+          "description": "The ids of the policies that determined the outcome.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(log_head)$": {
+          "default": "",
+          "description": "The hash of the log head the decision was made at.",
+          "type": "string"
+        },
+        "^(policy_set_digest)$": {
+          "default": "",
+          "description": "The digest of the policy set that decided.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "basis": {
+          "$ref": "#/$defs/pumi.events.v1.Basis.jsonschema.json",
+          "description": "The facts the decision used."
+        },
+        "determiningPolicies": {
+          "description": "The ids of the policies that determined the outcome.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "logHead": {
+          "default": "",
+          "description": "The hash of the log head the decision was made at.",
+          "type": "string"
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "pattern": "^MODE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "MODE_ENFORCED",
+                "MODE_SHADOW"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Whether the decision was enforced or a shadow decision.",
+          "title": "Mode"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "pattern": "^OUTCOME_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "OUTCOME_ALLOW",
+                "OUTCOME_DENY"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The outcome.",
+          "title": "Outcome"
+        },
+        "policySetDigest": {
+          "default": "",
+          "description": "The digest of the policy set that decided.",
+          "type": "string"
+        }
+      },
+      "title": "Decision Made",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.DecisionMade.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.DecisionMade.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

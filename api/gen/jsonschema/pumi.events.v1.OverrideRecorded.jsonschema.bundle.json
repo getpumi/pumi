@@ -1,0 +1,46 @@
+{
+  "$defs": {
+    "pumi.events.v1.OverrideRecorded.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "OverrideRecorded is the data of dev.getpumi.override.recorded: a person\n overrides a settable gate for one tree (decision 0139).",
+      "properties": {
+        "decision": {
+          "default": "",
+          "description": "The id of the dev.getpumi.decision.made event it overrides.",
+          "type": "string"
+        },
+        "gate": {
+          "default": "",
+          "description": "The gate.",
+          "type": "string"
+        },
+        "person": {
+          "default": "",
+          "description": "The person.",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan the override is for. The overrides fact is keyed by plan and\n tree (decision 0136).",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "description": "Why, which is required.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree the override is bound to.",
+          "type": "string"
+        }
+      },
+      "title": "Override Recorded",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.OverrideRecorded.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.OverrideRecorded.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

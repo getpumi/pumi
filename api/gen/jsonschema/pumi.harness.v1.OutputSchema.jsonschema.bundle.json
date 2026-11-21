@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "pumi.harness.v1.OutputSchema.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "OutputSchema is the schema of an invocation's structured output (decision\n 0160).",
+      "patternProperties": {
+        "^(json_schema)$": {
+          "default": "",
+          "description": "The JSON Schema generated from the message by make generate, for\n harnesses that take JSON Schema.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "jsonSchema": {
+          "default": "",
+          "description": "The JSON Schema generated from the message by make generate, for\n harnesses that take JSON Schema.",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "description": "The full name of the protobuf message in the api module, such as\n pumi.events.v1.VerdictRecorded. The runner parses the output into it\n with protojson, and an unknown field fails the invocation.",
+          "type": "string"
+        }
+      },
+      "title": "Output Schema",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.harness.v1.OutputSchema.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.harness.v1.OutputSchema.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

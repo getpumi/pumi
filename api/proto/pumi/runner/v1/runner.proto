@@ -1,0 +1,166 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The runner protocol (decisions 0024, 0035 and 0152): runners pull
+// invocations under leases, renew them with heartbeats and report results,
+// which the control plane appends as events. No request names its principal
+// or its tenant: the control plane takes both from the runner's identity,
+// which also gives its role (decision 0156). The runner protocol is
+// versioned apart from the event schema (decision 0041).
+package pumi.runner.v1;
+
+import "google/protobuf/duration.proto";
+import "io/cloudevents/v1/cloudevents.proto";
+import "pumi/events/v1/invocations.proto";
+import "pumi/harness/v1/harness.proto";
+
+// RunnerService is the service that runners call. The control plane serves
+// it and builds each call on its four verbs (decision 0152). Embedded mode
+// calls it in-process with the same generated client.
+service RunnerService {
+  // Claim waits for an invocation that the runner may run and claims it
+  // under a lease, with a conditional append (decision 0153) that writes
+  // invocation.started and lease.granted. It is a long poll: when no
+  // invocation is ready before the server's wait ends, the response holds
+  // none, and the runner calls Claim again. When the server supports none
+  // of the protocol versions in the request, the error has the code
+  // failed_precondition.
+  rpc Claim(ClaimRequest) returns (ClaimResponse);
+
+  // Heartbeat renews the lease of a claimed invocation. Its response
+  // carries a cancel request when one was appended (decision 0035). A
+  // lease number that is not the current one has the error code aborted,
+  // and the runner stops the invocation.
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+
+  // Report appends the result of an invocation as invocation.result, the
+  // other events that the invocation allows, and invocation.finished
+  // (decision 0156). A lease number that is not the current one has the
+  // error code aborted, and nothing is written (decision 0035).
+  rpc Report(ReportRequest) returns (ReportResponse);
+}
+
+// ProtocolVersion is a version of the runner protocol. The service supports
+// the latest two minor versions (decision 0041).
+message ProtocolVersion {
+  // The major version, 1 for pumi.runner.v1.
+  uint32 major = 1;
+  // The minor version.
+  uint32 minor = 2;
+}
+
+// ClaimRequest is the request of Claim.
+message ClaimRequest {
+  // The protocol versions that the runner supports, at least one.
+  repeated ProtocolVersion protocol_versions = 1;
+}
+
+// ClaimResponse is the response of Claim.
+message ClaimResponse {
+  // The protocol version that the server chose from the request's, for the
+  // rest of the invocation.
+  ProtocolVersion protocol_version = 1;
+  // The invocation document; unset when no invocation was ready before the
+  // wait ended.
+  Invocation invocation = 2;
+  // The number of the lease that the runner now holds. Heartbeat and Report
+  // carry it.
+  int64 lease_number = 3;
+  // How long the lease lasts unless a heartbeat renews it.
+  google.protobuf.Duration lease_timeout = 4;
+}
+
+// Invocation is the invocation document: a self-contained record of one
+// invocation, with credential handles but never secrets (decision 0024).
+// The kernel writes it, and invocation.requested records its hash. The
+// runner derives the harness invocation (pumi.harness.v1.Invocation) from it
+// (decision 0158).
+message Invocation {
+  // Isolation is how the invocation's sandbox is isolated (decision 0039).
+  enum Isolation {
+    ISOLATION_UNSPECIFIED = 0;
+    // A container.
+    ISOLATION_CONTAINER = 1;
+    // A microVM.
+    ISOLATION_MICRO_VM = 2;
+  }
+
+  // The invocation.
+  string invocation = 1;
+  // The idempotency key (decision 0019).
+  string idempotency_key = 2;
+  // The kind of component, with its name and version.
+  pumi.harness.v1.Component component = 3;
+  // The input: the repository and tree hash, and the task.
+  pumi.harness.v1.Input input = 4;
+  // The environment, as the digest of a devcontainer image. The invocation
+  // runs in a fresh container from it.
+  string image_digest = 5;
+  // The role.
+  pumi.harness.v1.Role role = 6;
+  // The capabilities, with the allowed paths (decision 0159).
+  pumi.harness.v1.Capabilities capabilities = 7;
+  // The budget in tokens, money and wall time. The runner stops the
+  // invocation at the hard limits even when it loses its connection
+  // (decision 0035).
+  pumi.harness.v1.Usage budget = 8;
+  // The output schema: the full name of a protobuf message in the api
+  // module (decision 0160).
+  string output_message = 9;
+  // The isolation level.
+  Isolation isolation = 10;
+  // The credential handles, which the runner exchanges with the credentials
+  // broker for tokens valid for this invocation only.
+  repeated string credential_handles = 11;
+}
+
+// HeartbeatRequest is the request of Heartbeat.
+message HeartbeatRequest {
+  // The invocation.
+  string invocation = 1;
+  // The lease number from Claim.
+  int64 lease_number = 2;
+}
+
+// HeartbeatResponse is the response of Heartbeat.
+message HeartbeatResponse {
+  // Cancel is a request to cancel the invocation. The runner asks the
+  // adapter to stop, allows the grace period, kills it, and reports the
+  // outcome cancelled (decision 0035).
+  message Cancel {
+    // Who asked for the cancellation.
+    string requested_by = 1;
+  }
+
+  // The cancel request; unset when there is none.
+  Cancel cancel = 1;
+  // How long the renewed lease lasts.
+  google.protobuf.Duration lease_timeout = 2;
+}
+
+// ReportRequest is the request of Report.
+message ReportRequest {
+  // The invocation.
+  string invocation = 1;
+  // The lease number from Claim.
+  int64 lease_number = 2;
+  // The result, appended as invocation.result.
+  pumi.events.v1.InvocationResult result = 3;
+  // The other events the invocation produced, written between
+  // invocation.result and invocation.finished. The invocation decides which
+  // types are allowed: a gate-role invocation may report verdict.recorded
+  // and warning.raised, an external-action invocation merge.performed,
+  // check.ingested and trunk.unattested, and an agent-role invocation
+  // nothing more (decision 0156).
+  repeated io.cloudevents.v1.CloudEvent events = 4;
+  // The outcome, appended as invocation.finished.
+  pumi.events.v1.InvocationFinished.Outcome outcome = 5;
+}
+
+// ReportResponse is the response of Report.
+message ReportResponse {
+  // The position of each event written, in the order written.
+  repeated uint64 positions = 1;
+}

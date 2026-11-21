@@ -1,0 +1,72 @@
+{
+  "$defs": {
+    "pumi.facts.v1.PlanReview.Counts.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Counts are the verdicts counted.",
+      "properties": {
+        "fail": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The failing verdicts."
+        },
+        "models": {
+          "description": "The model of each counted verdict, so a policy can require a\n different model later.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pass": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The passing verdicts."
+        }
+      },
+      "title": "Counts",
+      "type": "object"
+    },
+    "pumi.facts.v1.PlanReview.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "PlanReview is plan.review: the passing and failing independent reviewer\n verdicts on the plan (decision 0137).",
+      "properties": {
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/pumi.facts.v1.PlanReview.Counts.jsonschema.json",
+          "description": "The counts."
+        }
+      },
+      "title": "Plan Review",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.PlanReview.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.PlanReview.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

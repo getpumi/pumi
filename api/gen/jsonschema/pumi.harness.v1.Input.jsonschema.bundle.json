@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "pumi.harness.v1.Input.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Input is the input of an invocation (decision 0024).",
+      "properties": {
+        "repo": {
+          "default": "",
+          "description": "The repository.",
+          "type": "string"
+        },
+        "task": {
+          "default": "",
+          "description": "The task, such as the prompt of an agent run.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree hash.",
+          "type": "string"
+        }
+      },
+      "title": "Input",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.harness.v1.Input.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.harness.v1.Input.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

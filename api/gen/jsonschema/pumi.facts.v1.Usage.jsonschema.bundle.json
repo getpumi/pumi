@@ -1,0 +1,93 @@
+{
+  "$defs": {
+    "pumi.facts.v1.Usage.Totals.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Totals are the usage.",
+      "patternProperties": {
+        "^(cost_microdollars)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars, because Cedar has no floating-point type\n (decision 0136)."
+        }
+      },
+      "properties": {
+        "costMicrodollars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars, because Cedar has no floating-point type\n (decision 0136)."
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The seconds the invocation ran."
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens used."
+        }
+      },
+      "title": "Totals",
+      "type": "object"
+    },
+    "pumi.facts.v1.Usage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Usage is usage: what an invocation used.",
+      "properties": {
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/pumi.facts.v1.Usage.Totals.jsonschema.json",
+          "description": "The usage."
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.Usage.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.Usage.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

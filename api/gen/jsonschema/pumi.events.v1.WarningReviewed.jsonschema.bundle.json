@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "pumi.events.v1.WarningReviewed.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "WarningReviewed is the data of dev.getpumi.warning.reviewed: a person's\n review of a warning.",
+      "properties": {
+        "person": {
+          "default": "",
+          "description": "The person who reviewed it.",
+          "type": "string"
+        },
+        "warning": {
+          "default": "",
+          "description": "The id of the dev.getpumi.warning.raised event.",
+          "type": "string"
+        }
+      },
+      "title": "Warning Reviewed",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.WarningReviewed.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.WarningReviewed.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

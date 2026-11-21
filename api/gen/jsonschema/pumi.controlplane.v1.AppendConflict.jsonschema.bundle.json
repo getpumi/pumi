@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.AppendConflict.Subject.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Subject is a subject whose condition failed.",
+      "patternProperties": {
+        "^(current_version)$": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "Its version now: the number of its events in the log, 0 when it has\n none."
+        }
+      },
+      "properties": {
+        "currentVersion": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "Its version now: the number of its events in the log, 0 when it has\n none."
+        },
+        "subject": {
+          "default": "",
+          "description": "The subject.",
+          "type": "string"
+        }
+      },
+      "title": "Subject",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.AppendConflict.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "AppendConflict is the error detail of an Append whose conditions did not\n all hold. Nothing was written. The caller can read again and retry.",
+      "properties": {
+        "subjects": {
+          "description": "Each subject whose condition failed.",
+          "items": {
+            "$ref": "#/$defs/pumi.controlplane.v1.AppendConflict.Subject.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Append Conflict",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.AppendConflict.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.AppendConflict.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

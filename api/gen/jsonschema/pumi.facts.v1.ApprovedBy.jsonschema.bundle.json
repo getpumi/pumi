@@ -1,0 +1,28 @@
+{
+  "$defs": {
+    "pumi.facts.v1.ApprovedBy.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ApprovedBy is approved.by: the people who approved the tree.",
+      "properties": {
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The people.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Approved By",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.ApprovedBy.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.ApprovedBy.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

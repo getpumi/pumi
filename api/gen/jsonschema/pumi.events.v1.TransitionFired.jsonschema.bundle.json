@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "pumi.events.v1.TransitionFired.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "TransitionFired is the data of dev.getpumi.transition.fired: the workflow\n moved.",
+      "patternProperties": {
+        "^(from_state)$": {
+          "default": "",
+          "description": "The state the workflow left.",
+          "type": "string"
+        },
+        "^(to_state)$": {
+          "default": "",
+          "description": "The state the workflow entered.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "decision": {
+          "default": "",
+          "description": "The id of the dev.getpumi.decision.made event that guarded it.",
+          "type": "string"
+        },
+        "fromState": {
+          "default": "",
+          "description": "The state the workflow left.",
+          "type": "string"
+        },
+        "gate": {
+          "default": "",
+          "description": "The gate of the state the workflow entered, or empty. The attempts fact\n is counted per plan and gate (decision 0136).",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan whose workflow moved.",
+          "type": "string"
+        },
+        "toState": {
+          "default": "",
+          "description": "The state the workflow entered.",
+          "type": "string"
+        },
+        "trigger": {
+          "default": "",
+          "description": "The trigger that fired the transition.",
+          "type": "string"
+        }
+      },
+      "title": "Transition Fired",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.TransitionFired.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.TransitionFired.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

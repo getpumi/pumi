@@ -1,0 +1,226 @@
+{
+  "$defs": {
+    "google.protobuf.Any.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "title": "Any",
+      "type": "object"
+    },
+    "google.protobuf.Timestamp.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "io.cloudevents.v1.CloudEvent.CloudEventAttributeValue.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(ce_boolean)$": {
+          "type": "boolean"
+        },
+        "^(ce_bytes)$": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(ce_integer)$": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ]
+        },
+        "^(ce_string)$": {
+          "type": "string"
+        },
+        "^(ce_timestamp)$": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "^(ce_uri)$": {
+          "type": "string"
+        },
+        "^(ce_uri_ref)$": {
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ceBoolean": {
+          "type": "boolean"
+        },
+        "ceBytes": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "ceInteger": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ]
+        },
+        "ceString": {
+          "type": "string"
+        },
+        "ceTimestamp": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "ceUri": {
+          "type": "string"
+        },
+        "ceUriRef": {
+          "type": "string"
+        }
+      },
+      "title": "Cloud Event Attribute Value",
+      "type": "object"
+    },
+    "io.cloudevents.v1.CloudEvent.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(binary_data)$": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(proto_data)$": {
+          "$ref": "#/$defs/google.protobuf.Any.jsonschema.json"
+        },
+        "^(spec_version)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(text_data)$": {
+          "type": "string"
+        }
+      },
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/io.cloudevents.v1.CloudEvent.CloudEventAttributeValue.jsonschema.json"
+          },
+          "description": "Optional \u0026 Extension Attributes",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "binaryData": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "id": {
+          "default": "",
+          "description": "Required Attributes",
+          "type": "string"
+        },
+        "protoData": {
+          "$ref": "#/$defs/google.protobuf.Any.jsonschema.json"
+        },
+        "source": {
+          "default": "",
+          "type": "string"
+        },
+        "specVersion": {
+          "default": "",
+          "type": "string"
+        },
+        "textData": {
+          "type": "string"
+        },
+        "type": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Cloud Event",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.AppendRequest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "AppendRequest is the request of Append.",
+      "properties": {
+        "conditions": {
+          "description": "The conditions. When any fails, nothing is written.",
+          "items": {
+            "$ref": "#/$defs/pumi.controlplane.v1.Condition.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "events": {
+          "description": "The events, at least one, written in this order. The control plane\n writes each event's tenant attribute from the caller's identity and its\n prevhash attribute, which chains the whole log (decisions 0153 and\n 0156).",
+          "items": {
+            "$ref": "#/$defs/io.cloudevents.v1.CloudEvent.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Append Request",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.Condition.NoEvents.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "NoEvents says that the subject has no events.",
+      "properties": {},
+      "title": "No Events",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.Condition.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Condition is what an Append expects of one subject (decision 0153). A\n subject's version is the number of events in the log whose subject\n attribute is that subject.",
+      "patternProperties": {
+        "^(no_events)$": {
+          "$ref": "#/$defs/pumi.controlplane.v1.Condition.NoEvents.jsonschema.json",
+          "description": "The subject has no events."
+        }
+      },
+      "properties": {
+        "noEvents": {
+          "$ref": "#/$defs/pumi.controlplane.v1.Condition.NoEvents.jsonschema.json",
+          "description": "The subject has no events."
+        },
+        "subject": {
+          "default": "",
+          "description": "The subject.",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "description": "The subject is at this version, which is 1 or more."
+        }
+      },
+      "title": "Condition",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.AppendRequest.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.AppendRequest.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,359 @@
+{
+  "$defs": {
+    "pumi.harness.v1.Capabilities.Network.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Network is the network access of a run.",
+      "properties": {
+        "access": {
+          "anyOf": [
+            {
+              "pattern": "^ACCESS_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ACCESS_NONE",
+                "ACCESS_GATEWAY",
+                "ACCESS_HOSTS"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The access.",
+          "title": "Access"
+        },
+        "hosts": {
+          "description": "The hosts, when the access is ACCESS_HOSTS.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Network",
+      "type": "object"
+    },
+    "pumi.harness.v1.Capabilities.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Capabilities is the capability list of an invocation (decision 0159),\n neutral between harnesses. What the list leaves out, the run may not do.",
+      "patternProperties": {
+        "^(write_paths)$": {
+          "description": "The paths the run may write, as globs relative to the workspace. A file\n written outside them fails the invocation.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "commands": {
+          "description": "The commands the run may run, as prefixes such as \"go test\".",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "network": {
+          "$ref": "#/$defs/pumi.harness.v1.Capabilities.Network.jsonschema.json",
+          "description": "The network access."
+        },
+        "tools": {
+          "description": "The kinds of tool the run may use.",
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "TOOL_KIND_UNSPECIFIED",
+                  "TOOL_KIND_READ",
+                  "TOOL_KIND_EDIT",
+                  "TOOL_KIND_RUN_COMMANDS",
+                  "TOOL_KIND_WEB"
+                ],
+                "type": "string"
+              },
+              {
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "type": "integer"
+              }
+            ],
+            "title": "Tool Kind"
+          },
+          "type": "array"
+        },
+        "writePaths": {
+          "description": "The paths the run may write, as globs relative to the workspace. A file\n written outside them fails the invocation.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Capabilities",
+      "type": "object"
+    },
+    "pumi.harness.v1.Component.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Component is the component that an invocation runs, with its name and\n version (decision 0024).",
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "pattern": "^KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "KIND_CHECK",
+                "KIND_EXTERNAL_ACTION",
+                "KIND_AGENT_RUN"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The kind.",
+          "title": "Kind"
+        },
+        "name": {
+          "default": "",
+          "description": "The name.",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "description": "The version.",
+          "type": "string"
+        }
+      },
+      "title": "Component",
+      "type": "object"
+    },
+    "pumi.harness.v1.Input.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Input is the input of an invocation (decision 0024).",
+      "properties": {
+        "repo": {
+          "default": "",
+          "description": "The repository.",
+          "type": "string"
+        },
+        "task": {
+          "default": "",
+          "description": "The task, such as the prompt of an agent run.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree hash.",
+          "type": "string"
+        }
+      },
+      "title": "Input",
+      "type": "object"
+    },
+    "pumi.harness.v1.Usage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Usage is an amount of usage: of a budget, or what a run used (decision\n 0136).",
+      "patternProperties": {
+        "^(cost_microdollars)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        }
+      },
+      "properties": {
+        "costMicrodollars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The wall time in seconds."
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens."
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    },
+    "pumi.runner.v1.Invocation.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Invocation is the invocation document: a self-contained record of one\n invocation, with credential handles but never secrets (decision 0024).\n The kernel writes it, and invocation.requested records its hash. The\n runner derives the harness invocation (pumi.harness.v1.Invocation) from it\n (decision 0158).",
+      "patternProperties": {
+        "^(credential_handles)$": {
+          "description": "The credential handles, which the runner exchanges with the credentials\n broker for tokens valid for this invocation only.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(idempotency_key)$": {
+          "default": "",
+          "description": "The idempotency key (decision 0019).",
+          "type": "string"
+        },
+        "^(image_digest)$": {
+          "default": "",
+          "description": "The environment, as the digest of a devcontainer image. The invocation\n runs in a fresh container from it.",
+          "type": "string"
+        },
+        "^(output_message)$": {
+          "default": "",
+          "description": "The output schema: the full name of a protobuf message in the api\n module (decision 0160).",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "budget": {
+          "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
+          "description": "The budget in tokens, money and wall time. The runner stops the\n invocation at the hard limits even when it loses its connection\n (decision 0035)."
+        },
+        "capabilities": {
+          "$ref": "#/$defs/pumi.harness.v1.Capabilities.jsonschema.json",
+          "description": "The capabilities, with the allowed paths (decision 0159)."
+        },
+        "component": {
+          "$ref": "#/$defs/pumi.harness.v1.Component.jsonschema.json",
+          "description": "The kind of component, with its name and version."
+        },
+        "credentialHandles": {
+          "description": "The credential handles, which the runner exchanges with the credentials\n broker for tokens valid for this invocation only.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idempotencyKey": {
+          "default": "",
+          "description": "The idempotency key (decision 0019).",
+          "type": "string"
+        },
+        "imageDigest": {
+          "default": "",
+          "description": "The environment, as the digest of a devcontainer image. The invocation\n runs in a fresh container from it.",
+          "type": "string"
+        },
+        "input": {
+          "$ref": "#/$defs/pumi.harness.v1.Input.jsonschema.json",
+          "description": "The input: the repository and tree hash, and the task."
+        },
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        },
+        "isolation": {
+          "anyOf": [
+            {
+              "pattern": "^ISOLATION_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ISOLATION_CONTAINER",
+                "ISOLATION_MICRO_VM"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The isolation level.",
+          "title": "Isolation"
+        },
+        "outputMessage": {
+          "default": "",
+          "description": "The output schema: the full name of a protobuf message in the api\n module (decision 0160).",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "pattern": "^ROLE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ROLE_GATE",
+                "ROLE_AGENT"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The role.",
+          "title": "Role"
+        }
+      },
+      "title": "Invocation",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.runner.v1.Invocation.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.runner.v1.Invocation.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

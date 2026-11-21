@@ -1,0 +1,38 @@
+{
+  "$defs": {
+    "pumi.facts.v1.VerifyPassed.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "VerifyPassed is verify.passed: whether VERIFY passed on the tree.",
+      "patternProperties": {
+        "^(gate_version)$": {
+          "default": "",
+          "description": "The version of the gate.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "gateVersion": {
+          "default": "",
+          "description": "The version of the gate.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "default": false,
+          "description": "Whether VERIFY passed.",
+          "type": "boolean"
+        }
+      },
+      "title": "Verify Passed",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.VerifyPassed.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.VerifyPassed.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

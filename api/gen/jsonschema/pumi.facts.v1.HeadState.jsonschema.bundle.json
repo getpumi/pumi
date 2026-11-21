@@ -1,0 +1,56 @@
+{
+  "$defs": {
+    "pumi.facts.v1.HeadState.State.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "State is the head's state.",
+      "patternProperties": {
+        "^(up_to_date)$": {
+          "default": false,
+          "description": "Whether the head is up to date with the target branch.",
+          "type": "boolean"
+        }
+      },
+      "properties": {
+        "commit": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "Its tree.",
+          "type": "string"
+        },
+        "upToDate": {
+          "default": false,
+          "description": "Whether the head is up to date with the target branch.",
+          "type": "boolean"
+        }
+      },
+      "title": "State",
+      "type": "object"
+    },
+    "pumi.facts.v1.HeadState.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "HeadState is head.state: the head of the change, as the forge reports it.",
+      "properties": {
+        "change": {
+          "default": "",
+          "description": "The change, such as a pull request.",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/pumi.facts.v1.HeadState.State.jsonschema.json",
+          "description": "The state."
+        }
+      },
+      "title": "Head State",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.HeadState.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.HeadState.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,40 @@
+{
+  "$defs": {
+    "pumi.facts.v1.BudgetsBreached.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "BudgetsBreached is budgets.breached: the names of the metrics over the\n profile's thresholds.",
+      "patternProperties": {
+        "^(metrics_adapter_version)$": {
+          "default": "",
+          "description": "The version of the metrics adapter.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "metricsAdapterVersion": {
+          "default": "",
+          "description": "The version of the metrics adapter.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The metric names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Budgets Breached",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.BudgetsBreached.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.BudgetsBreached.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

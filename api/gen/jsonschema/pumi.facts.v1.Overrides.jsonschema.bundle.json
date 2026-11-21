@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "pumi.facts.v1.Overrides.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Overrides is overrides: the gates a person overrode for the plan and tree\n (decision 0139).",
+      "properties": {
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The gates.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Overrides",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.Overrides.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.Overrides.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

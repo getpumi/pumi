@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "google.protobuf.Duration.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "format": "duration",
+      "title": "Duration",
+      "type": "string"
+    },
+    "pumi.events.v1.LeaseGranted.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "LeaseGranted is the data of dev.getpumi.lease.granted (decision 0020).",
+      "properties": {
+        "holder": {
+          "default": "",
+          "description": "The holder of the lease.",
+          "type": "string"
+        },
+        "lease": {
+          "default": "",
+          "description": "The lease.",
+          "type": "string"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The lease number, which fences out late results (decision 0035)."
+        },
+        "timeout": {
+          "$ref": "#/$defs/google.protobuf.Duration.jsonschema.json",
+          "description": "How long the lease lasts unless its holder renews it."
+        }
+      },
+      "title": "Lease Granted",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.LeaseGranted.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.LeaseGranted.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

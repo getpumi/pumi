@@ -91,8 +91,15 @@ type InvocationRequested struct {
 	Invocation string `protobuf:"bytes,1,opt,name=invocation,proto3" json:"invocation,omitempty"`
 	// The idempotency key.
 	IdempotencyKey string `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
-	// The hash of the invocation document.
-	DocumentHash  string `protobuf:"bytes,3,opt,name=document_hash,json=documentHash,proto3" json:"document_hash,omitempty"`
+	// The hash of the invocation document: sha256: and the hex SHA-256 of
+	// document.
+	DocumentHash string `protobuf:"bytes,3,opt,name=document_hash,json=documentHash,proto3" json:"document_hash,omitempty"`
+	// The invocation document, as the binary protobuf of
+	// pumi.runner.v1.Invocation, which Claim returns to the runner that
+	// claims the invocation (decision 0165). It is bytes, not the message,
+	// because the runner protocol is versioned apart from the event schema
+	// (decision 0041) and pumi.runner.v1 imports this file.
+	Document      []byte `protobuf:"bytes,4,opt,name=document,proto3" json:"document,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -146,6 +153,13 @@ func (x *InvocationRequested) GetDocumentHash() string {
 		return x.DocumentHash
 	}
 	return ""
+}
+
+func (x *InvocationRequested) GetDocument() []byte {
+	if x != nil {
+		return x.Document
+	}
+	return nil
 }
 
 // InvocationStarted is the data of dev.getpumi.invocation.started: the
@@ -553,13 +567,14 @@ var File_pumi_events_v1_invocations_proto protoreflect.FileDescriptor
 
 const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"\n" +
-	" pumi/events/v1/invocations.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\"\x83\x01\n" +
+	" pumi/events/v1/invocations.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\"\x9f\x01\n" +
 	"\x13InvocationRequested\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +
 	"invocation\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12#\n" +
-	"\rdocument_hash\x18\x03 \x01(\tR\fdocumentHash\"n\n" +
+	"\rdocument_hash\x18\x03 \x01(\tR\fdocumentHash\x12\x1a\n" +
+	"\bdocument\x18\x04 \x01(\fR\bdocument\"n\n" +
 	"\x11InvocationStarted\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +

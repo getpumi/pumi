@@ -653,6 +653,107 @@ func (x *ReportResponse) GetPositions() []uint64 {
 	return nil
 }
 
+// SendLogRequest is the request of SendLog.
+type SendLogRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The invocation.
+	Invocation string `protobuf:"bytes,1,opt,name=invocation,proto3" json:"invocation,omitempty"`
+	// The lease number from Claim.
+	LeaseNumber int64 `protobuf:"varint,2,opt,name=lease_number,json=leaseNumber,proto3" json:"lease_number,omitempty"`
+	// The output since the last batch, masked.
+	Output        []byte `protobuf:"bytes,3,opt,name=output,proto3" json:"output,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendLogRequest) Reset() {
+	*x = SendLogRequest{}
+	mi := &file_pumi_runner_v1_runner_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendLogRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendLogRequest) ProtoMessage() {}
+
+func (x *SendLogRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_runner_v1_runner_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendLogRequest.ProtoReflect.Descriptor instead.
+func (*SendLogRequest) Descriptor() ([]byte, []int) {
+	return file_pumi_runner_v1_runner_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SendLogRequest) GetInvocation() string {
+	if x != nil {
+		return x.Invocation
+	}
+	return ""
+}
+
+func (x *SendLogRequest) GetLeaseNumber() int64 {
+	if x != nil {
+		return x.LeaseNumber
+	}
+	return 0
+}
+
+func (x *SendLogRequest) GetOutput() []byte {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+// SendLogResponse is the response of SendLog.
+type SendLogResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SendLogResponse) Reset() {
+	*x = SendLogResponse{}
+	mi := &file_pumi_runner_v1_runner_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SendLogResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SendLogResponse) ProtoMessage() {}
+
+func (x *SendLogResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_runner_v1_runner_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SendLogResponse.ProtoReflect.Descriptor instead.
+func (*SendLogResponse) Descriptor() ([]byte, []int) {
+	return file_pumi_runner_v1_runner_proto_rawDescGZIP(), []int{9}
+}
+
 // Cancel is a request to cancel the invocation. The runner asks the
 // adapter to stop, allows the grace period, kills it, and reports the
 // outcome cancelled (decision 0035).
@@ -666,7 +767,7 @@ type HeartbeatResponse_Cancel struct {
 
 func (x *HeartbeatResponse_Cancel) Reset() {
 	*x = HeartbeatResponse_Cancel{}
-	mi := &file_pumi_runner_v1_runner_proto_msgTypes[8]
+	mi := &file_pumi_runner_v1_runner_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -678,7 +779,7 @@ func (x *HeartbeatResponse_Cancel) String() string {
 func (*HeartbeatResponse_Cancel) ProtoMessage() {}
 
 func (x *HeartbeatResponse_Cancel) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_runner_v1_runner_proto_msgTypes[8]
+	mi := &file_pumi_runner_v1_runner_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -757,11 +858,19 @@ const file_pumi_runner_v1_runner_proto_rawDesc = "" +
 	"\x06events\x18\x04 \x03(\v2\x1d.io.cloudevents.v1.CloudEventR\x06events\x12D\n" +
 	"\aoutcome\x18\x05 \x01(\x0e2*.pumi.events.v1.InvocationFinished.OutcomeR\aoutcome\".\n" +
 	"\x0eReportResponse\x12\x1c\n" +
-	"\tpositions\x18\x01 \x03(\x04R\tpositions2\xf0\x01\n" +
+	"\tpositions\x18\x01 \x03(\x04R\tpositions\"k\n" +
+	"\x0eSendLogRequest\x12\x1e\n" +
+	"\n" +
+	"invocation\x18\x01 \x01(\tR\n" +
+	"invocation\x12!\n" +
+	"\flease_number\x18\x02 \x01(\x03R\vleaseNumber\x12\x16\n" +
+	"\x06output\x18\x03 \x01(\fR\x06output\"\x11\n" +
+	"\x0fSendLogResponse2\xbc\x02\n" +
 	"\rRunnerService\x12D\n" +
 	"\x05Claim\x12\x1c.pumi.runner.v1.ClaimRequest\x1a\x1d.pumi.runner.v1.ClaimResponse\x12P\n" +
 	"\tHeartbeat\x12 .pumi.runner.v1.HeartbeatRequest\x1a!.pumi.runner.v1.HeartbeatResponse\x12G\n" +
-	"\x06Report\x12\x1d.pumi.runner.v1.ReportRequest\x1a\x1e.pumi.runner.v1.ReportResponseB\xad\x01\n" +
+	"\x06Report\x12\x1d.pumi.runner.v1.ReportRequest\x1a\x1e.pumi.runner.v1.ReportResponse\x12J\n" +
+	"\aSendLog\x12\x1e.pumi.runner.v1.SendLogRequest\x1a\x1f.pumi.runner.v1.SendLogResponseB\xad\x01\n" +
 	"\x12com.pumi.runner.v1B\vRunnerProtoP\x01Z0getpumi.dev/pumi/api/gen/pumi/runner/v1;runnerv1\xa2\x02\x03PRX\xaa\x02\x0ePumi.Runner.V1\xca\x02\x0ePumi\\Runner\\V1\xe2\x02\x1aPumi\\Runner\\V1\\GPBMetadata\xea\x02\x10Pumi::Runner::V1b\x06proto3"
 
 var (
@@ -777,7 +886,7 @@ func file_pumi_runner_v1_runner_proto_rawDescGZIP() []byte {
 }
 
 var file_pumi_runner_v1_runner_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pumi_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pumi_runner_v1_runner_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_pumi_runner_v1_runner_proto_goTypes = []any{
 	(Invocation_Isolation)(0),           // 0: pumi.runner.v1.Invocation.Isolation
 	(*ProtocolVersion)(nil),             // 1: pumi.runner.v1.ProtocolVersion
@@ -788,41 +897,45 @@ var file_pumi_runner_v1_runner_proto_goTypes = []any{
 	(*HeartbeatResponse)(nil),           // 6: pumi.runner.v1.HeartbeatResponse
 	(*ReportRequest)(nil),               // 7: pumi.runner.v1.ReportRequest
 	(*ReportResponse)(nil),              // 8: pumi.runner.v1.ReportResponse
-	(*HeartbeatResponse_Cancel)(nil),    // 9: pumi.runner.v1.HeartbeatResponse.Cancel
-	(*durationpb.Duration)(nil),         // 10: google.protobuf.Duration
-	(*v1.Component)(nil),                // 11: pumi.harness.v1.Component
-	(*v1.Input)(nil),                    // 12: pumi.harness.v1.Input
-	(v1.Role)(0),                        // 13: pumi.harness.v1.Role
-	(*v1.Capabilities)(nil),             // 14: pumi.harness.v1.Capabilities
-	(*v1.Usage)(nil),                    // 15: pumi.harness.v1.Usage
-	(*v11.InvocationResult)(nil),        // 16: pumi.events.v1.InvocationResult
-	(*v12.CloudEvent)(nil),              // 17: io.cloudevents.v1.CloudEvent
-	(v11.InvocationFinished_Outcome)(0), // 18: pumi.events.v1.InvocationFinished.Outcome
+	(*SendLogRequest)(nil),              // 9: pumi.runner.v1.SendLogRequest
+	(*SendLogResponse)(nil),             // 10: pumi.runner.v1.SendLogResponse
+	(*HeartbeatResponse_Cancel)(nil),    // 11: pumi.runner.v1.HeartbeatResponse.Cancel
+	(*durationpb.Duration)(nil),         // 12: google.protobuf.Duration
+	(*v1.Component)(nil),                // 13: pumi.harness.v1.Component
+	(*v1.Input)(nil),                    // 14: pumi.harness.v1.Input
+	(v1.Role)(0),                        // 15: pumi.harness.v1.Role
+	(*v1.Capabilities)(nil),             // 16: pumi.harness.v1.Capabilities
+	(*v1.Usage)(nil),                    // 17: pumi.harness.v1.Usage
+	(*v11.InvocationResult)(nil),        // 18: pumi.events.v1.InvocationResult
+	(*v12.CloudEvent)(nil),              // 19: io.cloudevents.v1.CloudEvent
+	(v11.InvocationFinished_Outcome)(0), // 20: pumi.events.v1.InvocationFinished.Outcome
 }
 var file_pumi_runner_v1_runner_proto_depIdxs = []int32{
 	1,  // 0: pumi.runner.v1.ClaimRequest.protocol_versions:type_name -> pumi.runner.v1.ProtocolVersion
 	1,  // 1: pumi.runner.v1.ClaimResponse.protocol_version:type_name -> pumi.runner.v1.ProtocolVersion
 	4,  // 2: pumi.runner.v1.ClaimResponse.invocation:type_name -> pumi.runner.v1.Invocation
-	10, // 3: pumi.runner.v1.ClaimResponse.lease_timeout:type_name -> google.protobuf.Duration
-	11, // 4: pumi.runner.v1.Invocation.component:type_name -> pumi.harness.v1.Component
-	12, // 5: pumi.runner.v1.Invocation.input:type_name -> pumi.harness.v1.Input
-	13, // 6: pumi.runner.v1.Invocation.role:type_name -> pumi.harness.v1.Role
-	14, // 7: pumi.runner.v1.Invocation.capabilities:type_name -> pumi.harness.v1.Capabilities
-	15, // 8: pumi.runner.v1.Invocation.budget:type_name -> pumi.harness.v1.Usage
+	12, // 3: pumi.runner.v1.ClaimResponse.lease_timeout:type_name -> google.protobuf.Duration
+	13, // 4: pumi.runner.v1.Invocation.component:type_name -> pumi.harness.v1.Component
+	14, // 5: pumi.runner.v1.Invocation.input:type_name -> pumi.harness.v1.Input
+	15, // 6: pumi.runner.v1.Invocation.role:type_name -> pumi.harness.v1.Role
+	16, // 7: pumi.runner.v1.Invocation.capabilities:type_name -> pumi.harness.v1.Capabilities
+	17, // 8: pumi.runner.v1.Invocation.budget:type_name -> pumi.harness.v1.Usage
 	0,  // 9: pumi.runner.v1.Invocation.isolation:type_name -> pumi.runner.v1.Invocation.Isolation
-	9,  // 10: pumi.runner.v1.HeartbeatResponse.cancel:type_name -> pumi.runner.v1.HeartbeatResponse.Cancel
-	10, // 11: pumi.runner.v1.HeartbeatResponse.lease_timeout:type_name -> google.protobuf.Duration
-	16, // 12: pumi.runner.v1.ReportRequest.result:type_name -> pumi.events.v1.InvocationResult
-	17, // 13: pumi.runner.v1.ReportRequest.events:type_name -> io.cloudevents.v1.CloudEvent
-	18, // 14: pumi.runner.v1.ReportRequest.outcome:type_name -> pumi.events.v1.InvocationFinished.Outcome
+	11, // 10: pumi.runner.v1.HeartbeatResponse.cancel:type_name -> pumi.runner.v1.HeartbeatResponse.Cancel
+	12, // 11: pumi.runner.v1.HeartbeatResponse.lease_timeout:type_name -> google.protobuf.Duration
+	18, // 12: pumi.runner.v1.ReportRequest.result:type_name -> pumi.events.v1.InvocationResult
+	19, // 13: pumi.runner.v1.ReportRequest.events:type_name -> io.cloudevents.v1.CloudEvent
+	20, // 14: pumi.runner.v1.ReportRequest.outcome:type_name -> pumi.events.v1.InvocationFinished.Outcome
 	2,  // 15: pumi.runner.v1.RunnerService.Claim:input_type -> pumi.runner.v1.ClaimRequest
 	5,  // 16: pumi.runner.v1.RunnerService.Heartbeat:input_type -> pumi.runner.v1.HeartbeatRequest
 	7,  // 17: pumi.runner.v1.RunnerService.Report:input_type -> pumi.runner.v1.ReportRequest
-	3,  // 18: pumi.runner.v1.RunnerService.Claim:output_type -> pumi.runner.v1.ClaimResponse
-	6,  // 19: pumi.runner.v1.RunnerService.Heartbeat:output_type -> pumi.runner.v1.HeartbeatResponse
-	8,  // 20: pumi.runner.v1.RunnerService.Report:output_type -> pumi.runner.v1.ReportResponse
-	18, // [18:21] is the sub-list for method output_type
-	15, // [15:18] is the sub-list for method input_type
+	9,  // 18: pumi.runner.v1.RunnerService.SendLog:input_type -> pumi.runner.v1.SendLogRequest
+	3,  // 19: pumi.runner.v1.RunnerService.Claim:output_type -> pumi.runner.v1.ClaimResponse
+	6,  // 20: pumi.runner.v1.RunnerService.Heartbeat:output_type -> pumi.runner.v1.HeartbeatResponse
+	8,  // 21: pumi.runner.v1.RunnerService.Report:output_type -> pumi.runner.v1.ReportResponse
+	10, // 22: pumi.runner.v1.RunnerService.SendLog:output_type -> pumi.runner.v1.SendLogResponse
+	19, // [19:23] is the sub-list for method output_type
+	15, // [15:19] is the sub-list for method input_type
 	15, // [15:15] is the sub-list for extension type_name
 	15, // [15:15] is the sub-list for extension extendee
 	0,  // [0:15] is the sub-list for field type_name
@@ -839,7 +952,7 @@ func file_pumi_runner_v1_runner_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_runner_v1_runner_proto_rawDesc), len(file_pumi_runner_v1_runner_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

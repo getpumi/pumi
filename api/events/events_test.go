@@ -394,6 +394,9 @@ func value(t *testing.T, m protoreflect.Message, fd protoreflect.FieldDescriptor
 	if fd.Kind() == protoreflect.StringKind {
 		return protoreflect.ValueOfString("value-of-" + string(fd.Name()))
 	}
+	if fd.Kind() == protoreflect.BytesKind {
+		return protoreflect.ValueOfBytes([]byte("value-of-" + string(fd.Name())))
+	}
 	if fd.Kind() == protoreflect.Int64Kind {
 		return protoreflect.ValueOfInt64(int64(fd.Number()) + 40)
 	}
@@ -437,6 +440,15 @@ func TestRoundTrips(t *testing.T) {
 				t.Fatal(err)
 			}
 			fill(t, data.ProtoReflect())
+			if r, ok := data.(*eventsv1.InvocationRequested); ok {
+				// The document must match the other fields (decision 0165).
+				filled, err := InvocationRequested(document())
+				if err != nil {
+					t.Fatal(err)
+				}
+				proto.Reset(r)
+				proto.Merge(r, filled)
+			}
 			e, err := New(data, attrs())
 			if err != nil {
 				t.Fatal(err)

@@ -1,0 +1,15 @@
+{
+  "$defs": {
+    "pumi.runner.v1.SendLogResponse.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "SendLogResponse is the response of SendLog.",
+      "properties": {},
+      "title": "Send Log Response",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.runner.v1.SendLogResponse.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.runner.v1.SendLogResponse.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

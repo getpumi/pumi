@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "pumi.runner.v1.SendLogRequest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "SendLogRequest is the request of SendLog.",
+      "patternProperties": {
+        "^(lease_number)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The lease number from Claim."
+        }
+      },
+      "properties": {
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        },
+        "leaseNumber": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The lease number from Claim."
+        },
+        "output": {
+          "default": null,
+          "description": "The output since the last batch, masked.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        }
+      },
+      "title": "Send Log Request",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.runner.v1.SendLogRequest.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.runner.v1.SendLogRequest.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

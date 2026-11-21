@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -17,6 +18,7 @@ import (
 	"connectrpc.com/connect/v2/connectinprocess"
 
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
+	"getpumi.dev/pumi/api/gen/pumi/runner/v1/runnerv1connect"
 	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane"
 	"getpumi.dev/pumi/internal/controlplane/conformance"
@@ -56,26 +58,70 @@ var callerOf = map[conformance.Caller]controlplane.Caller{
 // start returns a conformance.Start that opens a new embedded log, serves
 // it with one server for each caller, wired with that caller's identity,
 // and reaches each server through the transport that transport returns.
+// The control plane's clock is a fake one that the suite advances.
 func start(transport func(*testing.T, *connect.Server) connect.Transport) conformance.Start {
-	return func(t *testing.T) conformance.Clients {
+	return func(t *testing.T) conformance.Plane {
 		t.Helper()
-		svc := newService(t)
-		clients := map[conformance.Caller]controlplanev1connect.ControlPlaneServiceClient{}
-		for _, caller := range conformance.Callers {
-			server, err := svc.Server(identity(callerOf[caller]))
-			if err != nil {
-				t.Fatalf("Server for a %s: %v", caller, err)
-			}
-			clients[caller] = controlplanev1connect.NewControlPlaneServiceClient(connect.NewClient(transport(t, server)))
+		clock := newFakeClock()
+		cfg := config()
+		cfg.Clock = clock
+		svc, err := controlplane.New(openLog(t), cfg)
+		if err != nil {
+			t.Fatal(err)
 		}
-		return func(c conformance.Caller) controlplanev1connect.ControlPlaneServiceClient {
+		dial := func(id controlplane.Identity) *connect.Client {
+			server, err := svc.Server(id)
+			if err != nil {
+				t.Fatalf("Server for %v: %v", id, err)
+			}
+			return connect.NewClient(transport(t, server))
+		}
+		clients := map[conformance.Caller]*connect.Client{}
+		for _, caller := range conformance.Callers {
+			clients[caller] = dial(identity(callerOf[caller]))
+		}
+		client := func(c conformance.Caller) *connect.Client {
 			client, ok := clients[c]
 			if !ok {
 				t.Fatalf("the suite asked for a client of the unknown caller %q", c)
 			}
 			return client
 		}
+		r := &runners{dial: dial, clients: map[string]runnerv1connect.RunnerServiceClient{}}
+		return conformance.Plane{
+			Clients: func(c conformance.Caller) controlplanev1connect.ControlPlaneServiceClient {
+				return controlplanev1connect.NewControlPlaneServiceClient(client(c))
+			},
+			Runner: r.runner,
+			RunnerServiceAs: func(c conformance.Caller) runnerv1connect.RunnerServiceClient {
+				return runnerv1connect.NewRunnerServiceClient(client(c))
+			},
+			Advance: clock.Advance,
+		}
 	}
+}
+
+// runners gives the suite one RunnerService client for each runner name.
+type runners struct {
+	mu      sync.Mutex
+	dial    func(controlplane.Identity) *connect.Client
+	clients map[string]runnerv1connect.RunnerServiceClient
+}
+
+// runner returns the client of the runner name, with the roles given the
+// first time the name is used.
+func (r *runners) runner(name string, roles ...conformance.Role) runnerv1connect.RunnerServiceClient {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if c, ok := r.clients[name]; ok {
+		return c
+	}
+	id := controlplane.Identity{Caller: controlplane.CallerRunner, Principal: name, Tenant: embeddedlog.Tenant}
+	for _, role := range roles {
+		id.Roles = append(id.Roles, string(role))
+	}
+	r.clients[name] = runnerv1connect.NewRunnerServiceClient(r.dial(id))
+	return r.clients[name]
 }
 
 // permitAll is a lower policy set that permits every request, with which
@@ -108,7 +154,11 @@ func newService(t *testing.T) *controlplane.Service {
 
 // identity returns the identity of a client of the kind caller.
 func identity(caller controlplane.Caller) controlplane.Identity {
-	return controlplane.Identity{Caller: caller, Principal: string(caller) + "-1", Roles: []string{"maintainer"}, Tenant: embeddedlog.Tenant}
+	roles := []string{"maintainer"}
+	if caller == controlplane.CallerRunner {
+		roles = []string{"gate"}
+	}
+	return controlplane.Identity{Caller: caller, Principal: string(caller) + "-1", Roles: roles, Tenant: embeddedlog.Tenant}
 }
 
 // openLog opens the embedded log of a new git clone and closes it when the

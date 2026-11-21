@@ -4,6 +4,8 @@
 package controlplane
 
 import (
+	"time"
+
 	"github.com/cedar-policy/cedar-go"
 
 	"getpumi.dev/pumi/api/policy"
@@ -22,7 +24,22 @@ type Config struct {
 	HardCaps policy.Caps
 	// Project is the project that the plans are in.
 	Project Project
+	// Clock is the source of time of the lease timers and of Claim's wait;
+	// the operating system's clock when it is nil.
+	Clock Clock
+	// LeaseTimeout is how long a lease lasts unless a heartbeat renews it;
+	// DefaultLeaseTimeout when it is 0.
+	LeaseTimeout time.Duration
+	// ClaimWait is how long Claim waits for an invocation before it returns
+	// none; DefaultClaimWait when it is 0.
+	ClaimWait time.Duration
 }
+
+// DefaultLeaseTimeout is the lease timeout when the wiring sets none.
+const DefaultLeaseTimeout = 30 * time.Second
+
+// DefaultClaimWait is how long Claim waits when the wiring sets no wait.
+const DefaultClaimWait = 20 * time.Second
 
 // Project is the project of the Cedar resource Plan (decision 0141).
 type Project struct {

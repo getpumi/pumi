@@ -49,7 +49,7 @@ func fieldNames(md protoreflect.MessageDescriptor) []string {
 	return names
 }
 
-func TestRunnerServiceHasClaimHeartbeatAndReport(t *testing.T) {
+func TestRunnerServiceHasClaimHeartbeatReportAndSendLog(t *testing.T) {
 	methods := runnerService(t).Methods()
 	got := []string{}
 	for i := range methods.Len() {
@@ -60,8 +60,8 @@ func TestRunnerServiceHasClaimHeartbeatAndReport(t *testing.T) {
 		}
 	}
 	slices.Sort(got)
-	if want := []string{"Claim", "Heartbeat", "Report"}; !slices.Equal(got, want) {
-		t.Errorf("RunnerService has %q, want %q (decision 0152)", got, want)
+	if want := []string{"Claim", "Heartbeat", "Report", "SendLog"}; !slices.Equal(got, want) {
+		t.Errorf("RunnerService has %q, want %q (decisions 0152 and 0163)", got, want)
 	}
 }
 
@@ -133,6 +133,23 @@ func TestReportCarriesTheLeaseNumberAndTheResult(t *testing.T) {
 	}
 	if f := fieldOf(t, in, "events"); !f.IsList() || f.Message().FullName() != "io.cloudevents.v1.CloudEvent" {
 		t.Error("ReportRequest.events is not a list of CloudEvents (decision 0156)")
+	}
+}
+
+func TestSendLogCarriesTheLeaseNumberAndTheOutput(t *testing.T) {
+	m := runnerService(t).Methods().ByName("SendLog")
+	if m == nil {
+		t.Fatal("RunnerService has no SendLog (decision 0163)")
+	}
+	in := m.Input()
+	if fieldOf(t, in, "lease_number").Kind() != protoreflect.Int64Kind {
+		t.Error("SendLogRequest.lease_number is not an int64 (decision 0163)")
+	}
+	if f := fieldOf(t, in, "invocation"); f.Kind() != protoreflect.StringKind {
+		t.Error("SendLogRequest.invocation is not a string")
+	}
+	if f := fieldOf(t, in, "output"); f.Kind() != protoreflect.BytesKind || f.IsList() {
+		t.Error("SendLogRequest.output is not bytes (decision 0034)")
 	}
 }
 

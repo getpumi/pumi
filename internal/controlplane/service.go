@@ -18,6 +18,7 @@ import (
 	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
+	"getpumi.dev/pumi/api/gen/pumi/runner/v1/runnerv1connect"
 	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
 	"getpumi.dev/pumi/internal/controlplane/projections"
@@ -73,6 +74,8 @@ type Service struct {
 	catalog map[string]facts.Fact
 	// projections holds the registered projections by fact name.
 	projections map[string]projections.Projection
+	// runs is the state of RunnerService beside the log.
+	runs *runs
 	// trace, when set, is called with "decided" after an append's
 	// permissions are decided and before it is written. Tests use it to
 	// append in between.
@@ -99,19 +102,24 @@ func New(log *embeddedlog.Log, cfg Config) (*Service, error) {
 	}
 	s := &Service{
 		log: log, cfg: cfg, decider: decider, digest: policySetDigest(files), catalog: catalog,
-		projections: map[string]projections.Projection{},
+		projections: map[string]projections.Projection{}, runs: newRuns(cfg),
 	}
 	for _, p := range projections.All() {
 		s.projections[p.Fact] = p
 	}
+	if err := s.restoreLeases(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
-// Server returns a Connect server that serves ControlPlaneService to a
-// client with the identity id. The wiring gives each client its own
-// server, built with that client's identity, so a client cannot call as
-// anyone else. It refuses a caller that it does not know, an identity with
-// no principal and a tenant other than the embedded log's.
+// Server returns a Connect server that serves ControlPlaneService and
+// RunnerService to a client with the identity id. The wiring gives each
+// client its own server, built with that client's identity, so a client
+// cannot call as anyone else. It refuses a caller that it does not know, an identity with
+// no principal, a tenant other than the embedded log's, and a runner whose
+// roles are not gate or agent, the roles of the invocations it takes
+// (decision 0024).
 func (s *Service) Server(id Identity) (*connect.Server, error) {
 	switch id.Caller {
 	case CallerKernel, CallerPerson, CallerRunner:
@@ -124,8 +132,14 @@ func (s *Service) Server(id Identity) (*connect.Server, error) {
 	if id.Tenant != embeddedlog.Tenant {
 		return nil, fmt.Errorf("the embedded control plane serves only the tenant %q, not %q", embeddedlog.Tenant, id.Tenant)
 	}
+	if id.Caller == CallerRunner {
+		if err := checkRunnerRoles(id); err != nil {
+			return nil, err
+		}
+	}
 	server := connect.NewServer()
 	controlplanev1connect.RegisterControlPlaneServiceHandler(server, &handler{svc: s, log: s.log, id: id})
+	runnerv1connect.RegisterRunnerServiceHandler(server, &runnerHandler{svc: s, id: id})
 	return server, nil
 }
 
@@ -187,22 +201,9 @@ func (h *handler) checkEvents(evs []*cloudeventsv1.CloudEvent) ([]*cloudeventsv1
 	}
 	out := make([]*cloudeventsv1.CloudEvent, 0, len(evs))
 	for i, original := range evs {
-		if original == nil {
-			return nil, connect.Errorf(connect.CodeInvalidArgument, "event %d of the append is empty", i+1)
-		}
-		e, ok := proto.Clone(original).(*cloudeventsv1.CloudEvent)
-		if !ok {
-			return nil, connect.Errorf(connect.CodeInvalidArgument, "event %d of the append is not a CloudEvent", i+1)
-		}
-		if e.Attributes == nil {
-			e.Attributes = map[string]*cloudeventsv1.CloudEvent_CloudEventAttributeValue{}
-		}
-		e.Attributes[events.ExtensionTenant] = &cloudeventsv1.CloudEvent_CloudEventAttributeValue{
-			Attr: &cloudeventsv1.CloudEvent_CloudEventAttributeValue_CeString{CeString: h.id.Tenant},
-		}
-		delete(e.Attributes, events.ExtensionPrevHash)
-		if err := events.Validate(e); err != nil {
-			return nil, connect.Errorf(connect.CodeInvalidArgument, "event %d of the append: %v", i+1, err)
+		e, err := withTenant(i, original, h.id.Tenant)
+		if err != nil {
+			return nil, err
 		}
 		if a, ok := appenderOf[h.id.Caller]; !ok || !events.MayAppend(e.GetType(), a) {
 			return nil, connect.Errorf(connect.CodePermissionDenied,
@@ -211,6 +212,28 @@ func (h *handler) checkEvents(evs []*cloudeventsv1.CloudEvent) ([]*cloudeventsv1
 		out = append(out, e)
 	}
 	return out, nil
+}
+
+// withTenant returns a copy of original, event i of a request, with the
+// caller's tenant and no prevhash, which the log writes. It refuses an
+// empty event and one that is not a valid Pumi event, with invalid
+// argument.
+func withTenant(i int, original *cloudeventsv1.CloudEvent, tenant string) (*cloudeventsv1.CloudEvent, error) {
+	if original == nil {
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "event %d of the request is empty", i+1)
+	}
+	e := proto.CloneOf(original)
+	if e.Attributes == nil {
+		e.Attributes = map[string]*cloudeventsv1.CloudEvent_CloudEventAttributeValue{}
+	}
+	e.Attributes[events.ExtensionTenant] = &cloudeventsv1.CloudEvent_CloudEventAttributeValue{
+		Attr: &cloudeventsv1.CloudEvent_CloudEventAttributeValue_CeString{CeString: tenant},
+	}
+	delete(e.Attributes, events.ExtensionPrevHash)
+	if err := events.Validate(e); err != nil {
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "event %d of the request: %v", i+1, err)
+	}
+	return e, nil
 }
 
 // checkConditions refuses, with invalid argument, a condition with no

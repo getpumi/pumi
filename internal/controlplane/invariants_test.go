@@ -264,7 +264,13 @@ func checkCase(t *testing.T, set *cedar.PolicySet, v *validate.Validator, caps c
 		Resource:  uid(t, tt.Request.Resource),
 		Context:   tt.Request.Context,
 	}
-	if got, ok := tt.Request.Context.Get("hardCaps"); !ok || !got.Equal(caps) {
+	// The permissions read no facts and no caps (decision 0164).
+	got, ok := tt.Request.Context.Get("hardCaps")
+	if slices.Contains(permissions, string(req.Action.ID)) {
+		if ok {
+			t.Errorf("the case of the permission %s has hardCaps %v, want none", req.Action.ID, got)
+		}
+	} else if !ok || !got.Equal(caps) {
 		t.Errorf("the case's hardCaps are %v, want the release's defaults %v", got, caps)
 	}
 	if err := v.Request(req); err != nil {

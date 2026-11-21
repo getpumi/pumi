@@ -1432,18 +1432,7 @@
       "principal": "Pumi::Runner::\"gate-runner\"",
       "action": "Pumi::Action::\"writeVerdict\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -1534,18 +1523,7 @@
       "principal": "Pumi::Runner::\"agent-runner\"",
       "action": "Pumi::Action::\"writeVerdict\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -1636,18 +1614,7 @@
       "principal": "Pumi::Person::\"michael\"",
       "action": "Pumi::Action::\"approve\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -1738,18 +1705,7 @@
       "principal": "Pumi::Agent::\"claude\"",
       "action": "Pumi::Action::\"approve\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -1840,18 +1796,7 @@
       "principal": "Pumi::Person::\"michael\"",
       "action": "Pumi::Action::\"override\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -1942,18 +1887,7 @@
       "principal": "Pumi::Agent::\"claude\"",
       "action": "Pumi::Action::\"override\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -2044,18 +1978,7 @@
       "principal": "Pumi::Runner::\"gate-runner\"",
       "action": "Pumi::Action::\"override\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -2146,18 +2069,7 @@
       "principal": "Pumi::Kernel::\"kernel\"",
       "action": "Pumi::Action::\"override\"",
       "resource": "Pumi::Plan::\"p1\"",
-      "context": {
-        "hardCaps": {
-          "tokens": 5000000,
-          "costMicrodollars": 50000000,
-          "seconds": 14400
-        },
-        "usage": {
-          "tokens": 1000,
-          "costMicrodollars": 2000,
-          "seconds": 60
-        }
-      }
+      "context": {}
     },
     "entities": [
       {
@@ -2239,6 +2151,188 @@
     "decision": "deny",
     "reason": [
       "invariant.people-decide"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a cancel by the kernel is allowed, because the hard caps do not apply to it",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"cancel\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [
+      "permit-all"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "a cancel by a person is allowed",
+    "request": {
+      "principal": "Pumi::Person::\"michael\"",
+      "action": "Pumi::Action::\"cancel\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {}
+    },
+    "entities": [
+      {
+        "uid": {
+          "type": "Pumi::Project",
+          "id": "pumi"
+        },
+        "attrs": {
+          "protectedPaths": [
+            ".github/**"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Plan",
+          "id": "p1"
+        },
+        "attrs": {
+          "tree": "t1"
+        },
+        "parents": [
+          {
+            "type": "Pumi::Project",
+            "id": "pumi"
+          }
+        ]
+      },
+      {
+        "uid": {
+          "type": "Pumi::Kernel",
+          "id": "kernel"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Person",
+          "id": "michael"
+        },
+        "attrs": {
+          "roles": [
+            "maintainer"
+          ]
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Agent",
+          "id": "claude"
+        },
+        "attrs": {},
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "gate-runner"
+        },
+        "attrs": {
+          "role": "gate"
+        },
+        "parents": []
+      },
+      {
+        "uid": {
+          "type": "Pumi::Runner",
+          "id": "agent-runner"
+        },
+        "attrs": {
+          "role": "agent"
+        },
+        "parents": []
+      }
+    ],
+    "decision": "allow",
+    "reason": [
+      "permit-all"
     ],
     "num_errors": 0
   }

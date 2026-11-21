@@ -3,8 +3,9 @@
 
 // The Cedar schema of Pumi (decision 0141). Facts are passed in the request
 // context, not as entities: each action's context declares exactly the
-// facts and the profile settings its gate reads, and every context also
-// declares hardCaps, the project's hard caps (decisions 0142 and 0147),
+// facts and the profile settings its gate reads, and the context of every
+// gate and of merge also declares hardCaps, the project's hard caps
+// (decisions 0142, 0147 and 0164),
 // which are neither a fact nor a profile setting. A fact's context name is
 // its catalog name without the dots, such as verifyPassed for verify.passed,
 // and its type is the type of its value in getpumi.dev/pumi/api/facts. The
@@ -248,8 +249,10 @@ namespace Pumi {
     },
   };
 
-  // The permissions. Each reads only usage and hardCaps, for the hard caps
-  // (decision 0142). approve and override name every principal, so that the
+  // The permissions. They read no facts: a verdict, an approval, an override
+  // or a cancel spends nothing, so the hard caps do not apply to them, and
+  // the cancel that a reached cap causes is never forbidden by the cap
+  // (decision 0164). approve and override name every principal, so that the
   // invariant people-decide, not request validation, denies one that is not
   // a person, and the decision names it. writeVerdict names every runner, so
   // that verdicts-by-gate-role denies one in the agent role.
@@ -258,39 +261,27 @@ namespace Pumi {
   action writeVerdict appliesTo {
     principal: [Runner],
     resource: [Plan],
-    context: {
-      hardCaps: Usage,
-      usage: Usage,
-    },
+    context: {},
   };
 
   // Approving, which only a person may do.
   action approve appliesTo {
     principal: [Person, Agent, Runner, Kernel],
     resource: [Plan],
-    context: {
-      hardCaps: Usage,
-      usage: Usage,
-    },
+    context: {},
   };
 
   // Overriding a settable gate, which only a person may do (decision 0139).
   action override appliesTo {
     principal: [Person, Agent, Runner, Kernel],
     resource: [Plan],
-    context: {
-      hardCaps: Usage,
-      usage: Usage,
-    },
+    context: {},
   };
 
   // Cancelling an invocation.
   action cancel appliesTo {
     principal: [Person, Kernel],
     resource: [Plan],
-    context: {
-      hardCaps: Usage,
-      usage: Usage,
-    },
+    context: {},
   };
 }

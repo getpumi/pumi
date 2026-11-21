@@ -33,10 +33,27 @@ forbid (
 unless
 { context.headState.upToDate && context.headState.tree == resource.tree };
 
-// No action once usage is over a hard cap. The caps come from the project
-// configuration, set during bootstrapping, not from the profile.
+// No gate decision and no merge once usage is over a hard cap. The caps come
+// from the project configuration, set during bootstrapping, not from the
+// profile. The permissions spend nothing, so the caps do not apply to them,
+// and a cancel because a cap was reached is never forbidden by the cap
+// (decision 0164).
 @id("invariant.caps")
-forbid (principal, action, resource)
+forbid (
+  principal,
+  action in
+    [Pumi::Action::"spec",
+     Pumi::Action::"planReview",
+     Pumi::Action::"ambiguity",
+     Pumi::Action::"scope",
+     Pumi::Action::"budgets",
+     Pumi::Action::"conformance",
+     Pumi::Action::"dco",
+     Pumi::Action::"outsideChecks",
+     Pumi::Action::"mergeApproval",
+     Pumi::Action::"merge"],
+  resource
+)
 when
 {
   context.usage.tokens > context.hardCaps.tokens ||

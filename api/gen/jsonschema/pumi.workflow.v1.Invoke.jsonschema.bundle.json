@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.Invoke.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Invoke is an entry that starts an invocation (decision 0168).",
+      "patternProperties": {
+        "^(output_message)$": {
+          "default": "",
+          "description": "The full name of the protobuf message in the api module that the\n invocation's structured output must be, such as\n pumi.workflow.v1.PlanningOutput (decision 0160).",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "pattern": "^KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "KIND_HARNESS",
+                "KIND_CHECK",
+                "KIND_EXTERNAL_ACTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The kind of component.",
+          "title": "Kind"
+        },
+        "outputMessage": {
+          "default": "",
+          "description": "The full name of the protobuf message in the api module that the\n invocation's structured output must be, such as\n pumi.workflow.v1.PlanningOutput (decision 0160).",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "pattern": "^ROLE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ROLE_AGENT",
+                "ROLE_GATE"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The role.",
+          "title": "Role"
+        },
+        "task": {
+          "default": "",
+          "description": "The id of the task, such as \"plan\" or \"review-plan\". The task's text is\n its own file beside the workflow file.",
+          "type": "string"
+        }
+      },
+      "title": "Invoke",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.Invoke.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.Invoke.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

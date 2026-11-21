@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The schema of the workflow file (decisions 0166 to 0171). The workflow is
+// built into the release: a file in protobuf text format (.txtpb) in the
+// kernel's directory, embedded in the binary and read with prototext. The
+// kernel's loader checks what this schema cannot, such as unknown states,
+// unknown Cedar actions and unreachable states (decision 0168).
+package pumi.workflow.v1;
+
+// Workflow is the workflow: the states a plan moves through from spec to
+// merge (decision 0168).
+message Workflow {
+  // The name.
+  string name = 1;
+  // The version. The workflow is pinned with the kernel version, and a plan
+  // finishes on the workflow it started with (decision 0166).
+  string version = 2;
+  // The name of the initial state.
+  string initial = 3;
+  // The states.
+  repeated State states = 4;
+}
+
+// State is one state of the workflow (decision 0168).
+message State {
+  // The name, unique in the workflow.
+  string name = 1;
+  // The name of the state's parent, its superstate, or empty. A transition
+  // of a superstate fires from each of its substates (decision 0170).
+  string parent = 2;
+  // The gate of the state, or empty. The attempts fact is counted per plan
+  // and gate each time the plan enters the state (decision 0136).
+  string gate = 3;
+  // What the state does on entry: exactly one of these.
+  oneof entry {
+    // Start an invocation.
+    Invoke invoke = 4;
+    // Start nothing, and wait for an event.
+    Wait wait = 5;
+    // The plan is finished.
+    Final final = 6;
+  }
+  // The transitions, in order. For a trigger, the kernel asks the control
+  // plane about each transition of that trigger in this order and fires the
+  // first one allowed (decision 0169).
+  repeated Transition transitions = 7;
+}
+
+// Invoke is an entry that starts an invocation (decision 0168).
+message Invoke {
+  // Role is the role the invocation runs in (decision 0024).
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    // Agent work.
+    ROLE_AGENT = 1;
+    // Gate work, which may report verdicts and warnings.
+    ROLE_GATE = 2;
+  }
+
+  // Kind is the kind of component that the invocation runs.
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    // A harness, through its harness adapter.
+    KIND_HARNESS = 1;
+    // A check, such as the spec adapter's validation.
+    KIND_CHECK = 2;
+    // An external action, such as the forge adapter's merge.
+    KIND_EXTERNAL_ACTION = 3;
+  }
+
+  // The role.
+  Role role = 1;
+  // The kind of component.
+  Kind kind = 2;
+  // The id of the task, such as "plan" or "review-plan". The task's text is
+  // its own file beside the workflow file.
+  string task = 3;
+  // The full name of the protobuf message in the api module that the
+  // invocation's structured output must be, such as
+  // pumi.workflow.v1.PlanningOutput (decision 0160).
+  string output_message = 4;
+}
+
+// Wait is an entry that starts nothing: the state waits for an event.
+message Wait {}
+
+// Final is an entry that finishes the plan.
+message Final {}
+
+// Transition is one transition of a state (decision 0168).
+message Transition {
+  // The trigger.
+  Trigger trigger = 1;
+  // The name of the state the transition goes to.
+  string target = 2;
+  // The name of the Cedar action that guards the transition, as
+  // pumi.cedarschema declares it, such as "advance" or "retry".
+  string action = 3;
+}
+
+// Trigger is what fires a transition (decision 0170): exactly one of these.
+// The kernel reads triggers from Subscribe in log order, and each event
+// fires at most once.
+message Trigger {
+  // InvocationResult fires on the invocation.finished event of the
+  // invocation that the state started.
+  message InvocationResult {}
+
+  // StateEntered fires as the state is entered, for a state that only
+  // decides.
+  message StateEntered {}
+
+  // The kind of trigger.
+  oneof kind {
+    // The result of the state's invocation.
+    InvocationResult result = 1;
+    // The state was entered.
+    StateEntered entered = 2;
+    // An event whose subject is the plan, by its CloudEvents type, such as
+    // "dev.getpumi.approval.recorded" (decision 0135).
+    string event = 3;
+  }
+}

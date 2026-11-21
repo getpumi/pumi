@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.Transition.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Transition is one transition of a state (decision 0168).",
+      "properties": {
+        "action": {
+          "default": "",
+          "description": "The name of the Cedar action that guards the transition, as\n pumi.cedarschema declares it, such as \"advance\" or \"retry\".",
+          "type": "string"
+        },
+        "target": {
+          "default": "",
+          "description": "The name of the state the transition goes to.",
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.jsonschema.json",
+          "description": "The trigger."
+        }
+      },
+      "title": "Transition",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Trigger.InvocationResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationResult fires on the invocation.finished event of the\n invocation that the state started.",
+      "properties": {},
+      "title": "Invocation Result",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Trigger.StateEntered.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "StateEntered fires as the state is entered, for a state that only\n decides.",
+      "properties": {},
+      "title": "State Entered",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Trigger.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Trigger is what fires a transition (decision 0170): exactly one of these.\n The kernel reads triggers from Subscribe in log order, and each event\n fires at most once.",
+      "properties": {
+        "entered": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.StateEntered.jsonschema.json",
+          "description": "The state was entered."
+        },
+        "event": {
+          "description": "An event whose subject is the plan, by its CloudEvents type, such as\n \"dev.getpumi.approval.recorded\" (decision 0135).",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationResult.jsonschema.json",
+          "description": "The result of the state's invocation."
+        }
+      },
+      "title": "Trigger",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.Transition.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.Transition.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

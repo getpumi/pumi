@@ -1,0 +1,199 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.Final.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Final is an entry that finishes the plan.",
+      "properties": {},
+      "title": "Final",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Invoke.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Invoke is an entry that starts an invocation (decision 0168).",
+      "patternProperties": {
+        "^(output_message)$": {
+          "default": "",
+          "description": "The full name of the protobuf message in the api module that the\n invocation's structured output must be, such as\n pumi.workflow.v1.PlanningOutput (decision 0160).",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "pattern": "^KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "KIND_HARNESS",
+                "KIND_CHECK",
+                "KIND_EXTERNAL_ACTION"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The kind of component.",
+          "title": "Kind"
+        },
+        "outputMessage": {
+          "default": "",
+          "description": "The full name of the protobuf message in the api module that the\n invocation's structured output must be, such as\n pumi.workflow.v1.PlanningOutput (decision 0160).",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "pattern": "^ROLE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ROLE_AGENT",
+                "ROLE_GATE"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The role.",
+          "title": "Role"
+        },
+        "task": {
+          "default": "",
+          "description": "The id of the task, such as \"plan\" or \"review-plan\". The task's text is\n its own file beside the workflow file.",
+          "type": "string"
+        }
+      },
+      "title": "Invoke",
+      "type": "object"
+    },
+    "pumi.workflow.v1.State.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "State is one state of the workflow (decision 0168).",
+      "properties": {
+        "final": {
+          "$ref": "#/$defs/pumi.workflow.v1.Final.jsonschema.json",
+          "description": "The plan is finished."
+        },
+        "gate": {
+          "default": "",
+          "description": "The gate of the state, or empty. The attempts fact is counted per plan\n and gate each time the plan enters the state (decision 0136).",
+          "type": "string"
+        },
+        "invoke": {
+          "$ref": "#/$defs/pumi.workflow.v1.Invoke.jsonschema.json",
+          "description": "Start an invocation."
+        },
+        "name": {
+          "default": "",
+          "description": "The name, unique in the workflow.",
+          "type": "string"
+        },
+        "parent": {
+          "default": "",
+          "description": "The name of the state's parent, its superstate, or empty. A transition\n of a superstate fires from each of its substates (decision 0170).",
+          "type": "string"
+        },
+        "transitions": {
+          "description": "The transitions, in order. For a trigger, the kernel asks the control\n plane about each transition of that trigger in this order and fires the\n first one allowed (decision 0169).",
+          "items": {
+            "$ref": "#/$defs/pumi.workflow.v1.Transition.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "wait": {
+          "$ref": "#/$defs/pumi.workflow.v1.Wait.jsonschema.json",
+          "description": "Start nothing, and wait for an event."
+        }
+      },
+      "title": "State",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Transition.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Transition is one transition of a state (decision 0168).",
+      "properties": {
+        "action": {
+          "default": "",
+          "description": "The name of the Cedar action that guards the transition, as\n pumi.cedarschema declares it, such as \"advance\" or \"retry\".",
+          "type": "string"
+        },
+        "target": {
+          "default": "",
+          "description": "The name of the state the transition goes to.",
+          "type": "string"
+        },
+        "trigger": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.jsonschema.json",
+          "description": "The trigger."
+        }
+      },
+      "title": "Transition",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Trigger.InvocationResult.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationResult fires on the invocation.finished event of the\n invocation that the state started.",
+      "properties": {},
+      "title": "Invocation Result",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Trigger.StateEntered.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "StateEntered fires as the state is entered, for a state that only\n decides.",
+      "properties": {},
+      "title": "State Entered",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Trigger.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Trigger is what fires a transition (decision 0170): exactly one of these.\n The kernel reads triggers from Subscribe in log order, and each event\n fires at most once.",
+      "properties": {
+        "entered": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.StateEntered.jsonschema.json",
+          "description": "The state was entered."
+        },
+        "event": {
+          "description": "An event whose subject is the plan, by its CloudEvents type, such as\n \"dev.getpumi.approval.recorded\" (decision 0135).",
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationResult.jsonschema.json",
+          "description": "The result of the state's invocation."
+        }
+      },
+      "title": "Trigger",
+      "type": "object"
+    },
+    "pumi.workflow.v1.Wait.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Wait is an entry that starts nothing: the state waits for an event.",
+      "properties": {},
+      "title": "Wait",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.State.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.State.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

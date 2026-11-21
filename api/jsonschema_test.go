@@ -18,6 +18,7 @@ import (
 	factsv1 "getpumi.dev/pumi/api/gen/pumi/facts/v1"
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
+	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
@@ -35,6 +36,7 @@ var schemaFiles = []protoreflect.FileDescriptor{
 	factsv1.File_pumi_facts_v1_code_proto,
 	harnessv1.File_pumi_harness_v1_harness_proto,
 	runnerv1.File_pumi_runner_v1_runner_proto,
+	workflowv1.File_pumi_workflow_v1_workflow_proto,
 }
 
 // topLevelMessages returns the full names of the top-level messages of every

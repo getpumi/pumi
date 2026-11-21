@@ -1,0 +1,31 @@
+{
+  "$defs": {
+    "pumi.events.v1.EscalationResolved.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "EscalationResolved is the data of dev.getpumi.escalation.resolved: the\n person's answer.",
+      "properties": {
+        "answer": {
+          "default": "",
+          "description": "The answer.",
+          "type": "string"
+        },
+        "escalation": {
+          "default": "",
+          "description": "The id of the dev.getpumi.escalation.raised event.",
+          "type": "string"
+        },
+        "person": {
+          "default": "",
+          "description": "The person who answered.",
+          "type": "string"
+        }
+      },
+      "title": "Escalation Resolved",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.EscalationResolved.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.EscalationResolved.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

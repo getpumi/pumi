@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "pumi.harness.v1.Result.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Result is what a harness adapter writes to its standard output when it\n exits (decisions 0158 and 0160). Exit status 0 means a result was\n written. A non-zero exit status, a missing result or a result that does\n not parse fails the invocation.",
+      "patternProperties": {
+        "^(output_files)$": {
+          "description": "The paths of the output files, relative to the workspace. The runner\n uploads them to the blob store and records them by hash (decision\n 0033).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "output": {
+          "default": "",
+          "description": "The structured output, as JSON of the message named in the invocation's\n output schema.",
+          "type": "string"
+        },
+        "outputFiles": {
+          "description": "The paths of the output files, relative to the workspace. The runner\n uploads them to the blob store and records them by hash (decision\n 0033).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "pattern": "^STATUS_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "STATUS_COMPLETED",
+                "STATUS_FAILED",
+                "STATUS_STOPPED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The status.",
+          "title": "Status"
+        },
+        "usage": {
+          "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
+          "description": "The adapter's own usage figures, for information only: the model\n gateway's count is the one that counts (decision 0036)."
+        }
+      },
+      "title": "Result",
+      "type": "object"
+    },
+    "pumi.harness.v1.Usage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Usage is an amount of usage: of a budget, or what a run used (decision\n 0136).",
+      "patternProperties": {
+        "^(cost_microdollars)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        }
+      },
+      "properties": {
+        "costMicrodollars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The wall time in seconds."
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens."
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.harness.v1.Result.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.harness.v1.Result.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

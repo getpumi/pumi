@@ -100,10 +100,11 @@ notices:
 pins:
 	go run ./internal/checks/cmd/pins
 
-# generate writes the Go code of the protobuf schema in api/proto to api/gen
-# with the pinned buf and plugins, without the Buf Schema Registry (decision
-# 0090). The generated code is committed, and a test in
-# internal/checks/bufconfig fails when it is not what generate writes.
+# generate writes the Go code of the protobuf schema in api/proto to api/gen,
+# and a JSON Schema of each top-level message to api/gen/jsonschema (decision
+# 0160), with the pinned buf and plugins, without the Buf Schema Registry
+# (decision 0090). The generated files are committed, and a test in
+# internal/checks/bufconfig fails when they are not what generate writes.
 generate:
 	$(BUF) generate
 

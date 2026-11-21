@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "pumi.events.v1.MergePerformed.Trailer.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Trailer is one trailer of the merge commit.",
+      "properties": {
+        "key": {
+          "default": "",
+          "description": "The trailer's key, such as Signed-off-by.",
+          "type": "string"
+        },
+        "value": {
+          "default": "",
+          "description": "The trailer's value.",
+          "type": "string"
+        }
+      },
+      "title": "Trailer",
+      "type": "object"
+    },
+    "pumi.events.v1.MergePerformed.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "MergePerformed is the data of dev.getpumi.merge.performed.",
+      "properties": {
+        "commit": {
+          "default": "",
+          "description": "The merge commit.",
+          "type": "string"
+        },
+        "trailers": {
+          "description": "Its trailers, in order.",
+          "items": {
+            "$ref": "#/$defs/pumi.events.v1.MergePerformed.Trailer.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Merge Performed",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.MergePerformed.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.MergePerformed.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

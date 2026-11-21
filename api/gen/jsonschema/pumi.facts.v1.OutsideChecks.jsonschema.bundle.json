@@ -1,0 +1,35 @@
+{
+  "$defs": {
+    "pumi.facts.v1.OutsideChecks.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "OutsideChecks is outside.checks: the checks that Pumi does not run that\n passed on the head commit (decision 0140).",
+      "patternProperties": {
+        "^(head_commit)$": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "headCommit": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The names of the checks that passed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Outside Checks",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.OutsideChecks.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.OutsideChecks.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

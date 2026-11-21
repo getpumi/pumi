@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "pumi.events.v1.InvocationStarted.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationStarted is the data of dev.getpumi.invocation.started: the\n runner's intent to run the invocation.",
+      "patternProperties": {
+        "^(lease_number)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of the lease the runner holds (decision 0035)."
+        }
+      },
+      "properties": {
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        },
+        "leaseNumber": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of the lease the runner holds (decision 0035)."
+        },
+        "runner": {
+          "default": "",
+          "description": "The runner.",
+          "type": "string"
+        }
+      },
+      "title": "Invocation Started",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.InvocationStarted.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.InvocationStarted.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

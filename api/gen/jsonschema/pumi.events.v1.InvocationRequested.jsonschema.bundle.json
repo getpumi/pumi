@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "pumi.events.v1.InvocationRequested.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationRequested is the data of dev.getpumi.invocation.requested: the\n kernel's intent to invoke a harness.",
+      "patternProperties": {
+        "^(document_hash)$": {
+          "default": "",
+          "description": "The hash of the invocation document.",
+          "type": "string"
+        },
+        "^(idempotency_key)$": {
+          "default": "",
+          "description": "The idempotency key.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "documentHash": {
+          "default": "",
+          "description": "The hash of the invocation document.",
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "default": "",
+          "description": "The idempotency key.",
+          "type": "string"
+        },
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        }
+      },
+      "title": "Invocation Requested",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.InvocationRequested.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.InvocationRequested.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

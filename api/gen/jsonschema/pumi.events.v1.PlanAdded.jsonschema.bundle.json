@@ -1,0 +1,38 @@
+{
+  "$defs": {
+    "pumi.events.v1.PlanAdded.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "PlanAdded is the data of dev.getpumi.plan.added: a plan joins a track,\n including a plan split from another.",
+      "patternProperties": {
+        "^(split_from)$": {
+          "default": "",
+          "description": "The plan this one was split from, or empty.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "splitFrom": {
+          "default": "",
+          "description": "The plan this one was split from, or empty.",
+          "type": "string"
+        },
+        "track": {
+          "default": "",
+          "description": "The track the plan joins.",
+          "type": "string"
+        }
+      },
+      "title": "Plan Added",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.PlanAdded.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.PlanAdded.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

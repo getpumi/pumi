@@ -1,0 +1,21 @@
+{
+  "$defs": {
+    "pumi.events.v1.TrunkUnattested.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "TrunkUnattested is the data of dev.getpumi.trunk.unattested: the trunk\n check found a commit without an attestation.",
+      "properties": {
+        "commit": {
+          "default": "",
+          "description": "The commit.",
+          "type": "string"
+        }
+      },
+      "title": "Trunk Unattested",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.TrunkUnattested.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.TrunkUnattested.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

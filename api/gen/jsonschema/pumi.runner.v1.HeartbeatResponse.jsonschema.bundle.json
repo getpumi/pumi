@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "google.protobuf.Duration.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "format": "duration",
+      "title": "Duration",
+      "type": "string"
+    },
+    "pumi.runner.v1.HeartbeatResponse.Cancel.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Cancel is a request to cancel the invocation. The runner asks the\n adapter to stop, allows the grace period, kills it, and reports the\n outcome cancelled (decision 0035).",
+      "patternProperties": {
+        "^(requested_by)$": {
+          "default": "",
+          "description": "Who asked for the cancellation.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "requestedBy": {
+          "default": "",
+          "description": "Who asked for the cancellation.",
+          "type": "string"
+        }
+      },
+      "title": "Cancel",
+      "type": "object"
+    },
+    "pumi.runner.v1.HeartbeatResponse.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "HeartbeatResponse is the response of Heartbeat.",
+      "patternProperties": {
+        "^(lease_timeout)$": {
+          "$ref": "#/$defs/google.protobuf.Duration.jsonschema.json",
+          "description": "How long the renewed lease lasts."
+        }
+      },
+      "properties": {
+        "cancel": {
+          "$ref": "#/$defs/pumi.runner.v1.HeartbeatResponse.Cancel.jsonschema.json",
+          "description": "The cancel request; unset when there is none."
+        },
+        "leaseTimeout": {
+          "$ref": "#/$defs/google.protobuf.Duration.jsonschema.json",
+          "description": "How long the renewed lease lasts."
+        }
+      },
+      "title": "Heartbeat Response",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.runner.v1.HeartbeatResponse.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.runner.v1.HeartbeatResponse.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

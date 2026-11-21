@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.AppendResponse.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "AppendResponse is the response of Append.",
+      "properties": {
+        "positions": {
+          "description": "The position of each event written, in the order of the request.\n Positions count from 1 in each tenant's log, in the order of writing.",
+          "items": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "title": "Append Response",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.AppendResponse.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.AppendResponse.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

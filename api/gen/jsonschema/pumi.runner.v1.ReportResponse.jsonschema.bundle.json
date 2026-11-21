@@ -1,0 +1,32 @@
+{
+  "$defs": {
+    "pumi.runner.v1.ReportResponse.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ReportResponse is the response of Report.",
+      "properties": {
+        "positions": {
+          "description": "The position of each event written, in the order written.",
+          "items": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "pattern": "^[0-9]+$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "title": "Report Response",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.runner.v1.ReportResponse.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.runner.v1.ReportResponse.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

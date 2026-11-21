@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "pumi.events.v1.EscalationRaised.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "EscalationRaised is the data of dev.getpumi.escalation.raised: work\n escalated to a person.",
+      "properties": {
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "question": {
+          "default": "",
+          "description": "The question for the person.",
+          "type": "string"
+        }
+      },
+      "title": "Escalation Raised",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.EscalationRaised.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.EscalationRaised.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

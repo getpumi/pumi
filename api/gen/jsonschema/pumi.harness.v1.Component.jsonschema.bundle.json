@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "pumi.harness.v1.Component.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Component is the component that an invocation runs, with its name and\n version (decision 0024).",
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "pattern": "^KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "KIND_CHECK",
+                "KIND_EXTERNAL_ACTION",
+                "KIND_AGENT_RUN"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The kind.",
+          "title": "Kind"
+        },
+        "name": {
+          "default": "",
+          "description": "The name.",
+          "type": "string"
+        },
+        "version": {
+          "default": "",
+          "description": "The version.",
+          "type": "string"
+        }
+      },
+      "title": "Component",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.harness.v1.Component.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.harness.v1.Component.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

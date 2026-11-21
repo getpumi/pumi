@@ -224,7 +224,15 @@ type InvocationResult struct {
 	// The hash of the blob that holds the full log (decision 0034).
 	LogBlobHash string `protobuf:"bytes,3,opt,name=log_blob_hash,json=logBlobHash,proto3" json:"log_blob_hash,omitempty"`
 	// The usage summary.
-	Usage         *InvocationResult_Usage `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
+	Usage *InvocationResult_Usage `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
+	// The tree that the runner computed from the workspace after the adapter
+	// exited; empty when the invocation changes no code (decisions 0160 and
+	// 0162).
+	Tree string `protobuf:"bytes,5,opt,name=tree,proto3" json:"tree,omitempty"`
+	// The structured output, as the protojson of the message that the
+	// invocation document names, as the runner parsed it (decisions 0160 and
+	// 0162).
+	Output        string `protobuf:"bytes,6,opt,name=output,proto3" json:"output,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -285,6 +293,20 @@ func (x *InvocationResult) GetUsage() *InvocationResult_Usage {
 		return x.Usage
 	}
 	return nil
+}
+
+func (x *InvocationResult) GetTree() string {
+	if x != nil {
+		return x.Tree
+	}
+	return ""
+}
+
+func (x *InvocationResult) GetOutput() string {
+	if x != nil {
+		return x.Output
+	}
+	return ""
 }
 
 // InvocationFinished is the data of dev.getpumi.invocation.finished: the
@@ -543,14 +565,16 @@ const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"invocation\x18\x01 \x01(\tR\n" +
 	"invocation\x12\x16\n" +
 	"\x06runner\x18\x02 \x01(\tR\x06runner\x12!\n" +
-	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\"\x8b\x03\n" +
+	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\"\xb7\x03\n" +
 	"\x10InvocationResult\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +
 	"invocation\x12N\n" +
 	"\foutput_files\x18\x02 \x03(\v2+.pumi.events.v1.InvocationResult.OutputFileR\voutputFiles\x12\"\n" +
 	"\rlog_blob_hash\x18\x03 \x01(\tR\vlogBlobHash\x12<\n" +
-	"\x05usage\x18\x04 \x01(\v2&.pumi.events.v1.InvocationResult.UsageR\x05usage\x1a=\n" +
+	"\x05usage\x18\x04 \x01(\v2&.pumi.events.v1.InvocationResult.UsageR\x05usage\x12\x12\n" +
+	"\x04tree\x18\x05 \x01(\tR\x04tree\x12\x16\n" +
+	"\x06output\x18\x06 \x01(\tR\x06output\x1a=\n" +
 	"\n" +
 	"OutputFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1b\n" +

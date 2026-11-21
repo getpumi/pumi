@@ -1,0 +1,47 @@
+{
+  "$defs": {
+    "pumi.events.v1.InvocationFinished.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationFinished is the data of dev.getpumi.invocation.finished: the\n confirmation that the invocation ended.",
+      "properties": {
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "pattern": "^OUTCOME_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "OUTCOME_SUCCEEDED",
+                "OUTCOME_FAILED",
+                "OUTCOME_CANCELLED",
+                "OUTCOME_CAP_REACHED",
+                "OUTCOME_RESOLVED_ON_RECOVERY"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The outcome.",
+          "title": "Outcome"
+        }
+      },
+      "title": "Invocation Finished",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.InvocationFinished.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.InvocationFinished.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

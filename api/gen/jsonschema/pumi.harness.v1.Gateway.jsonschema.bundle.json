@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "pumi.harness.v1.Gateway.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Gateway is how the adapter reaches the model gateway (decision 0036).",
+      "patternProperties": {
+        "^(base_url)$": {
+          "default": "",
+          "description": "The base URL.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "baseUrl": {
+          "default": "",
+          "description": "The base URL.",
+          "type": "string"
+        },
+        "token": {
+          "default": "",
+          "description": "The short-lived token, valid for this invocation only. The runner masks\n it in the log.",
+          "type": "string"
+        }
+      },
+      "title": "Gateway",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.harness.v1.Gateway.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.harness.v1.Gateway.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

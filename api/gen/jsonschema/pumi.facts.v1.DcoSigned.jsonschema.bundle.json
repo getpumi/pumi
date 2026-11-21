@@ -1,0 +1,33 @@
+{
+  "$defs": {
+    "pumi.facts.v1.DcoSigned.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "DcoSigned is dco.signed: whether every commit has the sign-off the DCO\n check requires.",
+      "patternProperties": {
+        "^(head_commit)$": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "headCommit": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "value": {
+          "default": false,
+          "description": "Whether the commits are signed off.",
+          "type": "boolean"
+        }
+      },
+      "title": "Dco Signed",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.DcoSigned.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.DcoSigned.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

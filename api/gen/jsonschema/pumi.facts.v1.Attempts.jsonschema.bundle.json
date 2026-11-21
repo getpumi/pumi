@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "pumi.facts.v1.Attempts.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Attempts is attempts: how many times the plan has entered the gate.",
+      "properties": {
+        "gate": {
+          "default": "",
+          "description": "The gate.",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of attempts."
+        }
+      },
+      "title": "Attempts",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.Attempts.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.Attempts.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "pumi.events.v1.VerdictRecorded.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "VerdictRecorded is the data of dev.getpumi.verdict.recorded: a gate's\n verdict, written only under the gate role.",
+      "patternProperties": {
+        "^(gate_version)$": {
+          "default": "",
+          "description": "The version of the gate.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "gate": {
+          "default": "",
+          "description": "The gate.",
+          "type": "string"
+        },
+        "gateVersion": {
+          "default": "",
+          "description": "The version of the gate.",
+          "type": "string"
+        },
+        "invocation": {
+          "default": "",
+          "description": "The invocation that gave the verdict, so that a verdict from the\n invocation that wrote the work is not counted as independent (decision\n 0137).",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "description": "The model that gave a model-judgment verdict, or empty for a verdict\n from a machine (decision 0137).",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan the verdict is for. The review facts are keyed by plan and tree\n (decision 0136).",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree the verdict is about.",
+          "type": "string"
+        },
+        "verdict": {
+          "anyOf": [
+            {
+              "pattern": "^VERDICT_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "VERDICT_PASS",
+                "VERDICT_FAIL"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Pass or fail.",
+          "title": "Verdict"
+        }
+      },
+      "title": "Verdict Recorded",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.VerdictRecorded.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.VerdictRecorded.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

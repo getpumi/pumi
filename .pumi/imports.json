@@ -8,7 +8,9 @@
     {"name": "control plane", "path": "internal/controlplane", "modules": [
       {"module": "github.com/cedar-policy/cedar-go", "reason": "Validates and authorizes each Cedar request at runtime (decision 0146); its tests parse and resolve the Cedar schema of the api module (decision 0141)."}
     ]},
-    {"name": "runner", "path": "internal/runner", "modules": []},
+    {"name": "runner", "path": "internal/runner", "modules": [
+      {"module": "google.golang.org/protobuf", "reason": "Copies the invocation document into the harness invocation and reads and writes the adapter's protojson (decisions 0158 and 0160)."}
+    ]},
     {"name": "gateway", "path": "internal/gateway", "modules": []},
     {"name": "CLI", "path": "internal/cli", "modules": []}
   ],

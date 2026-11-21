@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "pumi.runner.v1.ClaimRequest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ClaimRequest is the request of Claim.",
+      "patternProperties": {
+        "^(protocol_versions)$": {
+          "description": "The protocol versions that the runner supports, at least one.",
+          "items": {
+            "$ref": "#/$defs/pumi.runner.v1.ProtocolVersion.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "protocolVersions": {
+          "description": "The protocol versions that the runner supports, at least one.",
+          "items": {
+            "$ref": "#/$defs/pumi.runner.v1.ProtocolVersion.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Claim Request",
+      "type": "object"
+    },
+    "pumi.runner.v1.ProtocolVersion.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ProtocolVersion is a version of the runner protocol. The service supports\n the latest two minor versions (decision 0041).",
+      "properties": {
+        "major": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The major version, 1 for pumi.runner.v1."
+        },
+        "minor": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The minor version."
+        }
+      },
+      "title": "Protocol Version",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.runner.v1.ClaimRequest.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.runner.v1.ClaimRequest.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

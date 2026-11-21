@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "pumi.harness.v1.Usage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Usage is an amount of usage: of a budget, or what a run used (decision\n 0136).",
+      "patternProperties": {
+        "^(cost_microdollars)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        }
+      },
+      "properties": {
+        "costMicrodollars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The wall time in seconds."
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens."
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.harness.v1.Usage.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

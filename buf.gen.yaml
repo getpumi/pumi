@@ -24,3 +24,10 @@ plugins:
   - local: ["go", "tool", "-modfile=tools/protoc-gen-connect-go.mod", "protoc-gen-connect-go"]
     out: api/gen
     opt: paths=source_relative
+  # One self-contained JSON Schema 2020-12 for each top-level message, with
+  # the JSON field names that protojson writes, for harnesses that take JSON
+  # Schema (decision 0160). The plain variant accepts what protojson writes,
+  # such as int64 values as strings; the strict variant does not.
+  - local: ["go", "tool", "-modfile=tools/protoc-gen-jsonschema.mod", "protoc-gen-jsonschema"]
+    out: api/gen/jsonschema
+    opt: target=json-bundle

@@ -1,0 +1,76 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.DecideRequest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "DecideRequest is the request of Decide. It names the facts by their keys\n and carries no fact values: the control plane projects each fact that the\n action's context declares from its own log, and reads the profile settings\n and the hard caps itself (decision 0155). A fact that has not been\n produced is missing, and the request is denied (decision 0143).",
+      "properties": {
+        "action": {
+          "default": "",
+          "description": "The Cedar action, as named in pumi.cedarschema, such as merge.",
+          "type": "string"
+        },
+        "keys": {
+          "$ref": "#/$defs/pumi.controlplane.v1.FactKeys.jsonschema.json",
+          "description": "The keys that the facts are looked up by."
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan, which is the Cedar resource.",
+          "type": "string"
+        }
+      },
+      "title": "Decide Request",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.FactKeys.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "FactKeys are the keys that the facts of a decision are looked up by\n (decision 0136). A key that does not apply to the action is empty.",
+      "patternProperties": {
+        "^(base_tree)$": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "^(head_commit)$": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "^(head_tree)$": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "baseTree": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "headCommit": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "headTree": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        },
+        "invocation": {
+          "default": "",
+          "description": "The invocation, where the action is about one.",
+          "type": "string"
+        }
+      },
+      "title": "Fact Keys",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.DecideRequest.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.DecideRequest.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.Condition.NoEvents.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "NoEvents says that the subject has no events.",
+      "properties": {},
+      "title": "No Events",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.Condition.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Condition is what an Append expects of one subject (decision 0153). A\n subject's version is the number of events in the log whose subject\n attribute is that subject.",
+      "patternProperties": {
+        "^(no_events)$": {
+          "$ref": "#/$defs/pumi.controlplane.v1.Condition.NoEvents.jsonschema.json",
+          "description": "The subject has no events."
+        }
+      },
+      "properties": {
+        "noEvents": {
+          "$ref": "#/$defs/pumi.controlplane.v1.Condition.NoEvents.jsonschema.json",
+          "description": "The subject has no events."
+        },
+        "subject": {
+          "default": "",
+          "description": "The subject.",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "description": "The subject is at this version, which is 1 or more."
+        }
+      },
+      "title": "Condition",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.Condition.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.Condition.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

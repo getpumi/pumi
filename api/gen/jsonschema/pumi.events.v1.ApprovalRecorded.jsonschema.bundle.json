@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "pumi.events.v1.ApprovalRecorded.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ApprovalRecorded is the data of dev.getpumi.approval.recorded: a person\n approves or rejects.",
+      "properties": {
+        "answer": {
+          "anyOf": [
+            {
+              "pattern": "^ANSWER_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ANSWER_APPROVED",
+                "ANSWER_REJECTED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Approved or rejected.",
+          "title": "Answer"
+        },
+        "person": {
+          "default": "",
+          "description": "The person.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree the answer is about.",
+          "type": "string"
+        }
+      },
+      "title": "Approval Recorded",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.ApprovalRecorded.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.ApprovalRecorded.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

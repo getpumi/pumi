@@ -1,0 +1,38 @@
+{
+  "$defs": {
+    "pumi.facts.v1.SpecValid.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "SpecValid is spec.valid: whether the spec adapter accepts the tree's spec.",
+      "patternProperties": {
+        "^(spec_adapter_version)$": {
+          "default": "",
+          "description": "The version of the spec adapter.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "specAdapterVersion": {
+          "default": "",
+          "description": "The version of the spec adapter.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "default": false,
+          "description": "Whether the spec is valid.",
+          "type": "boolean"
+        }
+      },
+      "title": "Spec Valid",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.SpecValid.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.SpecValid.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

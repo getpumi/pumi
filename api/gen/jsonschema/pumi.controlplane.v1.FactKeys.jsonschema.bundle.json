@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.FactKeys.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "FactKeys are the keys that the facts of a decision are looked up by\n (decision 0136). A key that does not apply to the action is empty.",
+      "patternProperties": {
+        "^(base_tree)$": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "^(head_commit)$": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "^(head_tree)$": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "baseTree": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "headCommit": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "headTree": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        },
+        "invocation": {
+          "default": "",
+          "description": "The invocation, where the action is about one.",
+          "type": "string"
+        }
+      },
+      "title": "Fact Keys",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.FactKeys.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.FactKeys.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

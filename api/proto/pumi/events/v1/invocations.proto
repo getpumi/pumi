@@ -58,6 +58,14 @@ message InvocationResult {
   string log_blob_hash = 3;
   // The usage summary.
   Usage usage = 4;
+  // The tree that the runner computed from the workspace after the adapter
+  // exited; empty when the invocation changes no code (decisions 0160 and
+  // 0162).
+  string tree = 5;
+  // The structured output, as the protojson of the message that the
+  // invocation document names, as the runner parsed it (decisions 0160 and
+  // 0162).
+  string output = 6;
 }
 
 // InvocationFinished is the data of dev.getpumi.invocation.finished: the

@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "google.protobuf.Any.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "title": "Any",
+      "type": "object"
+    },
+    "google.protobuf.Timestamp.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "io.cloudevents.v1.CloudEvent.CloudEventAttributeValue.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(ce_boolean)$": {
+          "type": "boolean"
+        },
+        "^(ce_bytes)$": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(ce_integer)$": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ]
+        },
+        "^(ce_string)$": {
+          "type": "string"
+        },
+        "^(ce_timestamp)$": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "^(ce_uri)$": {
+          "type": "string"
+        },
+        "^(ce_uri_ref)$": {
+          "type": "string"
+        }
+      },
+      "properties": {
+        "ceBoolean": {
+          "type": "boolean"
+        },
+        "ceBytes": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "ceInteger": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ]
+        },
+        "ceString": {
+          "type": "string"
+        },
+        "ceTimestamp": {
+          "$ref": "#/$defs/google.protobuf.Timestamp.jsonschema.json"
+        },
+        "ceUri": {
+          "type": "string"
+        },
+        "ceUriRef": {
+          "type": "string"
+        }
+      },
+      "title": "Cloud Event Attribute Value",
+      "type": "object"
+    },
+    "io.cloudevents.v1.CloudEvent.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(binary_data)$": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "^(proto_data)$": {
+          "$ref": "#/$defs/google.protobuf.Any.jsonschema.json"
+        },
+        "^(spec_version)$": {
+          "default": "",
+          "type": "string"
+        },
+        "^(text_data)$": {
+          "type": "string"
+        }
+      },
+      "properties": {
+        "attributes": {
+          "additionalProperties": {
+            "$ref": "#/$defs/io.cloudevents.v1.CloudEvent.CloudEventAttributeValue.jsonschema.json"
+          },
+          "description": "Optional \u0026 Extension Attributes",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "binaryData": {
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "id": {
+          "default": "",
+          "description": "Required Attributes",
+          "type": "string"
+        },
+        "protoData": {
+          "$ref": "#/$defs/google.protobuf.Any.jsonschema.json"
+        },
+        "source": {
+          "default": "",
+          "type": "string"
+        },
+        "specVersion": {
+          "default": "",
+          "type": "string"
+        },
+        "textData": {
+          "type": "string"
+        },
+        "type": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "Cloud Event",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.Entry.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Entry is an event of the log and its position.",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/io.cloudevents.v1.CloudEvent.jsonschema.json",
+          "description": "The event."
+        },
+        "position": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The position of the event in the tenant's log."
+        }
+      },
+      "title": "Entry",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.QueryResponse.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "QueryResponse is the response of Query.",
+      "properties": {
+        "events": {
+          "description": "The matching events, in log order.",
+          "items": {
+            "$ref": "#/$defs/pumi.controlplane.v1.Entry.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "head": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The position of the last event in the tenant's log when the query read\n it, whether it matches or not; 0 when the log is empty."
+        }
+      },
+      "title": "Query Response",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.QueryResponse.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.QueryResponse.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

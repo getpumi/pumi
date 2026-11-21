@@ -1,0 +1,66 @@
+{
+  "$defs": {
+    "pumi.facts.v1.AmbiguityOpinions.Opinion.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Opinion is one opinion.",
+      "properties": {
+        "answer": {
+          "default": "",
+          "description": "The opinion.",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "description": "The model that gave it.",
+          "type": "string"
+        }
+      },
+      "title": "Opinion",
+      "type": "object"
+    },
+    "pumi.facts.v1.AmbiguityOpinions.Opinions.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Opinions are the two opinions.",
+      "properties": {
+        "first": {
+          "$ref": "#/$defs/pumi.facts.v1.AmbiguityOpinions.Opinion.jsonschema.json",
+          "description": "The first opinion."
+        },
+        "second": {
+          "$ref": "#/$defs/pumi.facts.v1.AmbiguityOpinions.Opinion.jsonschema.json",
+          "description": "The second opinion."
+        }
+      },
+      "title": "Opinions",
+      "type": "object"
+    },
+    "pumi.facts.v1.AmbiguityOpinions.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "AmbiguityOpinions is ambiguity.opinions: the two independent opinions on a\n question.",
+      "properties": {
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "question": {
+          "default": "",
+          "description": "The question.",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/pumi.facts.v1.AmbiguityOpinions.Opinions.jsonschema.json",
+          "description": "The opinions."
+        }
+      },
+      "title": "Ambiguity Opinions",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.AmbiguityOpinions.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.AmbiguityOpinions.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

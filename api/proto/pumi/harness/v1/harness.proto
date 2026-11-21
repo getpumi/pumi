@@ -1,0 +1,200 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The messages between the runner and a harness adapter (decisions 0152 and
+// 0158 to 0160). There is no service: the runner starts the adapter as one
+// process per invocation, writes an Invocation as one line of protojson to
+// its standard input, and reads a Result as protojson from its standard
+// output. Standard error is the log. The runner closes standard input to ask
+// the adapter to stop.
+package pumi.harness.v1;
+
+// Invocation is what the runner gives a harness adapter. The runner derives
+// it from the invocation document (pumi.runner.v1.Invocation, decision
+// 0024): it leaves out what only the runner needs, which is the credential
+// handles, the image digest and the isolation level, and adds what it has
+// resolved, which is the workspace, the model gateway and the output schema
+// (decision 0158). An adapter never receives a credential handle or a
+// provider key.
+message Invocation {
+  // The invocation.
+  string invocation = 1;
+  // The idempotency key.
+  string idempotency_key = 2;
+  // The component that the invocation runs.
+  Component component = 3;
+  // The input: the repository and tree that the workspace holds, and the
+  // task.
+  Input input = 4;
+  // The role.
+  Role role = 5;
+  // What the run may do. The adapter translates the list into its harness's
+  // own settings; the runner checks the workspace after the run (decision
+  // 0159).
+  Capabilities capabilities = 6;
+  // The budget. The model gateway's caps enforce it; the adapter can also
+  // pass it to its harness.
+  Usage budget = 7;
+  // The absolute path of the workspace, a checkout of the input tree, in
+  // which the runner started the adapter.
+  string workspace = 8;
+  // The model gateway, through which every model call goes (decision 0036).
+  Gateway gateway = 9;
+  // The schema of the structured output.
+  OutputSchema output_schema = 10;
+}
+
+// Component is the component that an invocation runs, with its name and
+// version (decision 0024).
+message Component {
+  // Kind is the kind of component.
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    // A check, such as a test run.
+    KIND_CHECK = 1;
+    // An external action, such as the forge adapter's merge.
+    KIND_EXTERNAL_ACTION = 2;
+    // An agent run.
+    KIND_AGENT_RUN = 3;
+  }
+
+  // The kind.
+  Kind kind = 1;
+  // The name.
+  string name = 2;
+  // The version.
+  string version = 3;
+}
+
+// Input is the input of an invocation (decision 0024).
+message Input {
+  // The repository.
+  string repo = 1;
+  // The tree hash.
+  string tree = 2;
+  // The task, such as the prompt of an agent run.
+  string task = 3;
+}
+
+// Role is the role an invocation runs in. Only the gate role may write
+// verdicts, and gate work and agent work run under separate runner
+// identities (decisions 0024 and 0156).
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  // Gate work, which may report verdicts and warnings.
+  ROLE_GATE = 1;
+  // Agent work.
+  ROLE_AGENT = 2;
+}
+
+// Capabilities is the capability list of an invocation (decision 0159),
+// neutral between harnesses. What the list leaves out, the run may not do.
+message Capabilities {
+  // Network is the network access of a run.
+  message Network {
+    // Access is a kind of network access.
+    enum Access {
+      // Treated as ACCESS_NONE.
+      ACCESS_UNSPECIFIED = 0;
+      // No network access.
+      ACCESS_NONE = 1;
+      // The model gateway only.
+      ACCESS_GATEWAY = 2;
+      // The model gateway and the hosts listed.
+      ACCESS_HOSTS = 3;
+    }
+
+    // The access.
+    Access access = 1;
+    // The hosts, when the access is ACCESS_HOSTS.
+    repeated string hosts = 2;
+  }
+
+  // ToolKind is a kind of tool.
+  enum ToolKind {
+    TOOL_KIND_UNSPECIFIED = 0;
+    // Reading files.
+    TOOL_KIND_READ = 1;
+    // Editing files.
+    TOOL_KIND_EDIT = 2;
+    // Running commands.
+    TOOL_KIND_RUN_COMMANDS = 3;
+    // Using the web.
+    TOOL_KIND_WEB = 4;
+  }
+
+  // The paths the run may write, as globs relative to the workspace. A file
+  // written outside them fails the invocation.
+  repeated string write_paths = 1;
+  // The commands the run may run, as prefixes such as "go test".
+  repeated string commands = 2;
+  // The network access.
+  Network network = 3;
+  // The kinds of tool the run may use.
+  repeated ToolKind tools = 4;
+}
+
+// Usage is an amount of usage: of a budget, or what a run used (decision
+// 0136).
+message Usage {
+  // The tokens.
+  int64 tokens = 1;
+  // The cost in microdollars.
+  int64 cost_microdollars = 2;
+  // The wall time in seconds.
+  int64 seconds = 3;
+}
+
+// Gateway is how the adapter reaches the model gateway (decision 0036).
+message Gateway {
+  // The base URL.
+  string base_url = 1;
+  // The short-lived token, valid for this invocation only. The runner masks
+  // it in the log.
+  string token = 2;
+}
+
+// OutputSchema is the schema of an invocation's structured output (decision
+// 0160).
+message OutputSchema {
+  // The full name of the protobuf message in the api module, such as
+  // pumi.events.v1.VerdictRecorded. The runner parses the output into it
+  // with protojson, and an unknown field fails the invocation.
+  string message = 1;
+  // The JSON Schema generated from the message by make generate, for
+  // harnesses that take JSON Schema.
+  string json_schema = 2;
+}
+
+// Result is what a harness adapter writes to its standard output when it
+// exits (decisions 0158 and 0160). Exit status 0 means a result was
+// written. A non-zero exit status, a missing result or a result that does
+// not parse fails the invocation.
+message Result {
+  // Status is how the run ended.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    // The run completed.
+    STATUS_COMPLETED = 1;
+    // The run failed.
+    STATUS_FAILED = 2;
+    // The run stopped because the runner closed standard input. The result
+    // holds what the run had.
+    STATUS_STOPPED = 3;
+  }
+
+  // The status.
+  Status status = 1;
+  // The structured output, as JSON of the message named in the invocation's
+  // output schema.
+  string output = 2;
+  // The paths of the output files, relative to the workspace. The runner
+  // uploads them to the blob store and records them by hash (decision
+  // 0033).
+  repeated string output_files = 3;
+  // The adapter's own usage figures, for information only: the model
+  // gateway's count is the one that counts (decision 0036).
+  Usage usage = 4;
+}

@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.Filter.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Filter selects events of the log. An empty field selects every event.",
+      "properties": {
+        "subject": {
+          "default": "",
+          "description": "Only the events whose subject attribute is this subject.",
+          "type": "string"
+        },
+        "types": {
+          "description": "Only the events of these types, such as dev.getpumi.plan.added.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Filter",
+      "type": "object"
+    },
+    "pumi.controlplane.v1.QueryRequest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "QueryRequest is the request of Query.",
+      "properties": {
+        "after": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "Only the events after this position; 0 returns them from the start. A\n long result is read in pages by passing the last position returned."
+        },
+        "filter": {
+          "$ref": "#/$defs/pumi.controlplane.v1.Filter.jsonschema.json",
+          "description": "The events to return."
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The most events to return; 0 sets no limit."
+        }
+      },
+      "title": "Query Request",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.QueryRequest.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.QueryRequest.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

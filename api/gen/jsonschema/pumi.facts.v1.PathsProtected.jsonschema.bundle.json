@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "pumi.facts.v1.PathsProtected.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "PathsProtected is paths.protected: the changed paths that match the\n project's protected patterns.",
+      "patternProperties": {
+        "^(base_tree)$": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "^(head_tree)$": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "baseTree": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "headTree": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The paths.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Paths Protected",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.PathsProtected.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.PathsProtected.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

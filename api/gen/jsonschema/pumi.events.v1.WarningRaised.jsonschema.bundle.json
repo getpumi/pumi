@@ -1,0 +1,36 @@
+{
+  "$defs": {
+    "pumi.events.v1.WarningRaised.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "WarningRaised is the data of dev.getpumi.warning.raised: a warned gate's\n warning.",
+      "properties": {
+        "gate": {
+          "default": "",
+          "description": "The gate.",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "description": "What the gate warns about.",
+          "type": "string"
+        },
+        "project": {
+          "default": "",
+          "description": "The project. The warnings.open fact is keyed by project (decision 0136).",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree the warning is about.",
+          "type": "string"
+        }
+      },
+      "title": "Warning Raised",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.WarningRaised.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.WarningRaised.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

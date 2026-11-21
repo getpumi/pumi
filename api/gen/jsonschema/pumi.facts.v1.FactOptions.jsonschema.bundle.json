@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "pumi.facts.v1.FactOptions.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "FactOptions describes one fact of the catalog.",
+      "patternProperties": {
+        "^(cedar_type)$": {
+          "default": "",
+          "description": "The Cedar type of the value: Bool, Long, Set\u003cString\u003e or Record.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "cedarType": {
+          "default": "",
+          "description": "The Cedar type of the value: Bool, Long, Set\u003cString\u003e or Record.",
+          "type": "string"
+        },
+        "name": {
+          "default": "",
+          "description": "The fact's name, such as verify.passed.",
+          "type": "string"
+        },
+        "producer": {
+          "default": "",
+          "description": "What produces the fact.",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "pattern": "^SOURCE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "SOURCE_MACHINE",
+                "SOURCE_MODEL",
+                "SOURCE_PERSON"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Where the fact comes from.",
+          "title": "Source"
+        }
+      },
+      "title": "Fact Options",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.FactOptions.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.FactOptions.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

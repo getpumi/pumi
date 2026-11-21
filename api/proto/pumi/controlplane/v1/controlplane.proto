@@ -1,0 +1,180 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The control-plane API (decisions 0006 and 0152 to 0156): the four verbs
+// with which every component writes and reads the event log and asks for
+// decisions. No request names its principal or its tenant: the control plane
+// takes both from the caller's identity (decision 0156).
+package pumi.controlplane.v1;
+
+import "io/cloudevents/v1/cloudevents.proto";
+import "pumi/events/v1/plans.proto";
+
+// ControlPlaneService is the control plane's API. Embedded mode calls it
+// in-process with the same generated client that remote mode calls over the
+// network (decision 0152).
+service ControlPlaneService {
+  // Append writes events to the end of the tenant's log, all or none, when
+  // every condition holds (decision 0153). When a condition fails, nothing
+  // is written and the error has the code aborted and an AppendConflict
+  // detail. The table of decision 0156 decides which event types the caller
+  // may append.
+  rpc Append(AppendRequest) returns (AppendResponse);
+
+  // Query returns the events of the tenant's log that match a filter, in log
+  // order, and the log's head (decision 0154).
+  rpc Query(QueryRequest) returns (QueryResponse);
+
+  // Decide decides an action with the facts that the control plane projects
+  // from its own log, and appends the decision as decision.made (decision
+  // 0155).
+  rpc Decide(DecideRequest) returns (DecideResponse);
+
+  // Subscribe streams the events that match a filter after a position: first
+  // those already in the log, then new ones as they are appended, in log
+  // order (decision 0154). Delivery is at least once. The server keeps no
+  // subscription state: a client whose stream breaks calls Subscribe again
+  // with the last position it handled.
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse);
+}
+
+// AppendRequest is the request of Append.
+message AppendRequest {
+  // The events, at least one, written in this order. The control plane
+  // writes each event's tenant attribute from the caller's identity and its
+  // prevhash attribute, which chains the whole log (decisions 0153 and
+  // 0156).
+  repeated io.cloudevents.v1.CloudEvent events = 1;
+  // The conditions. When any fails, nothing is written.
+  repeated Condition conditions = 2;
+}
+
+// Condition is what an Append expects of one subject (decision 0153). A
+// subject's version is the number of events in the log whose subject
+// attribute is that subject.
+message Condition {
+  // NoEvents says that the subject has no events.
+  message NoEvents {}
+
+  // The subject.
+  string subject = 1;
+  // What the subject is expected to be at.
+  oneof expected {
+    // The subject is at this version, which is 1 or more.
+    uint64 version = 2;
+    // The subject has no events.
+    NoEvents no_events = 3;
+  }
+}
+
+// AppendResponse is the response of Append.
+message AppendResponse {
+  // The position of each event written, in the order of the request.
+  // Positions count from 1 in each tenant's log, in the order of writing.
+  repeated uint64 positions = 1;
+}
+
+// AppendConflict is the error detail of an Append whose conditions did not
+// all hold. Nothing was written. The caller can read again and retry.
+message AppendConflict {
+  // Subject is a subject whose condition failed.
+  message Subject {
+    // The subject.
+    string subject = 1;
+    // Its version now: the number of its events in the log, 0 when it has
+    // none.
+    uint64 current_version = 2;
+  }
+
+  // Each subject whose condition failed.
+  repeated Subject subjects = 1;
+}
+
+// Filter selects events of the log. An empty field selects every event.
+message Filter {
+  // Only the events whose subject attribute is this subject.
+  string subject = 1;
+  // Only the events of these types, such as dev.getpumi.plan.added.
+  repeated string types = 2;
+}
+
+// Entry is an event of the log and its position.
+message Entry {
+  // The position of the event in the tenant's log.
+  uint64 position = 1;
+  // The event.
+  io.cloudevents.v1.CloudEvent event = 2;
+}
+
+// QueryRequest is the request of Query.
+message QueryRequest {
+  // The events to return.
+  Filter filter = 1;
+  // Only the events after this position; 0 returns them from the start. A
+  // long result is read in pages by passing the last position returned.
+  uint64 after = 2;
+  // The most events to return; 0 sets no limit.
+  uint32 limit = 3;
+}
+
+// QueryResponse is the response of Query.
+message QueryResponse {
+  // The matching events, in log order.
+  repeated Entry events = 1;
+  // The position of the last event in the tenant's log when the query read
+  // it, whether it matches or not; 0 when the log is empty.
+  uint64 head = 2;
+}
+
+// SubscribeRequest is the request of Subscribe.
+message SubscribeRequest {
+  // The events to stream.
+  Filter filter = 1;
+  // Only the events after this position; 0 streams them from the start.
+  uint64 after = 2;
+}
+
+// SubscribeResponse is one message of the stream of Subscribe.
+message SubscribeResponse {
+  // The next matching event.
+  Entry entry = 1;
+}
+
+// DecideRequest is the request of Decide. It names the facts by their keys
+// and carries no fact values: the control plane projects each fact that the
+// action's context declares from its own log, and reads the profile settings
+// and the hard caps itself (decision 0155). A fact that has not been
+// produced is missing, and the request is denied (decision 0143).
+message DecideRequest {
+  // The Cedar action, as named in pumi.cedarschema, such as merge.
+  string action = 1;
+  // The plan, which is the Cedar resource.
+  string plan = 2;
+  // The keys that the facts are looked up by.
+  FactKeys keys = 3;
+}
+
+// FactKeys are the keys that the facts of a decision are looked up by
+// (decision 0136). A key that does not apply to the action is empty.
+message FactKeys {
+  // The base tree.
+  string base_tree = 1;
+  // The head tree.
+  string head_tree = 2;
+  // The head commit.
+  string head_commit = 3;
+  // The invocation, where the action is about one.
+  string invocation = 4;
+}
+
+// DecideResponse is the response of Decide.
+message DecideResponse {
+  // What the policies decided.
+  pumi.events.v1.DecisionMade.Outcome outcome = 1;
+  // The ids of the policies that determined the outcome.
+  repeated string determining_policies = 2;
+  // The position of the decision.made event that records the decision.
+  uint64 position = 3;
+}

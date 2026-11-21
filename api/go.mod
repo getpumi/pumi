@@ -7,4 +7,7 @@ go 1.26.0
 
 toolchain go1.27.4
 
-require google.golang.org/protobuf v1.36.12
+require (
+	connectrpc.com/connect/v2 v2.0.2
+	google.golang.org/protobuf v1.36.12
+)

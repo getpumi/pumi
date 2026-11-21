@@ -101,7 +101,7 @@ func TestDecideDeniesAMissingFactThatPlainAuthorizationAllows(t *testing.T) {
 }
 
 func TestDecideDeniesAnEvaluationError(t *testing.T) {
-	overflow := permitAllText + "\n@id(\"overflow\")\nforbid (principal, action, resource)\nwhen { context.usage.tokens * 9223372036854775807 > 0 };\n"
+	overflow := permitAllText + "\n@id(\"overflow\")\nforbid (principal, action == Pumi::Action::\"merge\", resource)\nwhen { context.usage.tokens * 9223372036854775807 > 0 };\n"
 	got := newDecider(t, overflow).Decide(mergeRequest(t))
 	if got.Allow {
 		t.Fatalf("Decide() = %+v, want deny", got)
@@ -171,7 +171,7 @@ func TestDecideNamesAnUndeclaredContextAttribute(t *testing.T) {
 }
 
 func TestDecideNamesTheForbidAsWellAsTheFailedPolicy(t *testing.T) {
-	overflow := permitAllText + "\n@id(\"overflow\")\nforbid (principal, action, resource)\nwhen { context.usage.tokens * 9223372036854775807 > 0 };\n"
+	overflow := permitAllText + "\n@id(\"overflow\")\nforbid (principal, action == Pumi::Action::\"merge\", resource)\nwhen { context.usage.tokens * 9223372036854775807 > 0 };\n"
 	req := mergeRequest(t)
 	m := req.Context.Map()
 	m["verifyPassed"] = cedartypes.False

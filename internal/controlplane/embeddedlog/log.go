@@ -322,6 +322,33 @@ func (l *Log) event(p uint64, r record) (*cloudeventsv1.CloudEvent, error) {
 // the error, because the events are committed in the open Log but may not
 // survive a crash, and the Log takes no more appends.
 func (l *Log) Append(evs []*cloudeventsv1.CloudEvent, check func(version func(subject string) uint64) error) ([]uint64, error) {
+	return l.append(evs, nil, check)
+}
+
+// ErrHeadMoved is the error of an AppendAt whose head is no longer the
+// log's head.
+var ErrHeadMoved = errors.New("the head of the event log moved")
+
+// AppendAt is Append, except that it writes nothing and returns
+// ErrHeadMoved unless the head is still at the position at. A caller
+// that read the log at head, such as the control plane projecting the
+// facts of a decision, writes with it only what it decided from that read.
+func (l *Log) AppendAt(at uint64, evs []*cloudeventsv1.CloudEvent, check func(version func(subject string) uint64) error) ([]uint64, error) {
+	return l.append(evs, &at, check)
+}
+
+// Snapshot returns the position of the last committed event and the hash
+// of its line, sha256:<hex>, read together; 0 and "" when the log is
+// empty.
+func (l *Log) Snapshot() (uint64, string) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return uint64(len(l.records)), l.hash
+}
+
+// append is Append and AppendAt: when at is set, it writes only while the
+// head is at *at.
+func (l *Log) append(evs []*cloudeventsv1.CloudEvent, at *uint64, check func(version func(subject string) uint64) error) ([]uint64, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	switch {
@@ -331,6 +358,8 @@ func (l *Log) Append(evs []*cloudeventsv1.CloudEvent, check func(version func(su
 		return nil, l.broken
 	case len(evs) == 0:
 		return nil, errors.New("an append needs at least one event")
+	case at != nil && *at != uint64(len(l.records)):
+		return nil, ErrHeadMoved
 	}
 	if check != nil {
 		if err := check(l.version); err != nil {

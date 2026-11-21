@@ -13,10 +13,14 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"getpumi.dev/pumi/api/events"
+	"getpumi.dev/pumi/api/facts"
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
 	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
+	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
+	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
+	"getpumi.dev/pumi/internal/controlplane/projections"
 )
 
 // Caller is the kind of a caller of the control plane from outside it
@@ -44,51 +48,99 @@ var appenderOf = map[Caller]events.Appender{
 }
 
 // Identity is who a client calls as. The wiring gives each client a fixed
-// identity, and the control plane takes the caller and the tenant only from
-// it, never from a request (decision 0156).
+// identity, and the control plane takes the caller, the principal and the
+// tenant only from it, never from a request (decision 0156).
 type Identity struct {
 	// Caller is the kind of caller.
 	Caller Caller
+	// Principal is the id of the caller's Cedar entity (decision 0141),
+	// such as a person's name or kernel.
+	Principal string
+	// Roles are a person's roles.
+	Roles []string
 	// Tenant is the caller's tenant (decision 0039).
 	Tenant string
 }
 
 // Service is the embedded control plane on one event log.
 type Service struct {
-	log *embeddedlog.Log
+	log     *embeddedlog.Log
+	cfg     Config
+	decider *Decider
+	// digest is the digest of the policy set that decides.
+	digest string
+	// catalog holds the facts of the catalog by their context names.
+	catalog map[string]facts.Fact
+	// projections holds the registered projections by fact name.
+	projections map[string]projections.Projection
+	// trace, when set, is called with "decided" after an append's
+	// permissions are decided and before it is written. Tests use it to
+	// append in between.
+	trace func(step string)
 }
 
-// New returns the embedded control plane on log. The caller closes log.
-func New(log *embeddedlog.Log) *Service {
-	return &Service{log: log}
+// New returns the embedded control plane on log, wired with cfg until
+// policy sets replace it (epic E10). It decides with the core invariants
+// and cfg's policies against the Cedar schema, and refuses policies that
+// do not parse or validate, and a project with no name. The caller closes
+// log.
+func New(log *embeddedlog.Log, cfg Config) (*Service, error) {
+	if cfg.Project.Name == "" {
+		return nil, errors.New("the wiring names no project")
+	}
+	files := policyFiles(cfg)
+	decider, err := NewDecider(policy.Schema, files...)
+	if err != nil {
+		return nil, err
+	}
+	catalog, err := factsByAttribute()
+	if err != nil {
+		return nil, err
+	}
+	s := &Service{
+		log: log, cfg: cfg, decider: decider, digest: policySetDigest(files), catalog: catalog,
+		projections: map[string]projections.Projection{},
+	}
+	for _, p := range projections.All() {
+		s.projections[p.Fact] = p
+	}
+	return s, nil
 }
 
 // Server returns a Connect server that serves ControlPlaneService to a
 // client with the identity id. The wiring gives each client its own
 // server, built with that client's identity, so a client cannot call as
-// anyone else. It refuses a caller that it does not know and a tenant other
-// than the embedded log's.
+// anyone else. It refuses a caller that it does not know, an identity with
+// no principal and a tenant other than the embedded log's.
 func (s *Service) Server(id Identity) (*connect.Server, error) {
 	switch id.Caller {
 	case CallerKernel, CallerPerson, CallerRunner:
 	default:
 		return nil, fmt.Errorf("the control plane has no caller %q", id.Caller)
 	}
+	if id.Principal == "" {
+		return nil, fmt.Errorf("the identity of the %s names no principal", id.Caller)
+	}
 	if id.Tenant != embeddedlog.Tenant {
 		return nil, fmt.Errorf("the embedded control plane serves only the tenant %q, not %q", embeddedlog.Tenant, id.Tenant)
 	}
 	server := connect.NewServer()
-	controlplanev1connect.RegisterControlPlaneServiceHandler(server, &handler{log: s.log, id: id})
+	controlplanev1connect.RegisterControlPlaneServiceHandler(server, &handler{svc: s, log: s.log, id: id})
 	return server, nil
 }
 
 // handler serves ControlPlaneService to the callers with one identity.
-// Decide is built with the projection of facts (decision 0155).
 type handler struct {
 	controlplanev1connect.UnimplementedControlPlaneServiceHandler
 
+	svc *Service
 	log *embeddedlog.Log
 	id  Identity
+}
+
+// principal returns the Cedar principal of the handler's caller.
+func (h *handler) principal() principal {
+	return principal{caller: h.id.Caller, id: h.id.Principal, roles: h.id.Roles}
 }
 
 // refuseRunner returns the error of every verb of ControlPlaneService that
@@ -103,9 +155,10 @@ func (h *handler) refuseRunner() error {
 }
 
 // Append writes the events, all or none, when every condition holds
-// (decision 0153), and when the table of decision 0156 lets the caller
-// append each event's type.
-func (h *handler) Append(_ context.Context, req *controlplanev1.AppendRequest) (*controlplanev1.AppendResponse, error) {
+// (decision 0153), when the table of decision 0156 lets the caller append
+// each event's type, and when the control plane allows the permission of
+// each verdict, approval, override and cancel (decision 0156).
+func (h *handler) Append(ctx context.Context, req *controlplanev1.AppendRequest) (*controlplanev1.AppendResponse, error) {
 	if err := h.refuseRunner(); err != nil {
 		return nil, err
 	}
@@ -116,15 +169,9 @@ func (h *handler) Append(_ context.Context, req *controlplanev1.AppendRequest) (
 	if err := checkConditions(req.GetConditions()); err != nil {
 		return nil, err
 	}
-	positions, err := h.log.Append(evs, func(version func(string) uint64) error {
-		return conflicts(req.GetConditions(), version)
-	})
+	positions, err := h.svc.appendAs(ctx, h.principal(), evs, req.GetConditions())
 	if err != nil {
-		var conflict *conflictError
-		if errors.As(err, &conflict) {
-			return nil, conflict.connectError()
-		}
-		return nil, logError(err)
+		return nil, err
 	}
 	return &controlplanev1.AppendResponse{Positions: positions}, nil
 }
@@ -328,4 +375,45 @@ func (h *handler) send(f *controlplanev1.Filter, after uint64,
 		}
 		after = found[len(found)-1].Position
 	}
+}
+
+// Decide decides the action for the plan with the facts that the control
+// plane projects from its own log as of the head, the settings and the
+// hard caps of the wiring, appends decision.made with the basis and the
+// log head, and returns the outcome, the determining policies and the
+// event's position (decision 0155). It refuses a request with no plan or
+// with an action that the schema does not have, with invalid argument.
+func (h *handler) Decide(_ context.Context, req *controlplanev1.DecideRequest) (*controlplanev1.DecideResponse, error) {
+	if err := h.refuseRunner(); err != nil {
+		return nil, err
+	}
+	if req.GetPlan() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "a decision needs a plan")
+	}
+	if !h.svc.knows(req.GetAction()) {
+		return nil, connect.Errorf(connect.CodeInvalidArgument, "the Cedar schema has no action %q", req.GetAction())
+	}
+	k := req.GetKeys()
+	at, hash := h.log.Snapshot()
+	d, err := h.svc.decide(at, hash, h.principal(), question{
+		action: req.GetAction(),
+		plan:   req.GetPlan(),
+		keys: projections.Keys{
+			BaseTree: k.GetBaseTree(), HeadTree: k.GetHeadTree(), HeadCommit: k.GetHeadCommit(), Invocation: k.GetInvocation(),
+		},
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, "the request could not be decided").WithCause(err)
+	}
+	positions, err := h.log.Append([]*cloudeventsv1.CloudEvent{d.event}, nil)
+	if err != nil {
+		return nil, logError(err)
+	}
+	var data eventsv1.DecisionMade
+	if err := d.event.GetProtoData().UnmarshalTo(&data); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, "the decision could not be read").WithCause(err)
+	}
+	return &controlplanev1.DecideResponse{
+		Outcome: data.GetOutcome(), DeterminingPolicies: data.GetDeterminingPolicies(), Position: positions[0],
+	}, nil
 }

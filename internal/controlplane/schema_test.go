@@ -79,7 +79,7 @@ func TestSchemaHasTheActionsOf0141(t *testing.T) {
 		got = append(got, string(uid.ID))
 	}
 	sort.Strings(got)
-	want := slices.Sorted(slices.Values(append(slices.Clone(gates), "merge", "writeVerdict", "approve", "override", "cancel")))
+	want := slices.Sorted(slices.Values(slices.Concat(gates, []string{"merge"}, permissions)))
 	if !slices.Equal(got, want) {
 		t.Errorf("actions = %q, want %q", got, want)
 	}
@@ -187,14 +187,35 @@ func checkAttribute(name string, attr resolved.Attribute, byAttribute map[string
 	return ""
 }
 
-func TestEveryActionReadsUsageAndTheHardCaps(t *testing.T) {
-	// invariant.caps forbids any action when usage is over the hard caps
-	// (decision 0142).
-	for action, ctx := range contexts(t) {
+// permissions are the actions of 0141 for the permissions.
+var permissions = []string{"approve", "cancel", "override", "writeVerdict"}
+
+func TestEveryGateAndMergeReadUsageAndTheHardCaps(t *testing.T) {
+	// invariant.caps forbids a gate decision or a merge when usage is over
+	// the hard caps (decisions 0142 and 0164).
+	ctxs := contexts(t)
+	for _, action := range append(slices.Clone(gates), "merge") {
 		for _, name := range []cedartypes.String{"usage", "hardCaps"} {
-			if _, ok := ctx[name]; !ok {
+			if _, ok := ctxs[action][name]; !ok {
 				t.Errorf("%s: the context does not declare %s", action, name)
 			}
+		}
+	}
+}
+
+func TestThePermissionsReadNoFacts(t *testing.T) {
+	// A verdict, an approval, an override or a cancel spends nothing, and
+	// the cancel that a reached cap causes must not be forbidden by the cap
+	// (decision 0164).
+	ctxs := contexts(t)
+	for _, action := range permissions {
+		ctx, ok := ctxs[action]
+		if !ok {
+			t.Errorf("the schema has no action %s", action)
+			continue
+		}
+		if len(ctx) != 0 {
+			t.Errorf("%s: the context declares %s, want nothing", action, recordOf(ctx))
 		}
 	}
 }

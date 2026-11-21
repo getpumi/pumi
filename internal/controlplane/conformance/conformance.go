@@ -45,7 +45,10 @@ var Callers = []Caller{Kernel, Person, Runner}
 type Clients func(Caller) controlplanev1connect.ControlPlaneServiceClient
 
 // Start starts a new control plane with an empty log for one test and
-// returns its clients. It stops the control plane when the test ends.
+// returns its clients. It stops the control plane when the test ends. The
+// control plane is wired with the core invariants and a lower policy set
+// that permits every request, so that only the invariants and the
+// validation of a request deny (decisions 0142 and 0143).
 type Start func(t *testing.T) Clients
 
 // Run runs the suite against the control planes that start starts. Each
@@ -72,6 +75,11 @@ func Run(t *testing.T, start Start) {
 		{"SubscribeResumesAfterAPosition", subscribeResumesAfterAPosition},
 		{"SubscribeFilters", subscribeFilters},
 		{"SubscribeCatchesUpWithALongLog", subscribeCatchesUpWithALongLog},
+		{"DecisionIsRecordedWithItsBasis", decisionIsRecordedWithItsBasis},
+		{"AMissingFactDenies", aMissingFactDenies},
+		{"DecideRefusesARequestItCannotDecide", decideRefusesARequestItCannotDecide},
+		{"AVerdictFromOutsideTheGateRoleIsRefused", aVerdictFromOutsideTheGateRoleIsRefused},
+		{"APermissionIsDecidedAndRecordedBeforeItsEvent", aPermissionIsDecidedAndRecordedBeforeItsEvent},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

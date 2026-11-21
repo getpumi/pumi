@@ -17,6 +17,7 @@ import (
 	"connectrpc.com/connect/v2/connectinprocess"
 
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
+	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane"
 	"getpumi.dev/pumi/internal/controlplane/conformance"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
@@ -58,11 +59,10 @@ var callerOf = map[conformance.Caller]controlplane.Caller{
 func start(transport func(*testing.T, *connect.Server) connect.Transport) conformance.Start {
 	return func(t *testing.T) conformance.Clients {
 		t.Helper()
-		log := openLog(t)
-		svc := controlplane.New(log)
+		svc := newService(t)
 		clients := map[conformance.Caller]controlplanev1connect.ControlPlaneServiceClient{}
 		for _, caller := range conformance.Callers {
-			server, err := svc.Server(controlplane.Identity{Caller: callerOf[caller], Tenant: embeddedlog.Tenant})
+			server, err := svc.Server(identity(callerOf[caller]))
 			if err != nil {
 				t.Fatalf("Server for a %s: %v", caller, err)
 			}
@@ -76,6 +76,39 @@ func start(transport func(*testing.T, *connect.Server) connect.Transport) confor
 			return client
 		}
 	}
+}
+
+// permitAll is a lower policy set that permits every request, with which
+// only the invariants and request validation deny.
+const permitAll = "@id(\"test.permit-all\")\npermit (principal, action, resource);\n"
+
+// config is the wiring of the control planes under test.
+func config() controlplane.Config {
+	return controlplane.Config{
+		Policies: []controlplane.PolicyFile{{Name: "permit-all.cedar", Text: permitAll}},
+		Settings: controlplane.Settings{
+			MaxAttempts: 3, Reviewers: 1, WarningsCap: 5,
+			UsageBudget: policy.Caps{Tokens: 1_000_000, CostMicrodollars: 10_000_000, Seconds: 3600},
+		},
+		HardCaps: policy.DefaultHardCaps(),
+		Project:  controlplane.Project{Name: "pumi", ProtectedPaths: []string{".github/**"}},
+	}
+}
+
+// newService returns the embedded control plane, wired with config, on a
+// new log.
+func newService(t *testing.T) *controlplane.Service {
+	t.Helper()
+	svc, err := controlplane.New(openLog(t), config())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return svc
+}
+
+// identity returns the identity of a client of the kind caller.
+func identity(caller controlplane.Caller) controlplane.Identity {
+	return controlplane.Identity{Caller: caller, Principal: string(caller) + "-1", Roles: []string{"maintainer"}, Tenant: embeddedlog.Tenant}
 }
 
 // openLog opens the embedded log of a new git clone and closes it when the

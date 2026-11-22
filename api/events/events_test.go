@@ -442,7 +442,7 @@ func TestRoundTrips(t *testing.T) {
 			fill(t, data.ProtoReflect())
 			if r, ok := data.(*eventsv1.InvocationRequested); ok {
 				// The document must match the other fields (decision 0165).
-				filled, err := InvocationRequested(document())
+				filled, err := InvocationRequested("plan-1", document())
 				if err != nil {
 					t.Fatal(err)
 				}

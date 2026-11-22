@@ -130,7 +130,16 @@ func (s *Service) decide(at uint64, hash string, p principal, q question) (decid
 		return decided{}, fmt.Errorf("the schema has no action %q", q.action)
 	}
 	keys := q.keys
-	keys.Plan, keys.Gate, keys.Project = q.plan, q.action, s.cfg.Project.Name
+	keys.Plan, keys.Gate, keys.Project, keys.Head = q.plan, q.action, s.cfg.Project.Name, at
+	if !isPermission(q.action) {
+		added, err := s.added(at, q.plan)
+		if err != nil {
+			return decided{}, err
+		}
+		if !added {
+			return s.record(Decision{Reasons: []string{fmt.Sprintf("the plan %q was never added (decision 0176)", q.plan)}}, &eventsv1.Basis{}, hash, q)
+		}
+	}
 	if q.action == retry {
 		gate, err := s.gateOf(at, q.plan)
 		if err != nil {
@@ -142,7 +151,12 @@ func (s *Service) decide(at uint64, hash string, p principal, q question) (decid
 	if err != nil {
 		return decided{}, err
 	}
-	d := s.decider.Decide(s.request(p, q, keys, cedar.NewRecord(context)))
+	return s.record(s.decider.Decide(s.request(p, q, keys, cedar.NewRecord(context))), basis, hash, q)
+}
+
+// record returns d with the decision.made event that records it, with
+// basis, made at the log head hash.
+func (s *Service) record(d Decision, basis *eventsv1.Basis, hash string, q question) (decided, error) {
 	outcome := eventsv1.DecisionMade_OUTCOME_DENY
 	if d.Allow {
 		outcome = eventsv1.DecisionMade_OUTCOME_ALLOW
@@ -159,6 +173,40 @@ func (s *Service) decide(at uint64, hash string, p principal, q question) (decid
 		return decided{}, fmt.Errorf("building the decision.made event: %w", err)
 	}
 	return decided{decision: d, event: e}, nil
+}
+
+// isPermission reports whether action is one of the permissions, which
+// are decided for the plan of their event, added or not (decision 0164).
+func isPermission(action string) bool {
+	for _, p := range permissionOf {
+		if p == action {
+			return true
+		}
+	}
+	return false
+}
+
+// added reports whether plan has a plan.added event in the log as of the
+// position at. A plan that has none is unknown, and every decision of a
+// workflow action, a gate or merge for it is a deny (decision 0176).
+func (s *Service) added(at uint64, plan string) (bool, error) {
+	found, _, err := s.log.Read(embeddedlog.Filter{Types: []string{events.TypePlanAdded}})
+	if err != nil {
+		return false, err
+	}
+	for _, e := range found {
+		if e.Position > at {
+			break
+		}
+		var a eventsv1.PlanAdded
+		if err := e.Event.GetProtoData().UnmarshalTo(&a); err != nil {
+			return false, fmt.Errorf("the data of the event %s: %w", e.Event.GetId(), err)
+		}
+		if a.GetPlan() == plan {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // gateOf returns the gate of the state that plan is in, as of the position

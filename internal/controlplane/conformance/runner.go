@@ -33,6 +33,7 @@ var runnerTests = []struct {
 	{"OnlyARunnerCallsRunnerService", onlyARunnerCallsRunnerService},
 	{"HeartbeatRenewsTheLease", heartbeatRenewsTheLease},
 	{"HeartbeatReturnsACancel", heartbeatReturnsACancel},
+	{"APlanCancelReachesThePlansInvocations", aPlanCancelReachesThePlansInvocations},
 	{"AnExpiredLeaseIsReclaimed", anExpiredLeaseIsReclaimed},
 	{"ALateReportWithAnOldLeaseNumberIsRefused", aLateReportWithAnOldLeaseNumberIsRefused},
 	{"ReportWritesTheResultTheEventsAndTheEnd", reportWritesTheResultTheEventsAndTheEnd},
@@ -70,7 +71,7 @@ func document(invocation string, role Role) *runnerv1.Invocation {
 // suite's plan, and returns doc.
 func request(t *testing.T, p Plane, doc *runnerv1.Invocation) *runnerv1.Invocation {
 	t.Helper()
-	data, err := events.InvocationRequested(doc)
+	data, err := events.InvocationRequested(plan, doc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,6 +304,37 @@ func heartbeatReturnsACancel(t *testing.T, p Plane) {
 	}
 	if hb.GetCancel().GetRequestedBy() != "someone" {
 		t.Fatalf("the heartbeat carries the cancel %v, want one requested by someone", hb.GetCancel())
+	}
+}
+
+// aPlanCancelReachesThePlansInvocations: a cancel that names a plan and no
+// invocation cancels the plan's invocations, which name their plan in
+// invocation.requested (decisions 0170 and 0175), and no other plan's.
+func aPlanCancelReachesThePlansInvocations(t *testing.T, p Plane) {
+	mustAppend(t, p.Clients, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, plan), planAdded(t, "plan-b")})
+	request(t, p, document("invocation-1", Gate))
+	other, err := events.InvocationRequested("plan-b", document("invocation-2", Gate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustAppend(t, p.Clients, Kernel, []*cloudeventsv1.CloudEvent{build(t, other, "plan-b")})
+	r := p.Runner("runner-a", Gate)
+	first, second := claim(t, r), claim(t, r)
+	mustAppend(t, p.Clients, Person, []*cloudeventsv1.CloudEvent{
+		build(t, &eventsv1.CancelRequested{Plan: plan, RequestedBy: "someone"}, plan),
+	})
+	for _, res := range []*runnerv1.ClaimResponse{first, second} {
+		hb, err := heartbeat(t, r, res)
+		if err != nil {
+			t.Fatalf("Heartbeat: %v", err)
+		}
+		inv := res.GetInvocation().GetInvocation()
+		switch {
+		case inv == "invocation-1" && hb.GetCancel().GetRequestedBy() != "someone":
+			t.Errorf("the heartbeat of %s, of the cancelled plan, carries the cancel %v, want one requested by someone", inv, hb.GetCancel())
+		case inv == "invocation-2" && hb.GetCancel() != nil:
+			t.Errorf("the heartbeat of %s, of another plan, carries the cancel %v, want none", inv, hb.GetCancel())
+		}
 	}
 }
 

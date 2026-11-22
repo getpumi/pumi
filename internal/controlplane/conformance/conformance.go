@@ -112,6 +112,8 @@ func Run(t *testing.T, start Start) {
 		{"AVerdictFromOutsideTheGateRoleIsRefused", aVerdictFromOutsideTheGateRoleIsRefused},
 		{"APermissionIsDecidedAndRecordedBeforeItsEvent", aPermissionIsDecidedAndRecordedBeforeItsEvent},
 		{"TheWorkflowActionsAreDecided", theWorkflowActionsAreDecided},
+		{"AFreshlyAddedPlanMayMove", aFreshlyAddedPlanMayMove},
+		{"APlanNeverAddedIsDenied", aPlanNeverAddedIsDenied},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

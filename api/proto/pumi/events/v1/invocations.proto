@@ -23,6 +23,10 @@ message InvocationRequested {
   // because the runner protocol is versioned apart from the event schema
   // (decision 0041) and pumi.runner.v1 imports this file.
   bytes document = 4;
+  // The plan that the invocation is for, which the kernel names, so that
+  // the usage and the planning output of an invocation are found for its
+  // plan and a plan cancel reaches the plan's invocations.
+  string plan = 5;
 }
 
 // InvocationStarted is the data of dev.getpumi.invocation.started: the

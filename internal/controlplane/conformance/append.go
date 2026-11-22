@@ -305,7 +305,7 @@ func ofType(t *testing.T, typ string) *cloudeventsv1.CloudEvent {
 	}
 	if typ == events.TypeInvocationRequested {
 		// A request carries a valid document (decision 0165).
-		if data, err = events.InvocationRequested(document("invocation-of-"+typ, Gate)); err != nil {
+		if data, err = events.InvocationRequested("plan-of-"+typ, document("invocation-of-"+typ, Gate)); err != nil {
 			t.Fatal(err)
 		}
 	}

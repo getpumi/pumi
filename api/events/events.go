@@ -262,9 +262,12 @@ func validateData(e *cloudeventsv1.CloudEvent, data proto.Message) error {
 // state.
 var dataRules = map[string]func(proto.Message) error{
 	// An invocation request carries its document, which matches its hash
-	// (decision 0165).
+	// (decision 0165), and names its plan (decision 0175).
 	TypeInvocationRequested: func(m proto.Message) error {
 		if r, ok := m.(*eventsv1.InvocationRequested); ok {
+			if r.GetPlan() == "" {
+				return errNoPlan
+			}
 			_, err := Document(r)
 			return err
 		}

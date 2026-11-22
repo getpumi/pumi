@@ -125,7 +125,9 @@ func decisionIsRecordedWithItsBasis(t *testing.T, c Clients) {
 
 // aMissingFactDenies: a fact that nothing has produced is missing from the
 // context, and the decision is a deny that is recorded (decision 0143).
-// Nothing in the log gives the facts that merge reads.
+// Nothing in the log gives the Boolean and record facts that merge reads,
+// so the basis holds only the facts that start at zero or empty once the
+// plan exists (decisions 0174 and 0175).
 func aMissingFactDenies(t *testing.T, c Clients) {
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
 	res, err := c(Kernel).Decide(t.Context(), &controlplanev1.DecideRequest{
@@ -139,8 +141,14 @@ func aMissingFactDenies(t *testing.T, c Clients) {
 	}
 	d, e := decisionAt(t, c, res.GetPosition())
 	checkRecorded(t, d, e, eventsv1.DecisionMade_OUTCOME_DENY)
-	if n := len(d.GetBasis().GetFacts()); n != 0 {
-		t.Errorf("the basis has %d facts, want none", n)
+	empty := map[string]bool{
+		"pumi.facts.v1.ApprovedBy": true, "pumi.facts.v1.Attempts": true, "pumi.facts.v1.Overrides": true,
+		"pumi.facts.v1.QuestionsOpen": true, "pumi.facts.v1.Usage": true, "pumi.facts.v1.WarningsOpen": true,
+	}
+	for _, f := range d.GetBasis().GetFacts() {
+		if name := string(f.MessageName()); !empty[name] {
+			t.Errorf("the basis has the fact %s, which nothing in the log gives", name)
+		}
 	}
 }
 
@@ -270,4 +278,79 @@ func attemptsOf(t *testing.T, d *eventsv1.DecisionMade) *factsv1.Attempts {
 		}
 	}
 	return nil
+}
+
+// decideFor has the kernel decide action for plan with keys, checks that
+// the decision is recorded, and returns the response and the decision.
+func decideFor(t *testing.T, c Clients, action, plan string, keys *controlplanev1.FactKeys) (*controlplanev1.DecideResponse, *eventsv1.DecisionMade) {
+	t.Helper()
+	res, err := c(Kernel).Decide(t.Context(), &controlplanev1.DecideRequest{Action: action, Plan: plan, Keys: keys})
+	if err != nil {
+		t.Fatalf("Decide %s: %v", action, err)
+	}
+	d, e := decisionAt(t, c, res.GetPosition())
+	checkRecorded(t, d, e, res.GetOutcome())
+	return res, d
+}
+
+// aFreshlyAddedPlanMayMove: once a plan is added, its count and set facts
+// are 0 or empty, and its usage with no invocation named is zero
+// (decisions 0174 and 0175), so escalate and advance are allowed with no
+// other event, and a retry once the plan has entered a gate (decision
+// 0169). ask reads questions.open, 0, so it is denied. A gate's decision
+// shows its empty facts in the basis.
+func aFreshlyAddedPlanMayMove(t *testing.T, c Clients) {
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-f")})
+	keys := &controlplanev1.FactKeys{HeadTree: "tree-1", HeadCommit: "commit-1"}
+	for _, action := range []string{"escalate", "advance"} {
+		if res, d := decideFor(t, c, action, "plan-f", keys); res.GetOutcome() != eventsv1.DecisionMade_OUTCOME_ALLOW {
+			t.Errorf("%s of a freshly added plan: %v by %q, basis %v; want allow", action, res.GetOutcome(), res.GetDeterminingPolicies(), d.GetBasis())
+		}
+	}
+	if res, _ := decideFor(t, c, "ask", "plan-f", keys); res.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY ||
+		!slices.Contains(res.GetDeterminingPolicies(), "core.questions-open") {
+		t.Errorf("ask with no open question: %v by %q, want a deny by core.questions-open", res.GetOutcome(), res.GetDeterminingPolicies())
+	}
+	_, d := decideFor(t, c, "spec", "plan-f", keys)
+	wantFacts(t, d, &factsv1.Attempts{Plan: "plan-f", Gate: "spec"}, &factsv1.Overrides{Plan: "plan-f", Tree: "tree-1"},
+		&factsv1.WarningsOpen{Project: "pumi"}, &factsv1.Usage{Plan: "plan-f", Value: &factsv1.Usage_Totals{}})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{fired(t, "plan-f", "planReview")})
+	res, d := decideFor(t, c, "retry", "plan-f", keys)
+	if res.GetOutcome() != eventsv1.DecisionMade_OUTCOME_ALLOW {
+		t.Errorf("retry of a plan in its first attempt of a gate: %v by %q, basis %v; want allow", res.GetOutcome(), res.GetDeterminingPolicies(), d.GetBasis())
+	}
+	wantFacts(t, d, &factsv1.Attempts{Plan: "plan-f", Gate: "planReview", Value: 1})
+}
+
+// aPlanNeverAddedIsDenied: a plan with no plan.added is unknown, so
+// escalate, advance and retry are denied and recorded, even with a
+// transition of the plan into a gate in the log (decisions 0143 and 0174).
+func aPlanNeverAddedIsDenied(t *testing.T, c Clients) {
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), fired(t, "plan-z", "planReview")})
+	for _, action := range []string{"escalate", "advance", "retry"} {
+		res, d := decideFor(t, c, action, "plan-z", &controlplanev1.FactKeys{HeadTree: "tree-1"})
+		if res.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY {
+			t.Errorf("%s of a plan never added: %v by %q, want deny", action, res.GetOutcome(), res.GetDeterminingPolicies())
+		}
+		if n := len(d.GetBasis().GetFacts()); n != 0 {
+			t.Errorf("%s of a plan never added: the basis has %d facts, want none", action, n)
+		}
+	}
+}
+
+// wantFacts checks that the basis of d holds each fact of want.
+func wantFacts(t *testing.T, d *eventsv1.DecisionMade, want ...proto.Message) {
+	t.Helper()
+	for _, w := range want {
+		found := false
+		for _, f := range d.GetBasis().GetFacts() {
+			got, err := f.UnmarshalNew()
+			if err == nil && proto.Equal(got, w) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the basis %v has no fact %v", d.GetBasis(), w)
+		}
+	}
 }

@@ -37,6 +37,11 @@
           "default": "",
           "description": "The invocation.",
           "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan that the invocation is for, which the kernel names, so that\n the usage and the planning output of an invocation are found for its\n plan and a plan cancel reaches the plan's invocations (decision 0175).",
+          "type": "string"
         }
       },
       "title": "Invocation Requested",

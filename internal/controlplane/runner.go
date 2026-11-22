@@ -193,16 +193,29 @@ func (h *runnerHandler) Heartbeat(_ context.Context, req *runnerv1.HeartbeatRequ
 	return &runnerv1.HeartbeatResponse{Cancel: cancel, LeaseTimeout: durationpb.New(timeout)}, nil
 }
 
-// cancelOf returns the first cancel request of invocation in the log, or
-// nil when there is none.
+// cancelOf returns the first cancel request in the log that names
+// invocation, or that names the invocation's plan and no invocation, which
+// cancels the plan's invocations (decisions 0170 and 0175), or nil when
+// there is none.
 func (s *Service) cancelOf(invocation string) (*runnerv1.HeartbeatResponse_Cancel, error) {
-	found, _, err := s.log.Read(filter(&controlplanev1.Filter{Types: []string{events.TypeCancelRequested}}, 0, 0))
+	found, _, err := s.log.Read(filter(&controlplanev1.Filter{Types: []string{events.TypeInvocationRequested, events.TypeCancelRequested}}, 0, 0))
 	if err != nil {
 		return nil, logError(err)
 	}
+	plan := ""
+	for _, e := range found {
+		r := &eventsv1.InvocationRequested{}
+		if e.Event.GetType() == events.TypeInvocationRequested && e.Event.GetProtoData().UnmarshalTo(r) == nil && r.GetInvocation() == invocation {
+			plan = r.GetPlan()
+			break
+		}
+	}
 	for _, e := range found {
 		c := &eventsv1.CancelRequested{}
-		if e.Event.GetProtoData().UnmarshalTo(c) == nil && c.GetInvocation() == invocation {
+		if e.Event.GetType() != events.TypeCancelRequested || e.Event.GetProtoData().UnmarshalTo(c) != nil {
+			continue
+		}
+		if c.GetInvocation() == invocation || (c.GetInvocation() == "" && plan != "" && c.GetPlan() == plan) {
 			return &runnerv1.HeartbeatResponse_Cancel{RequestedBy: c.GetRequestedBy()}, nil
 		}
 	}

@@ -252,13 +252,35 @@ func TestARetryOutsideAGateDenies(t *testing.T) {
 	s := testService(t)
 	usageFact(s)
 	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"})
-	write(t, s, "plan-b", &eventsv1.TransitionFired{Plan: "plan-b", FromState: "dco", ToState: "implementing", Trigger: "t", Gate: "dco"},
+	write(t, s, "plan-b", &eventsv1.PlanAdded{Plan: "plan-b", Track: "main"},
+		&eventsv1.TransitionFired{Plan: "plan-b", FromState: "dco", ToState: "implementing", Trigger: "t", Gate: "dco"},
 		&eventsv1.TransitionFired{Plan: "plan-b", FromState: "dco", ToState: "implementing", Trigger: "t"})
 	for _, plan := range []string{"plan-a", "plan-b"} {
 		d, _ := decideAsKernel(t, s, question{action: "retry", plan: plan, keys: projections.Keys{Invocation: "i"}})
 		if d.Allow || !slices.Contains(d.Reasons, "the context lacks the attribute maxAttempts") {
 			t.Errorf("retry of %s: allow %v, reasons %q; want a deny that names maxAttempts", plan, d.Allow, d.Reasons)
 		}
+	}
+}
+
+func TestAPlanNeverAddedIsDeniedExceptForThePermissions(t *testing.T) {
+	// A plan with no plan.added is unknown: a workflow action, a gate or
+	// merge for it is denied before Cedar, with that reason and no facts
+	// (decision 0176). A permission is still decided by Cedar (decision
+	// 0164).
+	s := testService(t)
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"})
+	never := "the plan \"plan-x\" was never added (decision 0176)"
+	for _, action := range []string{"escalate", "advance", "retry", "spec", "merge"} {
+		d, data := decideAsKernel(t, s, question{action: action, plan: "plan-x"})
+		if d.Allow || !slices.Equal(d.Reasons, []string{never}) || len(data.GetBasis().GetFacts()) != 0 {
+			t.Errorf("%s of a plan never added: allow %v, reasons %q, basis %v; want a deny for that reason with no facts",
+				action, d.Allow, d.Reasons, data.GetBasis())
+		}
+	}
+	d, _ := decideAsKernel(t, s, question{action: "cancel", plan: "plan-x"})
+	if slices.Contains(d.Reasons, never) {
+		t.Errorf("cancel of a plan never added: reasons %q; want it decided by Cedar", d.Reasons)
 	}
 }
 
@@ -361,7 +383,8 @@ func TestDecideDeniesWithoutAFactAndLeavesItOutOfTheBasis(t *testing.T) {
 
 func TestDecideReadsTheLogOnlyUpToTheHeadItDecidesAt(t *testing.T) {
 	s := testService(t)
-	write(t, s, "plan-a", &eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"},
+		&eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
 	at, hash := s.log.Snapshot()
 	write(t, s, "plan-a", &eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
 	d, err := s.decide(at, hash, principal{caller: CallerKernel, id: "kernel"}, question{action: "dco", plan: "plan-a"})
@@ -373,7 +396,12 @@ func TestDecideReadsTheLogOnlyUpToTheHeadItDecidesAt(t *testing.T) {
 		t.Fatal(err)
 	}
 	var a factsv1.Attempts
-	if len(data.GetBasis().GetFacts()) != 1 || data.GetBasis().GetFacts()[0].UnmarshalTo(&a) != nil || a.GetValue() != 1 {
+	for _, f := range data.GetBasis().GetFacts() {
+		if f.MessageIs(&a) && f.UnmarshalTo(&a) != nil {
+			t.Fatal("the attempts of the basis do not parse")
+		}
+	}
+	if a.GetValue() != 1 {
 		t.Errorf("the basis is %v, want attempts 1, counted up to the head the decision was made at", data.GetBasis())
 	}
 }
@@ -390,8 +418,8 @@ func TestAFailingOrWrongProjectionGivesNoFact(t *testing.T) {
 	} {
 		s.projections["attempts"] = p
 		_, data := decideDCO(t, s)
-		if len(data.GetBasis().GetFacts()) != 0 || data.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY {
-			t.Errorf("a projection that %s: the decision is %v with the basis %q, want a deny with no facts",
+		if slices.Contains(basisNames(data), "pumi.facts.v1.Attempts") || data.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY {
+			t.Errorf("a projection that %s: the decision is %v with the basis %q, want a deny with no attempts",
 				name, data.GetOutcome(), basisNames(data))
 		}
 	}

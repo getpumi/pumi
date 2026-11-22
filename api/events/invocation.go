@@ -23,11 +23,17 @@ func HashOf(b []byte) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
+// errNoPlan refuses an invocation request that names no plan.
+var errNoPlan = errors.New("the invocation request names no plan (decision 0175)")
+
 // InvocationRequested returns the data of an invocation.requested event
-// that carries doc, the invocation document, as its binary protobuf, with
-// its hash (decision 0165). It refuses a document that Validate would
-// refuse.
-func InvocationRequested(doc *runnerv1.Invocation) (*eventsv1.InvocationRequested, error) {
+// for plan that carries doc, the invocation document, as its binary
+// protobuf, with its hash (decisions 0165 and 0175). It refuses a request
+// that Validate would refuse.
+func InvocationRequested(plan string, doc *runnerv1.Invocation) (*eventsv1.InvocationRequested, error) {
+	if plan == "" {
+		return nil, errNoPlan
+	}
 	if err := checkDocument(doc); err != nil {
 		return nil, err
 	}
@@ -40,6 +46,7 @@ func InvocationRequested(doc *runnerv1.Invocation) (*eventsv1.InvocationRequeste
 		IdempotencyKey: doc.GetIdempotencyKey(),
 		DocumentHash:   HashOf(raw),
 		Document:       raw,
+		Plan:           plan,
 	}, nil
 }
 

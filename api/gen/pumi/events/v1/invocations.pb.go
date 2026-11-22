@@ -99,7 +99,11 @@ type InvocationRequested struct {
 	// claims the invocation (decision 0165). It is bytes, not the message,
 	// because the runner protocol is versioned apart from the event schema
 	// (decision 0041) and pumi.runner.v1 imports this file.
-	Document      []byte `protobuf:"bytes,4,opt,name=document,proto3" json:"document,omitempty"`
+	Document []byte `protobuf:"bytes,4,opt,name=document,proto3" json:"document,omitempty"`
+	// The plan that the invocation is for, which the kernel names, so that
+	// the usage and the planning output of an invocation are found for its
+	// plan and a plan cancel reaches the plan's invocations (decision 0175).
+	Plan          string `protobuf:"bytes,5,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -160,6 +164,13 @@ func (x *InvocationRequested) GetDocument() []byte {
 		return x.Document
 	}
 	return nil
+}
+
+func (x *InvocationRequested) GetPlan() string {
+	if x != nil {
+		return x.Plan
+	}
+	return ""
 }
 
 // InvocationStarted is the data of dev.getpumi.invocation.started: the
@@ -578,14 +589,15 @@ var File_pumi_events_v1_invocations_proto protoreflect.FileDescriptor
 
 const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"\n" +
-	" pumi/events/v1/invocations.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\"\x9f\x01\n" +
+	" pumi/events/v1/invocations.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\"\xb3\x01\n" +
 	"\x13InvocationRequested\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +
 	"invocation\x12'\n" +
 	"\x0fidempotency_key\x18\x02 \x01(\tR\x0eidempotencyKey\x12#\n" +
 	"\rdocument_hash\x18\x03 \x01(\tR\fdocumentHash\x12\x1a\n" +
-	"\bdocument\x18\x04 \x01(\fR\bdocument\"n\n" +
+	"\bdocument\x18\x04 \x01(\fR\bdocument\x12\x12\n" +
+	"\x04plan\x18\x05 \x01(\tR\x04plan\"n\n" +
 	"\x11InvocationStarted\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +

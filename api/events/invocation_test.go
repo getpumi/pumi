@@ -42,12 +42,15 @@ func requested(t *testing.T, data *eventsv1.InvocationRequested) *cloudeventsv1.
 }
 
 func TestInvocationRequestedCarriesItsDocument(t *testing.T) {
-	data, err := InvocationRequested(document())
+	data, err := InvocationRequested("plan-1", document())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if data.GetInvocation() != "invocation-1" || data.GetIdempotencyKey() != "key-1" {
 		t.Errorf("the data names %q and %q, want the document's invocation and key", data.GetInvocation(), data.GetIdempotencyKey())
+	}
+	if data.GetPlan() != "plan-1" {
+		t.Errorf("the data names the plan %q, want plan-1", data.GetPlan())
 	}
 	if want := HashOf(data.GetDocument()); data.GetDocumentHash() != want || !strings.HasPrefix(want, "sha256:") {
 		t.Errorf("the document hash is %q, want %q", data.GetDocumentHash(), want)
@@ -78,10 +81,11 @@ func TestInvocationRequestedRefusesABadDocument(t *testing.T) {
 		}, "document"},
 		{"another invocation", func(d *eventsv1.InvocationRequested) { d.Invocation = "invocation-2" }, "invocation-2"},
 		{"another idempotency key", func(d *eventsv1.InvocationRequested) { d.IdempotencyKey = "key-2" }, "key-2"},
+		{"no plan", func(d *eventsv1.InvocationRequested) { d.Plan = "" }, "plan"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := InvocationRequested(document())
+			data, err := InvocationRequested("plan-1", document())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -105,7 +109,7 @@ func TestInvocationRequestedRefusesAnIncompleteDocument(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			doc := document()
 			change(doc)
-			if _, err := InvocationRequested(doc); err == nil {
+			if _, err := InvocationRequested("plan-1", doc); err == nil {
 				t.Fatalf("InvocationRequested with %s succeeded, want an error", name)
 			}
 			raw, err := proto.Marshal(doc)
@@ -114,10 +118,17 @@ func TestInvocationRequestedRefusesAnIncompleteDocument(t *testing.T) {
 			}
 			data := &eventsv1.InvocationRequested{
 				Invocation: doc.GetInvocation(), IdempotencyKey: doc.GetIdempotencyKey(), Document: raw, DocumentHash: HashOf(raw),
+				Plan: "plan-1",
 			}
 			if err := Validate(requested(t, data)); err == nil {
 				t.Fatalf("Validate of a document with %s succeeded, want an error", name)
 			}
 		})
+	}
+}
+
+func TestInvocationRequestedNeedsAPlan(t *testing.T) {
+	if _, err := InvocationRequested("", document()); err == nil || !strings.Contains(err.Error(), "plan") {
+		t.Fatalf("InvocationRequested with no plan = %v, want an error that names the plan", err)
 	}
 }

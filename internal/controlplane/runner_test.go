@@ -59,7 +59,7 @@ func newPlane(t *testing.T, log *embeddedlog.Log) plane {
 // invocation.
 func (p plane) requestCheck(t *testing.T, invocation string) {
 	t.Helper()
-	data, err := events.InvocationRequested(&runnerv1.Invocation{
+	data, err := events.InvocationRequested("plan-a", &runnerv1.Invocation{
 		Invocation: invocation, IdempotencyKey: "key-" + invocation, Role: harnessv1.Role_ROLE_GATE,
 		Component: &harnessv1.Component{Kind: harnessv1.Component_KIND_CHECK, Name: "tests", Version: "1"},
 	})

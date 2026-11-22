@@ -328,6 +328,71 @@ func (x *Overrides) GetValue() []string {
 	return nil
 }
 
+// QuestionsOpen is questions.open: the open questions of the planning output
+// of the invocation (decision 0171).
+type QuestionsOpen struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The plan.
+	Plan string `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
+	// The invocation that wrote the planning output.
+	Invocation string `protobuf:"bytes,2,opt,name=invocation,proto3" json:"invocation,omitempty"`
+	// The number of open questions.
+	Value         int64 `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QuestionsOpen) Reset() {
+	*x = QuestionsOpen{}
+	mi := &file_pumi_facts_v1_workflow_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QuestionsOpen) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuestionsOpen) ProtoMessage() {}
+
+func (x *QuestionsOpen) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_facts_v1_workflow_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuestionsOpen.ProtoReflect.Descriptor instead.
+func (*QuestionsOpen) Descriptor() ([]byte, []int) {
+	return file_pumi_facts_v1_workflow_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *QuestionsOpen) GetPlan() string {
+	if x != nil {
+		return x.Plan
+	}
+	return ""
+}
+
+func (x *QuestionsOpen) GetInvocation() string {
+	if x != nil {
+		return x.Invocation
+	}
+	return ""
+}
+
+func (x *QuestionsOpen) GetValue() int64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
 // Totals are the usage.
 type Usage_Totals struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -344,7 +409,7 @@ type Usage_Totals struct {
 
 func (x *Usage_Totals) Reset() {
 	*x = Usage_Totals{}
-	mi := &file_pumi_facts_v1_workflow_proto_msgTypes[5]
+	mi := &file_pumi_facts_v1_workflow_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -356,7 +421,7 @@ func (x *Usage_Totals) String() string {
 func (*Usage_Totals) ProtoMessage() {}
 
 func (x *Usage_Totals) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_facts_v1_workflow_proto_msgTypes[5]
+	mi := &file_pumi_facts_v1_workflow_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -427,7 +492,14 @@ const file_pumi_facts_v1_workflow_proto_rawDesc = "" +
 	"\x04plan\x18\x01 \x01(\tB\x04\x88\xb5\x18\x01R\x04plan\x12\x18\n" +
 	"\x04tree\x18\x02 \x01(\tB\x04\x88\xb5\x18\x01R\x04tree\x12\x1a\n" +
 	"\x05value\x18\x03 \x03(\tB\x04\x88\xb5\x18\x02R\x05value:1\x82\xb5\x18-\n" +
-	"\toverrides\x12\vSet<String>\x1a\x11override.recorded \x03B\xa8\x01\n" +
+	"\toverrides\x12\vSet<String>\x1a\x11override.recorded \x03\"\x9c\x01\n" +
+	"\rQuestionsOpen\x12\x18\n" +
+	"\x04plan\x18\x01 \x01(\tB\x04\x88\xb5\x18\x01R\x04plan\x12$\n" +
+	"\n" +
+	"invocation\x18\x02 \x01(\tB\x04\x88\xb5\x18\x01R\n" +
+	"invocation\x12\x1a\n" +
+	"\x05value\x18\x03 \x01(\x03B\x04\x88\xb5\x18\x02R\x05value:/\x82\xb5\x18+\n" +
+	"\x0equestions.open\x12\x04Long\x1a\x11invocation.result \x01B\xa8\x01\n" +
 	"\x11com.pumi.facts.v1B\rWorkflowProtoP\x01Z.getpumi.dev/pumi/api/gen/pumi/facts/v1;factsv1\xa2\x02\x03PFX\xaa\x02\rPumi.Facts.V1\xca\x02\rPumi\\Facts\\V1\xe2\x02\x19Pumi\\Facts\\V1\\GPBMetadata\xea\x02\x0fPumi::Facts::V1b\x06proto3"
 
 var (
@@ -442,17 +514,18 @@ func file_pumi_facts_v1_workflow_proto_rawDescGZIP() []byte {
 	return file_pumi_facts_v1_workflow_proto_rawDescData
 }
 
-var file_pumi_facts_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_pumi_facts_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_pumi_facts_v1_workflow_proto_goTypes = []any{
-	(*ApprovedBy)(nil),   // 0: pumi.facts.v1.ApprovedBy
-	(*Attempts)(nil),     // 1: pumi.facts.v1.Attempts
-	(*WarningsOpen)(nil), // 2: pumi.facts.v1.WarningsOpen
-	(*Usage)(nil),        // 3: pumi.facts.v1.Usage
-	(*Overrides)(nil),    // 4: pumi.facts.v1.Overrides
-	(*Usage_Totals)(nil), // 5: pumi.facts.v1.Usage.Totals
+	(*ApprovedBy)(nil),    // 0: pumi.facts.v1.ApprovedBy
+	(*Attempts)(nil),      // 1: pumi.facts.v1.Attempts
+	(*WarningsOpen)(nil),  // 2: pumi.facts.v1.WarningsOpen
+	(*Usage)(nil),         // 3: pumi.facts.v1.Usage
+	(*Overrides)(nil),     // 4: pumi.facts.v1.Overrides
+	(*QuestionsOpen)(nil), // 5: pumi.facts.v1.QuestionsOpen
+	(*Usage_Totals)(nil),  // 6: pumi.facts.v1.Usage.Totals
 }
 var file_pumi_facts_v1_workflow_proto_depIdxs = []int32{
-	5, // 0: pumi.facts.v1.Usage.value:type_name -> pumi.facts.v1.Usage.Totals
+	6, // 0: pumi.facts.v1.Usage.value:type_name -> pumi.facts.v1.Usage.Totals
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -472,7 +545,7 @@ func file_pumi_facts_v1_workflow_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_facts_v1_workflow_proto_rawDesc), len(file_pumi_facts_v1_workflow_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

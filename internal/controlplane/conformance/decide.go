@@ -204,6 +204,7 @@ func aPermissionIsDecidedAndRecordedBeforeItsEvent(t *testing.T, c Clients) {
 		}, "plan-a")},
 		{Person, build(t, &eventsv1.CancelRequested{Invocation: "invocation-1", RequestedBy: "someone"}, "plan-a")},
 		{Kernel, build(t, &eventsv1.CancelRequested{Invocation: "invocation-2", RequestedBy: "kernel"}, "plan-a")},
+		{Person, build(t, &eventsv1.CancelRequested{Plan: "plan-a", RequestedBy: "someone"}, "plan-a")},
 	}
 	for _, tt := range cases {
 		positions := mustAppend(t, c, tt.caller, []*cloudeventsv1.CloudEvent{tt.event})
@@ -219,4 +220,54 @@ func aPermissionIsDecidedAndRecordedBeforeItsEvent(t *testing.T, c Clients) {
 			t.Errorf("the decision before the %s has the cause %q, want the event's id %q", tt.event.GetType(), got, tt.event.GetId())
 		}
 	}
+}
+
+// theWorkflowActionsAreDecided: Decide knows the five workflow actions
+// (decisions 0169 and 0171) and records each decision. escalate reads no
+// facts, and a core policy permits it for the kernel. retry reads the
+// attempts of the gate of the state the plan is in, which its last
+// transition entered.
+func theWorkflowActionsAreDecided(t *testing.T, c Clients) {
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{
+		planAdded(t, "plan-b"), fired(t, "plan-b", "planReview"), fired(t, "plan-b", "planReview"),
+	})
+	decide := func(action string) (*controlplanev1.DecideResponse, *eventsv1.DecisionMade) {
+		t.Helper()
+		res, err := c(Kernel).Decide(t.Context(), &controlplanev1.DecideRequest{
+			Action: action, Plan: "plan-b", Keys: &controlplanev1.FactKeys{Invocation: "invocation-1"},
+		})
+		if err != nil {
+			t.Fatalf("Decide %s: %v", action, err)
+		}
+		d, e := decisionAt(t, c, res.GetPosition())
+		checkRecorded(t, d, e, res.GetOutcome())
+		return res, d
+	}
+	for _, action := range []string{"advance", "resume", "ask"} {
+		decide(action)
+	}
+	res, _ := decide("escalate")
+	if res.GetOutcome() != eventsv1.DecisionMade_OUTCOME_ALLOW || !slices.Contains(res.GetDeterminingPolicies(), "core.escalate") {
+		t.Errorf("escalate: %v by %q, want an allow by core.escalate", res.GetOutcome(), res.GetDeterminingPolicies())
+	}
+	_, d := decide("retry")
+	want := &factsv1.Attempts{Plan: "plan-b", Gate: "planReview", Value: 2}
+	if got := attemptsOf(t, d); !proto.Equal(got, want) {
+		t.Errorf("retry: the basis is %v, want the attempts %v", d.GetBasis(), want)
+	}
+}
+
+// attemptsOf returns the attempts fact in the basis of d, or nil.
+func attemptsOf(t *testing.T, d *eventsv1.DecisionMade) *factsv1.Attempts {
+	t.Helper()
+	for _, f := range d.GetBasis().GetFacts() {
+		var a factsv1.Attempts
+		if f.MessageIs(&a) {
+			if err := f.UnmarshalTo(&a); err != nil {
+				t.Fatal(err)
+			}
+			return &a
+		}
+	}
+	return nil
 }

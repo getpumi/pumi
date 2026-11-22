@@ -90,10 +90,19 @@ func policySetDigest(files []PolicyFile) string {
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 
-// policyFiles returns the core invariants and the wiring's policies.
+// policyFiles returns the core invariants, the core policies of the
+// workflow actions and the wiring's policies.
 func policyFiles(cfg Config) []PolicyFile {
-	return append([]PolicyFile{{Name: "invariants.cedar", Text: policy.Invariants}}, cfg.Policies...)
+	return append([]PolicyFile{
+		{Name: "invariants.cedar", Text: policy.Invariants},
+		{Name: "core.cedar", Text: policy.Core},
+	}, cfg.Policies...)
 }
+
+// retry is the workflow action that is about another gate than its own: the
+// gate it retries, which is the gate of the state the plan is in (decision
+// 0169).
+const retry = "retry"
 
 // knows reports whether the schema has the action.
 func (s *Service) knows(action string) bool {
@@ -112,7 +121,9 @@ func actionUID(action string) cedar.EntityUID {
 // the action's context declares; a fact with no projection, or that its
 // projection does not give, is missing, and the decision is a deny
 // (decisions 0143 and 0155). The profile settings and the hard caps come
-// from the wiring.
+// from the wiring. The gate of the facts and of maxAttempts is the action
+// itself, except for a retry, whose gate is the gate of the state the plan
+// is in.
 func (s *Service) decide(at uint64, hash string, p principal, q question) (decided, error) {
 	attrs, ok := s.decider.contextAttributes(actionUID(q.action))
 	if !ok {
@@ -120,6 +131,13 @@ func (s *Service) decide(at uint64, hash string, p principal, q question) (decid
 	}
 	keys := q.keys
 	keys.Plan, keys.Gate, keys.Project = q.plan, q.action, s.cfg.Project.Name
+	if q.action == retry {
+		gate, err := s.gateOf(at, q.plan)
+		if err != nil {
+			return decided{}, err
+		}
+		keys.Gate = gate
+	}
 	context, basis, err := s.context(at, attrs, keys)
 	if err != nil {
 		return decided{}, err
@@ -143,6 +161,32 @@ func (s *Service) decide(at uint64, hash string, p principal, q question) (decid
 	return decided{decision: d, event: e}, nil
 }
 
+// gateOf returns the gate of the state that plan is in, as of the position
+// at: the gate of the last transition.fired of the plan, which names the
+// gate of the state the workflow entered. It is empty when the plan has no
+// transition or its state has no gate, and then a retry has no attempts and
+// no maxAttempts, and is denied (decision 0143).
+func (s *Service) gateOf(at uint64, plan string) (string, error) {
+	found, _, err := s.log.Read(embeddedlog.Filter{Types: []string{events.TypeTransitionFired}})
+	if err != nil {
+		return "", err
+	}
+	gate := ""
+	for _, e := range found {
+		if e.Position > at {
+			break
+		}
+		var fired eventsv1.TransitionFired
+		if err := e.Event.GetProtoData().UnmarshalTo(&fired); err != nil {
+			return "", fmt.Errorf("the data of the event %s: %w", e.Event.GetId(), err)
+		}
+		if fired.GetPlan() == plan {
+			gate = fired.GetGate()
+		}
+	}
+	return gate, nil
+}
+
 // context returns the context of a request whose action declares attrs,
 // with the facts projected for keys from the log as of the position at,
 // and the basis that lists those facts. The settings and the hard caps
@@ -150,7 +194,7 @@ func (s *Service) decide(at uint64, hash string, p principal, q question) (decid
 func (s *Service) context(at uint64, attrs []string, keys projections.Keys) (cedar.RecordMap, *eventsv1.Basis, error) {
 	context := cedar.RecordMap{}
 	basis := &eventsv1.Basis{}
-	settings := s.cfg.Settings.values()
+	settings := s.cfg.Settings.values(keys.Gate)
 	for _, name := range attrs {
 		f, isFact := s.catalog[name]
 		switch {

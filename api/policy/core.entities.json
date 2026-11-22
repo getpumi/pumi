@@ -1,0 +1,77 @@
+[
+  {
+    "uid": {
+      "type": "Pumi::Project",
+      "id": "pumi"
+    },
+    "attrs": {
+      "protectedPaths": [
+        ".github/**"
+      ]
+    },
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Pumi::Plan",
+      "id": "p1"
+    },
+    "attrs": {
+      "tree": "t1"
+    },
+    "parents": [
+      {
+        "type": "Pumi::Project",
+        "id": "pumi"
+      }
+    ]
+  },
+  {
+    "uid": {
+      "type": "Pumi::Kernel",
+      "id": "kernel"
+    },
+    "attrs": {},
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Pumi::Person",
+      "id": "michael"
+    },
+    "attrs": {
+      "roles": [
+        "maintainer"
+      ]
+    },
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Pumi::Agent",
+      "id": "claude"
+    },
+    "attrs": {},
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Pumi::Runner",
+      "id": "gate-runner"
+    },
+    "attrs": {
+      "role": "gate"
+    },
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Pumi::Runner",
+      "id": "agent-runner"
+    },
+    "attrs": {
+      "role": "agent"
+    },
+    "parents": []
+  }
+]

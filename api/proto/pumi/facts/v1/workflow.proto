@@ -100,3 +100,21 @@ message Overrides {
   // The gates.
   repeated string value = 3 [(role) = ROLE_VALUE];
 }
+
+// QuestionsOpen is questions.open: the open questions of the planning output
+// of the invocation (decision 0171).
+message QuestionsOpen {
+  option (fact) = {
+    name: "questions.open"
+    cedar_type: "Long"
+    producer: "invocation.result"
+    source: SOURCE_MACHINE
+  };
+
+  // The plan.
+  string plan = 1 [(role) = ROLE_KEY];
+  // The invocation that wrote the planning output.
+  string invocation = 2 [(role) = ROLE_KEY];
+  // The number of open questions.
+  int64 value = 3 [(role) = ROLE_VALUE];
+}

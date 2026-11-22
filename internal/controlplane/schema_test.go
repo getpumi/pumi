@@ -79,7 +79,7 @@ func TestSchemaHasTheActionsOf0141(t *testing.T) {
 		got = append(got, string(uid.ID))
 	}
 	sort.Strings(got)
-	want := slices.Sorted(slices.Values(slices.Concat(gates, []string{"merge"}, permissions)))
+	want := slices.Sorted(slices.Values(slices.Concat(gates, []string{"merge"}, permissions, workflowActions)))
 	if !slices.Equal(got, want) {
 		t.Errorf("actions = %q, want %q", got, want)
 	}
@@ -189,6 +189,40 @@ func checkAttribute(name string, attr resolved.Attribute, byAttribute map[string
 
 // permissions are the actions of 0141 for the permissions.
 var permissions = []string{"approve", "cancel", "override", "writeVerdict"}
+
+// workflowActions are the actions of 0169 and 0171 that the workflow's
+// transitions name besides the gates.
+var workflowActions = []string{"advance", "ask", "escalate", "resume", "retry"}
+
+func TestTheWorkflowActionsReadWhatTheirDecisionsSay(t *testing.T) {
+	// retry reads the attempts and the gate's maxAttempts, the usage and the
+	// hard caps; escalate reads nothing; advance and resume read the usage
+	// and the hard caps; ask reads questions.open (decisions 0169 and 0171).
+	usage := "{costMicrodollars: Long, seconds: Long, tokens: Long}"
+	want := map[string]string{
+		"retry":    "{attempts: Long, hardCaps: " + usage + ", maxAttempts: Long, usage: " + usage + "}",
+		"escalate": "{}",
+		"advance":  "{hardCaps: " + usage + ", usage: " + usage + "}",
+		"resume":   "{hardCaps: " + usage + ", usage: " + usage + "}",
+		"ask":      "{questionsOpen: Long}",
+	}
+	r := resolvedSchema(t)
+	ctxs := contexts(t)
+	for _, action := range workflowActions {
+		ctx, ok := ctxs[action]
+		if !ok {
+			t.Errorf("the schema has no action %s", action)
+			continue
+		}
+		if got := recordOf(ctx); got != want[action] {
+			t.Errorf("%s: the context is %s, want %s", action, got, want[action])
+		}
+		a := r.Actions[cedartypes.NewEntityUID("Pumi::Action", cedartypes.String(action))]
+		if a.AppliesTo == nil || !slices.Equal(a.AppliesTo.Principals, []cedartypes.EntityType{"Pumi::Kernel"}) {
+			t.Errorf("%s: the principals are not the kernel alone", action)
+		}
+	}
+}
 
 func TestEveryGateAndMergeReadUsageAndTheHardCaps(t *testing.T) {
 	// invariant.caps forbids a gate decision or a merge when usage is over

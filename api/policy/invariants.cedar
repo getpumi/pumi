@@ -33,11 +33,12 @@ forbid (
 unless
 { context.headState.upToDate && context.headState.tree == resource.tree };
 
-// No gate decision and no merge once usage is over a hard cap. The caps come
-// from the project configuration, set during bootstrapping, not from the
-// profile. The permissions spend nothing, so the caps do not apply to them,
-// and a cancel because a cap was reached is never forbidden by the cap
-// (decision 0164).
+// No gate decision, no merge, and no retry, advance or resume once usage is
+// over a hard cap, because each leads to more spending (decision 0169). The
+// caps come from the project configuration, set during bootstrapping, not
+// from the profile. The permissions spend nothing, so the caps do not apply
+// to them, and a cancel because a cap was reached is never forbidden by the
+// cap (decision 0164). escalate and ask read no usage.
 @id("invariant.caps")
 forbid (
   principal,
@@ -51,7 +52,10 @@ forbid (
      Pumi::Action::"dco",
      Pumi::Action::"outsideChecks",
      Pumi::Action::"mergeApproval",
-     Pumi::Action::"merge"],
+     Pumi::Action::"merge",
+     Pumi::Action::"retry",
+     Pumi::Action::"advance",
+     Pumi::Action::"resume"],
   resource
 )
 when

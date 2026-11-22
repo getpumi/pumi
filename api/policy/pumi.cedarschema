@@ -4,9 +4,9 @@
 // The Cedar schema of Pumi (decision 0141). Facts are passed in the request
 // context, not as entities: each action's context declares exactly the
 // facts and the profile settings its gate reads, and the context of every
-// gate and of merge also declares hardCaps, the project's hard caps
-// (decisions 0142, 0147 and 0164),
-// which are neither a fact nor a profile setting. A fact's context name is
+// gate, of merge and of the workflow actions retry, advance and resume also
+// declares hardCaps, the project's hard caps (decisions 0142, 0147, 0164
+// and 0169), which are neither a fact nor a profile setting. A fact's context name is
 // its catalog name without the dots, such as verifyPassed for verify.passed,
 // and its type is the type of its value in getpumi.dev/pumi/api/facts. The
 // profile settings are listed in getpumi.dev/pumi/api/policy.
@@ -246,6 +246,64 @@ namespace Pumi {
       pathsProtected: Set<String>,
       usage: Usage,
       verifyPassed: Bool,
+    },
+  };
+
+  // The workflow actions (decisions 0169 to 0171). Besides the gates, the
+  // workflow's transitions name these, and the kernel asks for each. The
+  // core policies in core.cedar permit them for the kernel.
+
+  // Retrying a gate: back to its work state, while the gate has attempts
+  // left. attempts and maxAttempts are those of the gate that the request's
+  // keys name. A retry spends money, so it reads the usage and the hard
+  // caps (decision 0169).
+  action retry appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      attempts: Long,
+      hardCaps: Usage,
+      maxAttempts: Long,
+      usage: Usage,
+    },
+  };
+
+  // Escalating to a person. It reads no facts, so it is the transition that
+  // is always allowed unless an invariant forbids it (decision 0169).
+  action escalate appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {},
+  };
+
+  // Advancing to the next stage, which the hard caps stop (decision 0171).
+  action advance appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      hardCaps: Usage,
+      usage: Usage,
+    },
+  };
+
+  // Resuming after a person answered an escalation or rejected an approval
+  // (decisions 0170 and 0171).
+  action resume appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      hardCaps: Usage,
+      usage: Usage,
+    },
+  };
+
+  // Asking for a second opinion on the planning output's open questions
+  // (decision 0171).
+  action ask appliesTo {
+    principal: [Kernel],
+    resource: [Plan],
+    context: {
+      questionsOpen: Long,
     },
   };
 

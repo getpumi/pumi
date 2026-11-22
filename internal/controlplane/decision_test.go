@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
+	"github.com/cedar-policy/cedar-go"
 	"google.golang.org/protobuf/proto"
 
 	"getpumi.dev/pumi/api/events"
@@ -30,7 +31,11 @@ func testConfig() Config {
 	return Config{
 		Policies: []PolicyFile{{Name: "permit-all.cedar", Text: permitAllText}},
 		Settings: Settings{
-			MaxAttempts: 3, Reviewers: 1, WarningsCap: 5,
+			MaxAttempts: map[string]int64{
+				"ambiguity": 3, "budgets": 3, "conformance": 3, "dco": 3, "mergeApproval": 3,
+				"outsideChecks": 3, "planReview": 3, "scope": 3, "spec": 3,
+			},
+			Reviewers: 1, WarningsCap: 5,
 			UsageBudget: policy.Caps{Tokens: 1_000_000, CostMicrodollars: 10_000_000, Seconds: 3600},
 		},
 		HardCaps: policy.DefaultHardCaps(),
@@ -149,8 +154,169 @@ func TestSettingsGiveEverySettingOfTheSchema(t *testing.T) {
 	for _, s := range policy.Settings() {
 		want = append(want, s.Name)
 	}
-	if got := slices.Sorted(maps.Keys(Settings{}.values())); !slices.Equal(got, want) {
+	settings := Settings{MaxAttempts: map[string]int64{"dco": 3}}
+	if got := slices.Sorted(maps.Keys(settings.values("dco"))); !slices.Equal(got, want) {
 		t.Errorf("Settings gives %q, want the settings of policy.Settings %q", got, want)
+	}
+}
+
+func TestMaxAttemptsIsTheGatesOwn(t *testing.T) {
+	// The profile sets maxAttempts for each gate (decision 0044), and a
+	// gate with no setting has none, so a decision that reads it denies.
+	settings := Settings{MaxAttempts: map[string]int64{"dco": 3, "spec": 1}}
+	for gate, want := range map[string]cedar.Value{"dco": cedar.Long(3), "spec": cedar.Long(1)} {
+		if got := settings.values(gate)["maxAttempts"]; got != want {
+			t.Errorf("maxAttempts of %s = %v, want %v", gate, got, want)
+		}
+	}
+	if got, ok := settings.values("scope")["maxAttempts"]; ok {
+		t.Errorf("maxAttempts of scope = %v, want none, because the profile sets none", got)
+	}
+}
+
+// usageFact registers a projection of usage for plan-a under the caps.
+func usageFact(s *Service) {
+	p := fixed("usage", &factsv1.Usage{Invocation: "i", Plan: "plan-a", Value: &factsv1.Usage_Totals{Tokens: 10, CostMicrodollars: 20, Seconds: 30}})
+	s.projections[p.Fact] = p
+}
+
+// decideAsKernel decides q as the kernel at the head and returns the
+// decision and the data of its decision.made event.
+func decideAsKernel(t *testing.T, s *Service, q question) (Decision, *eventsv1.DecisionMade) {
+	t.Helper()
+	at, hash := s.log.Snapshot()
+	d, err := s.decide(at, hash, principal{caller: CallerKernel, id: "kernel"}, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data eventsv1.DecisionMade
+	if err := d.event.GetProtoData().UnmarshalTo(&data); err != nil {
+		t.Fatal(err)
+	}
+	return d.decision, &data
+}
+
+// attemptsIn returns the attempts fact in the basis of d, or nil.
+func attemptsIn(t *testing.T, d *eventsv1.DecisionMade) *factsv1.Attempts {
+	t.Helper()
+	for _, f := range d.GetBasis().GetFacts() {
+		var a factsv1.Attempts
+		if f.MessageIs(&a) {
+			if err := f.UnmarshalTo(&a); err != nil {
+				t.Fatal(err)
+			}
+			return &a
+		}
+	}
+	return nil
+}
+
+func TestRetryReadsTheAttemptsAndTheMaxAttemptsOfTheGateItRetries(t *testing.T) {
+	// retry reads attempts and the profile's maxAttempts for the gate of the
+	// state the plan is in, which the plan's last transition entered, and
+	// core.attempts-left forbids it when the gate has none left (decision
+	// 0169).
+	s := testService(t)
+	s.cfg.Settings.MaxAttempts = map[string]int64{"planReview": 2, "dco": 5}
+	usageFact(s)
+	into := func(plan, gate string) *eventsv1.TransitionFired {
+		return &eventsv1.TransitionFired{Plan: plan, FromState: "work", ToState: gate, Trigger: "t", Gate: gate}
+	}
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"}, into("plan-a", "planReview"), into("plan-a", "planReview"))
+	write(t, s, "plan-b", &eventsv1.PlanAdded{Plan: "plan-b", Track: "main"}, into("plan-b", "planReview"), into("plan-b", "dco"))
+	tests := []struct {
+		plan, gate string
+		attempts   int64
+		allow      bool
+		policies   []string
+	}{
+		{"plan-a", "planReview", 2, false, []string{"core.attempts-left"}},
+		{"plan-b", "dco", 1, true, []string{"core.workflow-actions", "permit-all"}},
+	}
+	for _, tt := range tests {
+		d, data := decideAsKernel(t, s, question{action: "retry", plan: tt.plan, keys: projections.Keys{Invocation: "i"}})
+		if d.Allow != tt.allow || !slices.Equal(data.GetDeterminingPolicies(), tt.policies) {
+			t.Errorf("retry of %s in %s: allow %v by %q (reasons %q), want %v by %q",
+				tt.plan, tt.gate, d.Allow, data.GetDeterminingPolicies(), d.Reasons, tt.allow, tt.policies)
+		}
+		want := &factsv1.Attempts{Plan: tt.plan, Gate: tt.gate, Value: tt.attempts}
+		if got := attemptsIn(t, data); !proto.Equal(got, want) {
+			t.Errorf("retry of %s: the basis has the attempts %v, want %v", tt.plan, got, want)
+		}
+	}
+}
+
+func TestARetryOutsideAGateDenies(t *testing.T) {
+	// A plan with no transition, or in a state with no gate, has no gate to
+	// retry, so attempts and maxAttempts are missing (decision 0143).
+	s := testService(t)
+	usageFact(s)
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"})
+	write(t, s, "plan-b", &eventsv1.TransitionFired{Plan: "plan-b", FromState: "dco", ToState: "implementing", Trigger: "t", Gate: "dco"},
+		&eventsv1.TransitionFired{Plan: "plan-b", FromState: "dco", ToState: "implementing", Trigger: "t"})
+	for _, plan := range []string{"plan-a", "plan-b"} {
+		d, _ := decideAsKernel(t, s, question{action: "retry", plan: plan, keys: projections.Keys{Invocation: "i"}})
+		if d.Allow || !slices.Contains(d.Reasons, "the context lacks the attribute maxAttempts") {
+			t.Errorf("retry of %s: allow %v, reasons %q; want a deny that names maxAttempts", plan, d.Allow, d.Reasons)
+		}
+	}
+}
+
+func TestAGateWithNoMaxAttemptsDenies(t *testing.T) {
+	s := testService(t)
+	s.cfg.Settings.MaxAttempts = map[string]int64{"spec": 1}
+	dcoFacts(s)
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"},
+		&eventsv1.TransitionFired{Plan: "plan-a", FromState: "a", ToState: "dco", Trigger: "t", Gate: "dco"})
+	d, _ := decideDCO(t, s)
+	if d.decision.Allow || !slices.Contains(d.decision.Reasons, "the context lacks the attribute maxAttempts") {
+		t.Errorf("the dco gate with no maxAttempts: allow %v, reasons %q; want a deny that names maxAttempts", d.decision.Allow, d.decision.Reasons)
+	}
+}
+
+func TestTheWorkflowActionsAreDecided(t *testing.T) {
+	// The five workflow actions (decisions 0169 and 0171): escalate reads no
+	// facts and a core policy permits it for the kernel; advance and resume
+	// read the usage and the hard caps; ask reads questions.open, which has
+	// no projection yet, so it is missing and ask denies (decision 0143).
+	s := testService(t)
+	usageFact(s)
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"})
+	tests := []struct {
+		action   string
+		allow    bool
+		policies []string
+		facts    []string
+	}{
+		{"escalate", true, []string{"core.escalate", "permit-all"}, []string{}},
+		{"advance", true, []string{"core.workflow-actions", "permit-all"}, []string{"usage"}},
+		{"resume", true, []string{"core.workflow-actions", "permit-all"}, []string{"usage"}},
+		{"ask", false, nil, []string{}},
+	}
+	for _, tt := range tests {
+		d, data := decideAsKernel(t, s, question{action: tt.action, plan: "plan-a", keys: projections.Keys{Invocation: "i"}})
+		if d.Allow != tt.allow || !slices.Equal(data.GetDeterminingPolicies(), tt.policies) || !slices.Equal(d.Facts, tt.facts) {
+			t.Errorf("%s: allow %v by %q with the facts %q (reasons %q), want %v by %q with %q",
+				tt.action, d.Allow, data.GetDeterminingPolicies(), d.Facts, d.Reasons, tt.allow, tt.policies, tt.facts)
+		}
+	}
+	d, _ := decideAsKernel(t, s, question{action: "ask", plan: "plan-a", keys: projections.Keys{Invocation: "i"}})
+	if !slices.Contains(d.Reasons, "the context lacks the attribute questionsOpen") {
+		t.Errorf("ask: the reasons are %q, want the missing questionsOpen named", d.Reasons)
+	}
+}
+
+func TestTheCoreAndTheInvariantsAreInEveryPolicySet(t *testing.T) {
+	files := policyFiles(Config{Policies: []PolicyFile{{Name: "lower.cedar", Text: permitAllText}}})
+	names := []string{}
+	for _, f := range files {
+		names = append(names, f.Name)
+	}
+	if want := []string{"invariants.cedar", "core.cedar", "lower.cedar"}; !slices.Equal(names, want) {
+		t.Errorf("the policy files are %q, want %q", names, want)
+	}
+	if files[1].Text != policy.Core {
+		t.Error("core.cedar is not the core policies of the api module")
 	}
 }
 
@@ -304,5 +470,42 @@ func TestAPermissionIsDecidedAgainWhenTheHeadMoves(t *testing.T) {
 	}
 	if data.GetLogHead() != hash {
 		t.Errorf("the decision was made at %q, want the head after the event appended in between, %q", data.GetLogHead(), hash)
+	}
+}
+
+// cancel returns a cancel.requested event with data, whose subject is
+// subject.
+func cancel(t *testing.T, subject string, data *eventsv1.CancelRequested) *cloudeventsv1.CloudEvent {
+	t.Helper()
+	e, err := events.New(data, events.Attributes{ID: newID(), Source: "/test", Subject: subject, Tenant: embeddedlog.Tenant})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+func TestTheCancelPermissionIsDecidedForThePlanTheCancelNames(t *testing.T) {
+	// A cancel with a plan and no invocation cancels the plan; one with an
+	// invocation cancels that invocation (decision 0170). The plan the data
+	// names is the Cedar resource, and the subject is when it names none.
+	tests := []struct {
+		name       string
+		event      *cloudeventsv1.CloudEvent
+		plan       string
+		invocation string
+	}{
+		{"a plan", cancel(t, "plan-b", &eventsv1.CancelRequested{Plan: "plan-b", RequestedBy: "someone"}), "plan-b", ""},
+		{"a plan and another subject", cancel(t, "plan-a", &eventsv1.CancelRequested{Plan: "plan-b", RequestedBy: "someone"}), "plan-b", ""},
+		{"an invocation", cancel(t, "plan-a", &eventsv1.CancelRequested{Invocation: "invocation-1", RequestedBy: "someone"}), "plan-a", "invocation-1"},
+		{"both", cancel(t, "plan-a", &eventsv1.CancelRequested{Plan: "plan-a", Invocation: "invocation-1", RequestedBy: "someone"}), "plan-a", "invocation-1"},
+	}
+	for _, tt := range tests {
+		perms, err := permissionsOf([]*cloudeventsv1.CloudEvent{tt.event})
+		if err != nil {
+			t.Fatalf("a cancel of %s: %v", tt.name, err)
+		}
+		if len(perms) != 1 || perms[0].q.action != "cancel" || perms[0].q.plan != tt.plan || perms[0].q.keys.Invocation != tt.invocation {
+			t.Errorf("a cancel of %s: the permissions are %+v, want cancel for %s with the invocation %q", tt.name, perms, tt.plan, tt.invocation)
+		}
 	}
 }

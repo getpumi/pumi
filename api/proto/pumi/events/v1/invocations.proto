@@ -94,8 +94,9 @@ message InvocationFinished {
   Outcome outcome = 2;
 }
 
-// CancelRequested is the data of dev.getpumi.cancel.requested (decision
-// 0035).
+// CancelRequested is the data of dev.getpumi.cancel.requested (decisions
+// 0035 and 0170). With a plan and no invocation it cancels the plan; with an
+// invocation it cancels that invocation.
 message CancelRequested {
   // The invocation to cancel.
   string invocation = 1;
@@ -103,4 +104,7 @@ message CancelRequested {
   string requested_by = 2;
   // The facts behind the request.
   Basis basis = 3;
+  // The plan to cancel, when the request names no invocation, or the plan of
+  // the invocation.
+  string plan = 4;
 }

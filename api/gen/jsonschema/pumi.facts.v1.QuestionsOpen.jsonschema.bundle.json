@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "pumi.facts.v1.QuestionsOpen.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "QuestionsOpen is questions.open: the open questions of the planning output\n of the invocation (decision 0171).",
+      "properties": {
+        "invocation": {
+          "default": "",
+          "description": "The invocation that wrote the planning output.",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of open questions."
+        }
+      },
+      "title": "Questions Open",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.facts.v1.QuestionsOpen.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.facts.v1.QuestionsOpen.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

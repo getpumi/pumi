@@ -25,7 +25,7 @@ message InvocationRequested {
   bytes document = 4;
   // The plan that the invocation is for, which the kernel names, so that
   // the usage and the planning output of an invocation are found for its
-  // plan and a plan cancel reaches the plan's invocations.
+  // plan and a plan cancel reaches the plan's invocations (decision 0175).
   string plan = 5;
 }
 

@@ -102,7 +102,7 @@ type InvocationRequested struct {
 	Document []byte `protobuf:"bytes,4,opt,name=document,proto3" json:"document,omitempty"`
 	// The plan that the invocation is for, which the kernel names, so that
 	// the usage and the planning output of an invocation are found for its
-	// plan and a plan cancel reaches the plan's invocations.
+	// plan and a plan cancel reaches the plan's invocations (decision 0175).
 	Plan          string `protobuf:"bytes,5,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

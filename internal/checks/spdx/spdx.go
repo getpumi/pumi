@@ -126,6 +126,9 @@ var extensionStyles = map[string]Style{
 	// The workflow file and its test fixtures, in protobuf text format
 	// (decision 0167).
 	".txtpb": Hash,
+	// The graph of the first workflow's state machine, in the DOT language
+	// of Graphviz, which has // comments.
+	".dot": Slash,
 	// go.sum and the tools' .sum files are written by the go command.
 	".sum": Exempt,
 	// JSON has no comments, and the files in .pumi/ are plain JSON

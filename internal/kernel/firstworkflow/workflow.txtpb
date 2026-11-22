@@ -1,0 +1,817 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The first workflow, from spec to merge (decision 0171), as a first draft to
+# tune once it runs. It is built into the release and pinned with the kernel
+# version (decision 0166); the schema is pumi.workflow.v1.Workflow (decisions
+# 0167 and 0168).
+#
+# For a trigger, the kernel asks the control plane about each transition of
+# that trigger in the order listed here and fires the first one allowed. The
+# last transition of each trigger is guarded by escalate or cancel, which are
+# always allowed unless an invariant forbids them, so a plan always has a move
+# (decisions 0169 and 0177). A gate state goes to the next state on its gate's
+# action, back to its work state on retry, and to its own escalated state on
+# escalate. A state that is not a gate goes on with advance, which the hard
+# caps stop between stages, and otherwise escalates.
+#
+# The task of each invocation is the text file <task>.md beside this file.
+name: "spec-to-merge"
+version: "1"
+initial: "spec"
+
+# The superstate that holds every state of a plan that is not finished. A
+# cancel.requested for the plan goes to cancelled from any of them, guarded by
+# cancel, which the core policy core.cancel permits for the kernel (decisions
+# 0170 and 0177).
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+# 1. Spec (initial): the spec adapter validates the OpenSpec change of the
+# plan and reports spec.valid (decision 0172). To planning on the spec gate;
+# otherwise escalate. There is no retry, because only a person can fix the
+# spec.
+states {
+  name: "spec"
+  parent: "active"
+  gate: "spec"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    task: "validate-spec"
+    output_message: "pumi.facts.v1.SpecValid"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning"
+    action: "spec"
+  }
+  transitions {
+    trigger { result {} }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+}
+
+# Spec, escalated: wait for a person (decision 0170). An override goes on to
+# planning, decided again by the spec gate, which now reads the override. An
+# answer goes back to spec, decided by resume, which reads the usage and the
+# hard caps; the answer goes into the next invocation's input. Each trigger
+# ends in escalate, so a denied decision keeps the plan here. After an answer
+# the spec adapter validates the change again.
+states {
+  name: "spec-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "planning"
+    action: "spec"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "spec"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+}
+
+# 2. Planning: an agent writes the plan, with its declared paths and any open
+# questions, each with the agent's own answer. To a second opinion on ask,
+# which is allowed only when questions.open is above zero; otherwise to plan
+# review on advance; otherwise escalate.
+states {
+  name: "planning"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    task: "plan"
+    output_message: "pumi.workflow.v1.PlanningOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "second-opinion"
+    action: "ask"
+  }
+  transitions {
+    trigger { result {} }
+    target: "plan-review"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+# Planning, escalated: wait for a person. Planning escalates when advance is
+# denied, as by the hard caps. An answer goes back to planning, decided by
+# resume, which reads the usage and the hard caps; the answer goes into the
+# next invocation's input. A denied resume keeps the plan here.
+states {
+  name: "planning-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+# 3. Second opinion: an independent invocation answers each open question of
+# the planning output. Back to planning with the answers on the ambiguity
+# gate; otherwise escalate, and a person decides. Ambiguity is escalated only
+# from planning in the MVP (decision 0171).
+states {
+  name: "second-opinion"
+  parent: "active"
+  gate: "ambiguity"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    task: "answer-questions"
+    output_message: "pumi.workflow.v1.SecondOpinion"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning"
+    action: "ambiguity"
+  }
+  transitions {
+    trigger { result {} }
+    target: "second-opinion-escalated"
+    action: "escalate"
+  }
+}
+
+# Second opinion, escalated: wait for a person (decision 0170). An override
+# goes on to planning, decided again by the ambiguity gate, which now reads
+# the override. An answer goes back to planning, decided by resume, which
+# reads the usage and the hard caps; the answer goes into the next
+# invocation's input. Each trigger ends in escalate, so a denied decision
+# keeps the plan here.
+states {
+  name: "second-opinion-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "planning"
+    action: "ambiguity"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "second-opinion-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "second-opinion-escalated"
+    action: "escalate"
+  }
+}
+
+# 4. Plan review (gate role): as many reviews as the profile's reviewers
+# setting, and the result fires when all have finished (decision 0138). To
+# implementing on the planReview gate; otherwise retry to planning; otherwise
+# escalate.
+states {
+  name: "plan-review"
+  parent: "active"
+  gate: "planReview"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_HARNESS
+    task: "review-plan"
+    output_message: "pumi.events.v1.VerdictRecorded"
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing"
+    action: "planReview"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { result {} }
+    target: "plan-review-escalated"
+    action: "escalate"
+  }
+}
+
+# Plan review, escalated: wait for a person (decision 0170). An override goes
+# on to implementing, decided again by the planReview gate, which now reads
+# the override. An answer goes back to planning, decided by resume, which
+# reads the usage and the hard caps; the answer goes into the next
+# invocation's input. Each trigger ends in escalate, so a denied decision
+# keeps the plan here.
+states {
+  name: "plan-review-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "implementing"
+    action: "planReview"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "plan-review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "plan-review-escalated"
+    action: "escalate"
+  }
+}
+
+# 5. Implementing: an agent makes the change in the workspace. To checking on
+# advance; otherwise escalate. An agent that finds a question here fails its
+# run, and the retry is a new attempt (decision 0171).
+states {
+  name: "implementing"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    task: "implement"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# Implementing, escalated: wait for a person. Implementing escalates when
+# advance is denied, as by the hard caps. An answer goes back to implementing,
+# decided by resume, which reads the usage and the hard caps; the answer goes
+# into the next invocation's input. A denied resume keeps the plan here.
+states {
+  name: "implementing-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# 6. Checking: a check runs VERIFY, the path checks, the metrics and DCO,
+# which produce their facts. To scope on advance; otherwise escalate.
+states {
+  name: "checking"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    task: "run-checks"
+    output_message: "pumi.workflow.v1.CheckingOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "scope"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+}
+
+# Checking, escalated: wait for a person. Checking escalates when advance is
+# denied, as by the hard caps. An answer goes back to checking, decided by
+# resume, which reads the usage and the hard caps; the answer goes into the
+# next invocation's input. A denied resume keeps the plan here.
+states {
+  name: "checking-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "checking"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+}
+
+# 7a. Scope: a state that only decides, on entered: no changed path is outside
+# the plan's declared paths. To budgets on the scope gate; otherwise retry to
+# implementing; otherwise escalate.
+states {
+  name: "scope"
+  parent: "active"
+  gate: "scope"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "budgets"
+    action: "scope"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "scope-escalated"
+    action: "escalate"
+  }
+}
+
+# Scope, escalated: wait for a person (decision 0170). An override goes on to
+# budgets, decided again by the scope gate, which now reads the override. An
+# answer goes back to implementing, decided by resume, which reads the usage
+# and the hard caps; the answer goes into the next invocation's input. Each
+# trigger ends in escalate, so a denied decision keeps the plan here.
+states {
+  name: "scope-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "budgets"
+    action: "scope"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "scope-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "scope-escalated"
+    action: "escalate"
+  }
+}
+
+# 7b. Budgets: a state that only decides, on entered: no metric is over the
+# profile's thresholds. To dco on the budgets gate; otherwise retry to
+# implementing; otherwise escalate.
+states {
+  name: "budgets"
+  parent: "active"
+  gate: "budgets"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "dco"
+    action: "budgets"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "budgets-escalated"
+    action: "escalate"
+  }
+}
+
+# Budgets, escalated: wait for a person (decision 0170). An override goes on
+# to dco, decided again by the budgets gate, which now reads the override. An
+# answer goes back to implementing, decided by resume, which reads the usage
+# and the hard caps; the answer goes into the next invocation's input. Each
+# trigger ends in escalate, so a denied decision keeps the plan here.
+states {
+  name: "budgets-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "dco"
+    action: "budgets"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "budgets-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "budgets-escalated"
+    action: "escalate"
+  }
+}
+
+# 7c. DCO: a state that only decides, on entered: every commit has the sign-
+# off that the DCO check requires. To outside-checks on the dco gate;
+# otherwise retry to implementing; otherwise escalate.
+states {
+  name: "dco"
+  parent: "active"
+  gate: "dco"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "outside-checks"
+    action: "dco"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "dco-escalated"
+    action: "escalate"
+  }
+}
+
+# DCO, escalated: wait for a person (decision 0170). An override goes on to
+# outside-checks, decided again by the dco gate, which now reads the override.
+# An answer goes back to implementing, decided by resume, which reads the
+# usage and the hard caps; the answer goes into the next invocation's input.
+# Each trigger ends in escalate, so a denied decision keeps the plan here.
+states {
+  name: "dco-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "outside-checks"
+    action: "dco"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "dco-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "dco-escalated"
+    action: "escalate"
+  }
+}
+
+# 7d. Outside checks: a state that only decides, on entered: every required
+# check that Pumi does not run passed on the head commit (decision 0140). To
+# conformance audit on the outsideChecks gate; otherwise escalate. A missing
+# or pending result is not a pass, so it escalates rather than retrying the
+# implementation while the checks run.
+states {
+  name: "outside-checks"
+  parent: "active"
+  gate: "outsideChecks"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "conformance-audit"
+    action: "outsideChecks"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "outside-checks-escalated"
+    action: "escalate"
+  }
+}
+
+# Outside checks, escalated: wait for a person or for the results. Each
+# check.ingested decides the outsideChecks gate again, and the plan goes on to
+# conformance audit once the required checks pass. An override goes on the
+# same way. An answer goes back to implementing, decided by resume. Each
+# trigger ends in escalate, so a denied decision keeps the plan here.
+states {
+  name: "outside-checks-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.check.ingested" }
+    target: "conformance-audit"
+    action: "outsideChecks"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.check.ingested" }
+    target: "outside-checks-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "conformance-audit"
+    action: "outsideChecks"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "outside-checks-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "outside-checks-escalated"
+    action: "escalate"
+  }
+}
+
+# 8. Conformance audit (gate role): an independent audit of the tree against
+# the change and the plan. To awaiting approval on the conformance gate;
+# otherwise retry to implementing; otherwise escalate.
+states {
+  name: "conformance-audit"
+  parent: "active"
+  gate: "conformance"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_HARNESS
+    task: "audit-conformance"
+    output_message: "pumi.events.v1.VerdictRecorded"
+  }
+  transitions {
+    trigger { result {} }
+    target: "awaiting-approval"
+    action: "conformance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { result {} }
+    target: "conformance-audit-escalated"
+    action: "escalate"
+  }
+}
+
+# Conformance audit, escalated: wait for a person (decision 0170). An override
+# goes on to awaiting-approval, decided again by the conformance gate, which
+# now reads the override. An answer goes back to implementing, decided by
+# resume, which reads the usage and the hard caps; the answer goes into the
+# next invocation's input. Each trigger ends in escalate, so a denied decision
+# keeps the plan here.
+states {
+  name: "conformance-audit-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "awaiting-approval"
+    action: "conformance"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "conformance-audit-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "conformance-audit-escalated"
+    action: "escalate"
+  }
+}
+
+# 9. Awaiting approval: wait for a person. On approval.recorded: to ready to
+# merge on the mergeApproval gate; otherwise, after a rejection, back to
+# implementing on resume; otherwise escalate.
+states {
+  name: "awaiting-approval"
+  parent: "active"
+  gate: "mergeApproval"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.approval.recorded" }
+    target: "ready-to-merge"
+    action: "mergeApproval"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.approval.recorded" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.approval.recorded" }
+    target: "awaiting-approval-escalated"
+    action: "escalate"
+  }
+}
+
+# Awaiting approval, escalated: wait for a person (decision 0170). An override
+# goes on to ready-to-merge, decided again by the mergeApproval gate, which
+# now reads the override. An answer goes back to implementing, decided by
+# resume, which reads the usage and the hard caps; the answer goes into the
+# next invocation's input. Each trigger ends in escalate, so a denied decision
+# keeps the plan here.
+states {
+  name: "awaiting-approval-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "ready-to-merge"
+    action: "mergeApproval"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "awaiting-approval-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "awaiting-approval-escalated"
+    action: "escalate"
+  }
+}
+
+# 10. Ready to merge: a state that only decides, on entered. To merging on
+# merge, which the invariants guard (decision 0142); otherwise retry to
+# implementing, for example when the head is no longer up to date; otherwise
+# escalate.
+states {
+  name: "ready-to-merge"
+  parent: "active"
+  gate: "merge"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "merging"
+    action: "merge"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "ready-to-merge-escalated"
+    action: "escalate"
+  }
+}
+
+# Ready to merge, escalated: wait for a person (decision 0170). An override
+# goes on to merging, decided again by the merge gate, which now reads the
+# override. An answer goes back to implementing, decided by resume, which
+# reads the usage and the hard caps; the answer goes into the next
+# invocation's input. Each trigger ends in escalate, so a denied decision
+# keeps the plan here. An override cannot loosen the invariants that guard
+# merge.
+states {
+  name: "ready-to-merge-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "merging"
+    action: "merge"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "ready-to-merge-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "ready-to-merge-escalated"
+    action: "escalate"
+  }
+}
+
+# 11. Merging (external action): the forge adapter merges the approved head
+# commit. To merged on advance; otherwise escalate.
+states {
+  name: "merging"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_EXTERNAL_ACTION
+    task: "merge"
+    output_message: "pumi.events.v1.MergePerformed"
+  }
+  transitions {
+    trigger { result {} }
+    target: "merged"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+}
+
+# Merging, escalated: wait for a person. Merging escalates when the merge
+# fails or advance is denied. The answer goes back to ready to merge, so that
+# merge is decided again before the forge adapter merges. An answer goes back
+# to ready-to-merge, decided by resume, which reads the usage and the hard
+# caps; the answer goes into the next invocation's input. A denied resume
+# keeps the plan here.
+states {
+  name: "merging-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "ready-to-merge"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+}
+
+# 12. Merged: final. The plan's change is on trunk.
+states {
+  name: "merged"
+  final {}
+}
+
+# Cancelled: final. A person cancelled the plan.
+states {
+  name: "cancelled"
+  final {}
+}

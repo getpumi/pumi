@@ -288,3 +288,29 @@ func TestAnUnknownStateIsAnError(t *testing.T) {
 		t.Errorf("Transitions in an unknown state: %v, want an error that names it", err)
 	}
 }
+
+func TestGraphIsTheDOTOfTheMachineInItsInitialState(t *testing.T) {
+	// Each transition is labeled with its trigger, the event type without
+	// its dev.getpumi. prefix, and the Cedar action that guards it, so that
+	// a change to the workflow shows up as a readable diff of the graph.
+	w, err := load(t, "valid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := w.Graph()
+	for _, want := range []string{
+		"digraph {",
+		`init -> planning;`,
+		`planning -> review [label="result / advance"];`,
+		`review -> planning [label="result / retry"];`,
+		`"review-escalated" -> done [label="override.recorded / planReview"];`,
+		`active -> cancelled [label="cancel.requested / cancel"`,
+	} {
+		if !strings.Contains(g, want) {
+			t.Errorf("the graph has no %q:\n%s", want, g)
+		}
+	}
+	if w.Graph() != g {
+		t.Error("Graph is not the same each time")
+	}
+}

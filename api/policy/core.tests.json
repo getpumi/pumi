@@ -15,6 +15,21 @@
     "num_errors": 0
   },
   {
+    "name": "cancel is allowed for the kernel",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"cancel\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {}
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.cancel"
+    ],
+    "num_errors": 0
+  },
+  {
     "name": "retry is allowed with attempts left",
     "request": {
       "principal": "Pumi::Kernel::\"kernel\"",

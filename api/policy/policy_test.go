@@ -110,3 +110,36 @@ func TestDefaultHardCaps(t *testing.T) {
 		t.Errorf("DefaultHardCaps().Context() = %v, want %v", got, want)
 	}
 }
+
+func TestActionsAreTheActionsTheSchemaDeclares(t *testing.T) {
+	// The control plane's tests check the same list against the schema as
+	// cedar-go reads it; this test shows the names and their order.
+	want := []string{
+		"advance", "ambiguity", "approve", "ask", "budgets", "cancel", "conformance", "dco", "escalate",
+		"merge", "mergeApproval", "outsideChecks", "override", "planReview", "resume", "retry", "scope",
+		"spec", "writeVerdict",
+	}
+	if got := Actions(); !slices.Equal(got, want) {
+		t.Errorf("Actions() = %q, want %q", got, want)
+	}
+}
+
+func TestAlwaysAllowedAreEscalateAndCancel(t *testing.T) {
+	// The workflow loader requires the last transition of each trigger to
+	// guard with one of these (decisions 0169 and 0177).
+	got := AlwaysAllowed()
+	if want := []string{"cancel", "escalate"}; !slices.Equal(got, want) {
+		t.Errorf("AlwaysAllowed() = %q, want %q", got, want)
+	}
+	for _, a := range got {
+		if !slices.Contains(Actions(), a) {
+			t.Errorf("%s is not an action of the schema", a)
+		}
+	}
+	if len(got) > 0 {
+		got[0] = "changed"
+		if AlwaysAllowed()[0] == "changed" {
+			t.Error("AlwaysAllowed returns a list an importer can change")
+		}
+	}
+}

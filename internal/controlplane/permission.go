@@ -36,8 +36,8 @@ type permission struct {
 
 // permissionsOf returns the permissions to decide for evs, in order. The
 // plan, which is the Cedar resource, is the plan the data names, for a
-// verdict and an override, and the event's subject, for an approval and a
-// cancel, whose data names none. It refuses, with invalid argument, a
+// verdict, an override and a cancel that names one, and the event's
+// subject, for an approval and a cancel that names none. It refuses, with invalid argument, a
 // permission event with no plan.
 func permissionsOf(evs []*cloudeventsv1.CloudEvent) ([]permission, error) {
 	var out []permission
@@ -65,7 +65,8 @@ func permissionsOf(evs []*cloudeventsv1.CloudEvent) ([]permission, error) {
 }
 
 // keysOf returns the keys of the facts of a permission event's data, and
-// sets *plan to the plan the data names, when it names one.
+// sets *plan to the plan the data names, when it names one. A verdict and
+// an override always name one.
 func keysOf(data proto.Message, plan *string) projections.Keys {
 	switch d := data.(type) {
 	case *eventsv1.VerdictRecorded:
@@ -77,6 +78,9 @@ func keysOf(data proto.Message, plan *string) projections.Keys {
 	case *eventsv1.ApprovalRecorded:
 		return projections.Keys{HeadTree: d.GetTree()}
 	case *eventsv1.CancelRequested:
+		if d.GetPlan() != "" {
+			*plan = d.GetPlan()
+		}
 		return projections.Keys{Invocation: d.GetInvocation()}
 	}
 	return projections.Keys{}

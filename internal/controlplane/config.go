@@ -15,8 +15,9 @@ import (
 // policies beside the core invariants, the profile settings, the hard caps
 // and the project. Policy sets replace it in epic E10.
 type Config struct {
-	// Policies are the policy files beside the core invariants, which the
-	// control plane always adds (decision 0142).
+	// Policies are the policy files beside the core invariants and the core
+	// policies of the workflow actions, which the control plane always adds
+	// (decisions 0142 and 0169).
 	Policies []PolicyFile
 	// Settings are the profile settings that the actions read.
 	Settings Settings
@@ -53,8 +54,10 @@ type Project struct {
 // Settings are the profile settings that the actions of the Cedar schema
 // read, one field for each setting of policy.Settings.
 type Settings struct {
-	// MaxAttempts is maxAttempts.
-	MaxAttempts int64
+	// MaxAttempts is maxAttempts for each gate, by the gate's Cedar action,
+	// such as planReview (decision 0044). A gate with no entry has no
+	// maxAttempts, so a decision that reads it denies (decision 0143).
+	MaxAttempts map[string]int64
 	// OutsideChecksEnforced is outsideChecksEnforced.
 	OutsideChecksEnforced []string
 	// OutsideChecksWarned is outsideChecksWarned.
@@ -70,16 +73,21 @@ type Settings struct {
 // hardCaps is the name of the context attribute that holds the hard caps.
 const hardCaps = "hardCaps"
 
-// values returns the settings as Cedar values, by their context names.
-func (s Settings) values() map[string]cedar.Value {
-	return map[string]cedar.Value{
-		"maxAttempts":           cedar.Long(s.MaxAttempts),
+// values returns the settings of a decision about gate as Cedar values, by
+// their context names. maxAttempts is the gate's own, and is left out when
+// the gate has none.
+func (s Settings) values(gate string) map[string]cedar.Value {
+	values := map[string]cedar.Value{
 		"outsideChecksEnforced": stringSet(s.OutsideChecksEnforced),
 		"outsideChecksWarned":   stringSet(s.OutsideChecksWarned),
 		"reviewers":             cedar.Long(s.Reviewers),
 		"usageBudget":           capsRecord(s.UsageBudget),
 		"warningsCap":           cedar.Long(s.WarningsCap),
 	}
+	if n, ok := s.MaxAttempts[gate]; ok {
+		values["maxAttempts"] = cedar.Long(n)
+	}
+	return values
 }
 
 // stringSet returns the strings as a Cedar set.

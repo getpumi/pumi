@@ -133,7 +133,11 @@ func config() controlplane.Config {
 	return controlplane.Config{
 		Policies: []controlplane.PolicyFile{{Name: "permit-all.cedar", Text: permitAll}},
 		Settings: controlplane.Settings{
-			MaxAttempts: 3, Reviewers: 1, WarningsCap: 5,
+			MaxAttempts: map[string]int64{
+				"ambiguity": 3, "budgets": 3, "conformance": 3, "dco": 3, "mergeApproval": 3,
+				"outsideChecks": 3, "planReview": 3, "scope": 3, "spec": 3,
+			},
+			Reviewers: 1, WarningsCap: 5,
 			UsageBudget: policy.Caps{Tokens: 1_000_000, CostMicrodollars: 10_000_000, Seconds: 3600},
 		},
 		HardCaps: policy.DefaultHardCaps(),

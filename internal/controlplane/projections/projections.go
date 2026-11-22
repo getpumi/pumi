@@ -30,7 +30,9 @@ import (
 type Keys struct {
 	// Plan is the plan.
 	Plan string
-	// Gate is the gate, which is the Cedar action of the decision.
+	// Gate is the gate, which is the Cedar action of the decision, or, for a
+	// retry, the gate of the state the plan is in, which it retries
+	// (decision 0169).
 	Gate string
 	// Project is the project.
 	Project string

@@ -5,8 +5,8 @@
 //
 // A main package under cmd/ is the only kind of package that may import more
 // than one component, and only to wire them together. For now it builds the
-// control plane's decider from the embedded schema and core invariants,
-// prints its name and version and exits.
+// control plane's decider from the embedded schema, core invariants and core
+// policies, prints its name and version and exits.
 package main
 
 import (
@@ -19,11 +19,16 @@ import (
 	"getpumi.dev/pumi/internal/shared"
 )
 
-// invariants is the policy file of the core invariants (decision 0142).
-var invariants = controlplane.PolicyFile{Name: "invariants.cedar", Text: policy.Invariants}
+// core are the policy files that every policy set holds: the core
+// invariants (decision 0142) and the core policies of the workflow actions
+// (decision 0169).
+var core = []controlplane.PolicyFile{
+	{Name: "invariants.cedar", Text: policy.Invariants},
+	{Name: "core.cedar", Text: policy.Core},
+}
 
 func main() {
-	if err := run(os.Stdout, policy.Schema, invariants); err != nil {
+	if err := run(os.Stdout, policy.Schema, core...); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

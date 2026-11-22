@@ -379,8 +379,9 @@ func (x *InvocationFinished) GetOutcome() InvocationFinished_Outcome {
 	return InvocationFinished_OUTCOME_UNSPECIFIED
 }
 
-// CancelRequested is the data of dev.getpumi.cancel.requested (decision
-// 0035).
+// CancelRequested is the data of dev.getpumi.cancel.requested (decisions
+// 0035 and 0170). With a plan and no invocation it cancels the plan; with an
+// invocation it cancels that invocation.
 type CancelRequested struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The invocation to cancel.
@@ -388,7 +389,10 @@ type CancelRequested struct {
 	// Who asked for the cancellation.
 	RequestedBy string `protobuf:"bytes,2,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
 	// The facts behind the request.
-	Basis         *Basis `protobuf:"bytes,3,opt,name=basis,proto3" json:"basis,omitempty"`
+	Basis *Basis `protobuf:"bytes,3,opt,name=basis,proto3" json:"basis,omitempty"`
+	// The plan to cancel, when the request names no invocation, or the plan of
+	// the invocation.
+	Plan          string `protobuf:"bytes,4,opt,name=plan,proto3" json:"plan,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -442,6 +446,13 @@ func (x *CancelRequested) GetBasis() *Basis {
 		return x.Basis
 	}
 	return nil
+}
+
+func (x *CancelRequested) GetPlan() string {
+	if x != nil {
+		return x.Plan
+	}
+	return ""
 }
 
 // OutputFile is one output file, stored as a blob.
@@ -609,13 +620,14 @@ const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"\x0eOUTCOME_FAILED\x10\x02\x12\x15\n" +
 	"\x11OUTCOME_CANCELLED\x10\x03\x12\x17\n" +
 	"\x13OUTCOME_CAP_REACHED\x10\x04\x12 \n" +
-	"\x1cOUTCOME_RESOLVED_ON_RECOVERY\x10\x05\"\x81\x01\n" +
+	"\x1cOUTCOME_RESOLVED_ON_RECOVERY\x10\x05\"\x95\x01\n" +
 	"\x0fCancelRequested\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +
 	"invocation\x12!\n" +
 	"\frequested_by\x18\x02 \x01(\tR\vrequestedBy\x12+\n" +
-	"\x05basis\x18\x03 \x01(\v2\x15.pumi.events.v1.BasisR\x05basisB\xb2\x01\n" +
+	"\x05basis\x18\x03 \x01(\v2\x15.pumi.events.v1.BasisR\x05basis\x12\x12\n" +
+	"\x04plan\x18\x04 \x01(\tR\x04planB\xb2\x01\n" +
 	"\x12com.pumi.events.v1B\x10InvocationsProtoP\x01Z0getpumi.dev/pumi/api/gen/pumi/events/v1;eventsv1\xa2\x02\x03PEX\xaa\x02\x0ePumi.Events.V1\xca\x02\x0ePumi\\Events\\V1\xe2\x02\x1aPumi\\Events\\V1\\GPBMetadata\xea\x02\x10Pumi::Events::V1b\x06proto3"
 
 var (

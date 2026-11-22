@@ -71,6 +71,15 @@ func TestInvariantsAreEmbedded(t *testing.T) {
 	}
 }
 
+func TestCoreIsEmbedded(t *testing.T) {
+	if !strings.HasPrefix(Core, "// SPDX-License-Identifier: Apache-2.0\n") {
+		t.Errorf("Core does not start with the SPDX lines: %.80q", Core)
+	}
+	if !strings.Contains(Core, `@id("core.escalate")`) {
+		t.Error("Core has no core.escalate")
+	}
+}
+
 func TestDefaultHardCaps(t *testing.T) {
 	caps := DefaultHardCaps()
 	if caps.Tokens <= 0 || caps.CostMicrodollars <= 0 || caps.Seconds <= 0 {

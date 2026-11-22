@@ -1,0 +1,293 @@
+[
+  {
+    "name": "escalate is allowed for the kernel",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"escalate\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {}
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.escalate"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "retry is allowed with attempts left",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"retry\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 2,
+        "maxAttempts": 3,
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.workflow-actions"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "retry is denied without attempts left",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"retry\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 3,
+        "maxAttempts": 3,
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [
+      "core.attempts-left"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "retry is denied over the attempts",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"retry\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 4,
+        "maxAttempts": 3,
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [
+      "core.attempts-left"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "retry is denied over the token cap, with attempts left",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"retry\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 1,
+        "maxAttempts": 3,
+        "usage": {
+          "tokens": 5000001,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "advance is allowed under the caps",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"advance\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.workflow-actions"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "advance is allowed at the caps, because the invariant forbids usage over them",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"advance\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "usage": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.workflow-actions"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "advance is denied over the cost cap",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"advance\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 50000001,
+          "seconds": 60
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "resume is allowed under the caps",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"resume\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.workflow-actions"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "resume is denied over the time cap",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"resume\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 14401
+        },
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        }
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "ask is allowed with an open question",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"ask\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "questionsOpen": 1
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.workflow-actions"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "ask is denied with no open question",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"ask\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "questionsOpen": 0
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [
+      "core.questions-open"
+    ],
+    "num_errors": 0
+  }
+]

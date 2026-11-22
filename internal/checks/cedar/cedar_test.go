@@ -129,9 +129,13 @@ func mergeTests(verifyPassed string) string {
 // the safe.directory setting that the cedar job makes.
 func TestCheckPassesOnTheRepositorysPolicies(t *testing.T) {
 	const lower = "api/policy/testdata/permit-all"
+	const core = "api/policy/core"
 	out, err := check(t, newRepo(t, map[string]string{
-		lower + ".cedar":      repoFile(t, lower+".cedar"),
-		lower + ".tests.json": repoFile(t, lower+".tests.json"),
+		lower + ".cedar":        repoFile(t, lower+".cedar"),
+		lower + ".tests.json":   repoFile(t, lower+".tests.json"),
+		core + ".cedar":         repoFile(t, core+".cedar"),
+		core + ".tests.json":    repoFile(t, core+".tests.json"),
+		core + ".entities.json": repoFile(t, core+".entities.json"),
 	}))
 	if err != nil {
 		t.Fatalf("Check() = %v; output:\n%s", err, out)
@@ -141,6 +145,9 @@ func TestCheckPassesOnTheRepositorysPolicies(t *testing.T) {
 		"cedar: validate " + Invariants + ": ok",
 		"cedar: validate " + Invariants + " with api/policy/testdata/permit-all.cedar: ok",
 		"cedar: run-tests api/policy/testdata/permit-all.tests.json: ok",
+		"cedar: format api/policy/core.cedar: ok",
+		"cedar: validate " + Invariants + " with api/policy/core.cedar: ok",
+		"cedar: run-tests api/policy/core.tests.json: ok",
 	} {
 		if !strings.Contains(out, want+"\n") {
 			t.Errorf("Check() output does not have %q:\n%s", want, out)

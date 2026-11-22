@@ -19,8 +19,8 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
-// want is the catalog of decision 0136: Cedar type, keys and source of each
-// fact, by name.
+// want is the catalog of decision 0136, with questions.open of decision
+// 0171: Cedar type, keys and source of each fact, by name.
 var want = map[string]struct {
 	cedarType string
 	keys      []string
@@ -42,6 +42,7 @@ var want = map[string]struct {
 	"head.state":         {"Record", []string{"change"}, factsv1.Source_SOURCE_MACHINE},
 	"outside.checks":     {"Set<String>", []string{"head_commit"}, factsv1.Source_SOURCE_MACHINE},
 	"overrides":          {"Set<String>", []string{"plan", "tree"}, factsv1.Source_SOURCE_PERSON},
+	"questions.open":     {"Long", []string{"plan", "invocation"}, factsv1.Source_SOURCE_MACHINE},
 }
 
 func TestCatalogIsTheV1Catalog(t *testing.T) {
@@ -54,7 +55,7 @@ func TestCatalogIsTheV1Catalog(t *testing.T) {
 		names = append(names, f.Name)
 		w, ok := want[f.Name]
 		if !ok {
-			t.Errorf("%s is not a fact of decision 0136", f.Name)
+			t.Errorf("%s is not a fact of decisions 0136 and 0171", f.Name)
 			continue
 		}
 		if f.CedarType != w.cedarType || f.Source != w.source || !slices.Equal(f.Keys, w.keys) {
@@ -65,11 +66,30 @@ func TestCatalogIsTheV1Catalog(t *testing.T) {
 			t.Errorf("%s: producer %q, value field %q", f.Name, f.Producer, f.Value)
 		}
 	}
-	if len(names) != len(want) {
-		t.Errorf("the catalog has %d facts %q, want the %d of decision 0136", len(names), names, len(want))
+	// The 16 facts of decision 0136 and questions.open (decision 0171),
+	// within the budget of 20 (decision 0017).
+	if len(names) != 17 || len(names) != len(want) || len(names) > Budget {
+		t.Errorf("the catalog has %d facts %q, want the 17 of decisions 0136 and 0171", len(names), names)
 	}
 	if !slices.IsSorted(names) {
 		t.Errorf("Catalog() is not sorted by name: %q", names)
+	}
+}
+
+// TestQuestionsOpenIsProducedFromTheInvocationResult checks that the
+// planning output in invocation.result gives the open questions (decision
+// 0171).
+func TestQuestionsOpenIsProducedFromTheInvocationResult(t *testing.T) {
+	catalog, err := Catalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(catalog, func(f Fact) bool { return f.Name == "questions.open" })
+	if i < 0 {
+		t.Fatal("the catalog has no questions.open")
+	}
+	if got := catalog[i].Producer; got != "invocation.result" {
+		t.Errorf("questions.open: producer %q, want invocation.result", got)
 	}
 }
 

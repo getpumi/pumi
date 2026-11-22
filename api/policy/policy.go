@@ -17,6 +17,15 @@ var Schema string
 //go:embed invariants.cedar
 var Invariants string
 
+// Core are the core policies of the workflow actions, core.cedar: the
+// permits that let the kernel escalate, retry, advance, resume and ask, and
+// the forbid policies of the retry limit and of ask (decisions 0169 to
+// 0171). The control plane adds them, with the invariants, to every policy
+// set.
+//
+//go:embed core.cedar
+var Core string
+
 // Caps are hard caps on usage. They are the only floor under every profile
 // (decision 0012).
 type Caps struct {
@@ -81,7 +90,7 @@ type Setting struct {
 // the control plane and the kernel, not by a policy.
 func Settings() []Setting {
 	return []Setting{
-		{"maxAttempts", "Long", "The attempts a gate gets before it escalates to a person (decision 0044)."},
+		{"maxAttempts", "Long", "The attempts a gate gets before it escalates to a person, set for each gate; a retry reads the setting of the gate it retries (decisions 0044 and 0169)."},
 		{"outsideChecksEnforced", "Set<String>", "The required outside checks whose response is enforce: checks Pumi does not run that must pass on the head commit (decision 0140)."},
 		{"outsideChecksWarned", "Set<String>", "The required outside checks whose response is warn (decision 0140)."},
 		{"reviewers", "Long", "The independent passing verdicts a model-judgment gate needs (decision 0138)."},

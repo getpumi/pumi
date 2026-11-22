@@ -123,6 +123,9 @@ var extensionStyles = map[string]Style{
 	".cedarschema": Slash,
 	// The Cedar policies in the api module (decision 0142).
 	".cedar": Slash,
+	// The workflow file and its test fixtures, in protobuf text format
+	// (decision 0167).
+	".txtpb": Hash,
 	// go.sum and the tools' .sum files are written by the go command.
 	".sum": Exempt,
 	// JSON has no comments, and the files in .pumi/ are plain JSON

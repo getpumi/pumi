@@ -5,6 +5,8 @@ package policy
 
 import (
 	_ "embed" // for the schema
+	"regexp"
+	"slices"
 )
 
 // Schema is the Cedar schema, pumi.cedarschema.
@@ -97,4 +99,32 @@ func Settings() []Setting {
 		{"usageBudget", "{costMicrodollars: Long, seconds: Long, tokens: Long}", "The gate's token, cost and time budget, under the hard caps (decision 0044)."},
 		{"warningsCap", "Long", "The open warnings before warned gates enforce again (decision 0044)."},
 	}
+}
+
+// actionDecl matches the declaration of an action in the schema, which
+// pumi.cedarschema writes one to a line as "action <name> appliesTo {".
+var actionDecl = regexp.MustCompile(`(?m)^\s*action\s+([A-Za-z_][A-Za-z0-9_]*)\s+appliesTo\b`)
+
+// Actions returns the names of the actions that the schema declares,
+// sorted. The workflow loader refuses a transition guarded by any other
+// name (decision 0168). The control plane's tests check the list against
+// the schema as cedar-go reads it.
+func Actions() []string {
+	names := []string{}
+	for _, m := range actionDecl.FindAllStringSubmatch(Schema, -1) {
+		names = append(names, m[1])
+	}
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
+// AlwaysAllowed returns the actions that are always allowed for the kernel
+// unless an invariant forbids it, sorted: each reads no facts, and a core
+// policy permits it for the kernel. They are escalate (core.escalate,
+// decision 0169) and cancel (core.cancel, decision 0177). The workflow
+// loader requires the last transition of each trigger to be guarded by one
+// of them, so that a plan never has no move (decision 0169). It returns a
+// new list each time.
+func AlwaysAllowed() []string {
+	return []string{"cancel", "escalate"}
 }

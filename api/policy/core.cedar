@@ -15,6 +15,16 @@ permit (
   resource
 );
 
+// The kernel cancels a plan on cancel.requested, whose cancel the control
+// plane already allowed for the person who asked when it was appended.
+// cancel reads no facts, so it is always allowed as well (decision 0177).
+@id("core.cancel")
+permit (
+  principal is Pumi::Kernel,
+  action == Pumi::Action::"cancel",
+  resource
+);
+
 // The kernel retries a gate, advances a plan to the next stage, resumes it
 // after a person answered, and asks for a second opinion.
 @id("core.workflow-actions")

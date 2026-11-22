@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# "planning-escalated" has no entry.
+name: "small"
+version: "1"
+initial: "planning"
+
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+states {
+  name: "planning"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    task: "plan"
+    output_message: "pumi.workflow.v1.PlanningOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "review"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "planning-escalated"
+  parent: "active"
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "review"
+  parent: "active"
+  gate: "planReview"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_HARNESS
+    task: "review-plan"
+    output_message: "pumi.workflow.v1.SecondOpinion"
+  }
+  transitions {
+    trigger { result {} }
+    target: "done"
+    action: "planReview"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { result {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "review-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "done"
+    action: "planReview"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "review-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "done"
+  final {}
+}
+
+states {
+  name: "cancelled"
+  final {}
+}

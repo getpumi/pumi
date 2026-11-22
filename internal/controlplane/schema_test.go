@@ -271,3 +271,53 @@ func TestTheValidatorUsesTheSchema(t *testing.T) {
 		t.Error("a policy that reads a fact merge does not declare passed validation")
 	}
 }
+
+func TestActionsOfTheAPIAreTheSchemasActions(t *testing.T) {
+	r := resolvedSchema(t)
+	want := []string{}
+	for uid := range r.Actions {
+		want = append(want, string(uid.ID))
+	}
+	sort.Strings(want)
+	if got := policy.Actions(); !slices.Equal(got, want) {
+		t.Errorf("policy.Actions() = %q, want the schema's actions %q", got, want)
+	}
+}
+
+func TestTheAlwaysAllowedActionsAreAllowedForTheKernel(t *testing.T) {
+	// The workflow loader requires the last transition of each trigger to
+	// guard with an action of policy.AlwaysAllowed (decision 0169), so each
+	// must read no facts and be allowed for the kernel by the core and the
+	// invariants alone (decision 0177).
+	d, err := NewDecider(policy.Schema, policyFiles(Config{})...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctxs := contexts(t)
+	for _, a := range policy.AlwaysAllowed() {
+		if attrs := ctxs[a]; len(attrs) != 0 {
+			t.Errorf("%s reads %d context attributes, want none", a, len(attrs))
+		}
+		got := d.Decide(Request{
+			Principal: cedar.NewEntityUID("Pumi::Kernel", "kernel"),
+			Action:    actionUID(a),
+			Resource:  cedar.NewEntityUID("Pumi::Plan", "plan-a"),
+			Context:   cedar.NewRecord(nil),
+			Entities: cedar.EntityMap{
+				cedar.NewEntityUID("Pumi::Kernel", "kernel"): {UID: cedar.NewEntityUID("Pumi::Kernel", "kernel")},
+				cedar.NewEntityUID("Pumi::Plan", "plan-a"): {
+					UID:        cedar.NewEntityUID("Pumi::Plan", "plan-a"),
+					Attributes: cedar.NewRecord(cedar.RecordMap{"tree": cedar.String("t1")}),
+					Parents:    cedar.NewEntityUIDSet(cedar.NewEntityUID("Pumi::Project", "pumi")),
+				},
+				cedar.NewEntityUID("Pumi::Project", "pumi"): {
+					UID:        cedar.NewEntityUID("Pumi::Project", "pumi"),
+					Attributes: cedar.NewRecord(cedar.RecordMap{"protectedPaths": cedar.NewSet()}),
+				},
+			},
+		})
+		if !got.Allow {
+			t.Errorf("%s for the kernel with only the core and the invariants: denied (%q, %q), want allowed", a, got.DeterminingPolicies, got.Reasons)
+		}
+	}
+}

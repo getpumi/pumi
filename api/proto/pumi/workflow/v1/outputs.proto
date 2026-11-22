@@ -5,6 +5,8 @@ syntax = "proto3";
 
 package pumi.workflow.v1;
 
+import "pumi/facts/v1/code.proto";
+
 // PlanningOutput is the structured output of the planning stage of the first
 // workflow (decision 0171): the plan, the paths it will change, and any open
 // questions, each with the agent's own answer. The questions.open fact is
@@ -46,4 +48,31 @@ message SecondOpinion {
 
   // The answers, one for each question.
   repeated Answer answers = 1;
+}
+
+// ImplementationOutput is the structured output of the implementing stage
+// of the first workflow (decision 0171). The code change is the workspace
+// itself, whose tree the runner computes (decision 0160), so the output
+// only describes it.
+message ImplementationOutput {
+  // What the change does and why, as Markdown, for the people who review
+  // it.
+  string summary = 1;
+}
+
+// CheckingOutput is the structured output of the checking stage of the
+// first workflow (decision 0171): the facts that VERIFY, the path checks,
+// the metrics and DCO produce, which the scope, budgets and DCO gates and
+// the merge read.
+message CheckingOutput {
+  // verify.passed.
+  pumi.facts.v1.VerifyPassed verify_passed = 1;
+  // paths.protected.
+  pumi.facts.v1.PathsProtected paths_protected = 2;
+  // paths.outside.
+  pumi.facts.v1.PathsOutside paths_outside = 3;
+  // budgets.breached.
+  pumi.facts.v1.BudgetsBreached budgets_breached = 4;
+  // dco.signed.
+  pumi.facts.v1.DcoSigned dco_signed = 5;
 }

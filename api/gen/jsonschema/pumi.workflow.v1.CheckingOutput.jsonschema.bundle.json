@@ -1,0 +1,229 @@
+{
+  "$defs": {
+    "pumi.facts.v1.BudgetsBreached.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "BudgetsBreached is budgets.breached: the names of the metrics over the\n profile's thresholds.",
+      "patternProperties": {
+        "^(metrics_adapter_version)$": {
+          "default": "",
+          "description": "The version of the metrics adapter.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "metricsAdapterVersion": {
+          "default": "",
+          "description": "The version of the metrics adapter.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The metric names.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Budgets Breached",
+      "type": "object"
+    },
+    "pumi.facts.v1.DcoSigned.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "DcoSigned is dco.signed: whether every commit has the sign-off the DCO\n check requires.",
+      "patternProperties": {
+        "^(head_commit)$": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "headCommit": {
+          "default": "",
+          "description": "The head commit.",
+          "type": "string"
+        },
+        "value": {
+          "default": false,
+          "description": "Whether the commits are signed off.",
+          "type": "boolean"
+        }
+      },
+      "title": "Dco Signed",
+      "type": "object"
+    },
+    "pumi.facts.v1.PathsOutside.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "PathsOutside is paths.outside: the changed paths outside the plan's\n declared paths.",
+      "patternProperties": {
+        "^(base_tree)$": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "^(head_tree)$": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "baseTree": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "headTree": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        },
+        "plan": {
+          "default": "",
+          "description": "The plan.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The paths.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Paths Outside",
+      "type": "object"
+    },
+    "pumi.facts.v1.PathsProtected.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "PathsProtected is paths.protected: the changed paths that match the\n project's protected patterns.",
+      "patternProperties": {
+        "^(base_tree)$": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "^(head_tree)$": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "baseTree": {
+          "default": "",
+          "description": "The base tree.",
+          "type": "string"
+        },
+        "headTree": {
+          "default": "",
+          "description": "The head tree.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The paths.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Paths Protected",
+      "type": "object"
+    },
+    "pumi.facts.v1.VerifyPassed.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "VerifyPassed is verify.passed: whether VERIFY passed on the tree.",
+      "patternProperties": {
+        "^(gate_version)$": {
+          "default": "",
+          "description": "The version of the gate.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "gateVersion": {
+          "default": "",
+          "description": "The version of the gate.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "default": false,
+          "description": "Whether VERIFY passed.",
+          "type": "boolean"
+        }
+      },
+      "title": "Verify Passed",
+      "type": "object"
+    },
+    "pumi.workflow.v1.CheckingOutput.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "CheckingOutput is the structured output of the checking stage of the\n first workflow (decision 0171): the facts that VERIFY, the path checks,\n the metrics and DCO produce, which the scope, budgets and DCO gates and\n the merge read.",
+      "patternProperties": {
+        "^(budgets_breached)$": {
+          "$ref": "#/$defs/pumi.facts.v1.BudgetsBreached.jsonschema.json",
+          "description": "budgets.breached."
+        },
+        "^(dco_signed)$": {
+          "$ref": "#/$defs/pumi.facts.v1.DcoSigned.jsonschema.json",
+          "description": "dco.signed."
+        },
+        "^(paths_outside)$": {
+          "$ref": "#/$defs/pumi.facts.v1.PathsOutside.jsonschema.json",
+          "description": "paths.outside."
+        },
+        "^(paths_protected)$": {
+          "$ref": "#/$defs/pumi.facts.v1.PathsProtected.jsonschema.json",
+          "description": "paths.protected."
+        },
+        "^(verify_passed)$": {
+          "$ref": "#/$defs/pumi.facts.v1.VerifyPassed.jsonschema.json",
+          "description": "verify.passed."
+        }
+      },
+      "properties": {
+        "budgetsBreached": {
+          "$ref": "#/$defs/pumi.facts.v1.BudgetsBreached.jsonschema.json",
+          "description": "budgets.breached."
+        },
+        "dcoSigned": {
+          "$ref": "#/$defs/pumi.facts.v1.DcoSigned.jsonschema.json",
+          "description": "dco.signed."
+        },
+        "pathsOutside": {
+          "$ref": "#/$defs/pumi.facts.v1.PathsOutside.jsonschema.json",
+          "description": "paths.outside."
+        },
+        "pathsProtected": {
+          "$ref": "#/$defs/pumi.facts.v1.PathsProtected.jsonschema.json",
+          "description": "paths.protected."
+        },
+        "verifyPassed": {
+          "$ref": "#/$defs/pumi.facts.v1.VerifyPassed.jsonschema.json",
+          "description": "verify.passed."
+        }
+      },
+      "title": "Checking Output",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.CheckingOutput.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.CheckingOutput.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

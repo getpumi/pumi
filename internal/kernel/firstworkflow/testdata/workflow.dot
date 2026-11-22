@@ -1,0 +1,127 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+// The state machine of the first workflow, written by the test
+// TestTheGraphIsCurrent with -update, so that a change to the workflow
+// shows up as a diff of this graph.
+digraph {
+	compound=true;
+	node [shape=box, style=rounded];
+	rankdir="LR";
+
+
+	legend [shape=none, label="🔄 Reentry\l"];
+
+	init [label="", shape=point];
+	init -> spec;
+
+	active [label="active"];
+	subgraph cluster_active {
+		label="Substates of\nactive";
+		style="dashed";
+		spec [label="spec"];
+		"spec-escalated" [label="spec-escalated"];
+		planning [label="planning"];
+		"planning-escalated" [label="planning-escalated"];
+		"second-opinion" [label="second-opinion"];
+		"second-opinion-escalated" [label="second-opinion-escalated"];
+		"plan-review" [label="plan-review"];
+		"plan-review-escalated" [label="plan-review-escalated"];
+		implementing [label="implementing"];
+		"implementing-escalated" [label="implementing-escalated"];
+		checking [label="checking"];
+		"checking-escalated" [label="checking-escalated"];
+		scope [label="scope"];
+		"scope-escalated" [label="scope-escalated"];
+		budgets [label="budgets"];
+		"budgets-escalated" [label="budgets-escalated"];
+		dco [label="dco"];
+		"dco-escalated" [label="dco-escalated"];
+		"outside-checks" [label="outside-checks"];
+		"outside-checks-escalated" [label="outside-checks-escalated"];
+		"conformance-audit" [label="conformance-audit"];
+		"conformance-audit-escalated" [label="conformance-audit-escalated"];
+		"awaiting-approval" [label="awaiting-approval"];
+		"awaiting-approval-escalated" [label="awaiting-approval-escalated"];
+		"ready-to-merge" [label="ready-to-merge"];
+		"ready-to-merge-escalated" [label="ready-to-merge-escalated"];
+		merging [label="merging"];
+		"merging-escalated" [label="merging-escalated"];
+	}
+	cancelled [label="cancelled"];
+	merged [label="merged"];
+	active -> cancelled [label="cancel.requested / cancel"];
+	"awaiting-approval" -> "awaiting-approval-escalated" [label="approval.recorded / escalate"];
+	"awaiting-approval" -> "ready-to-merge" [label="approval.recorded / mergeApproval"];
+	"awaiting-approval" -> implementing [label="approval.recorded / resume"];
+	"awaiting-approval-escalated" -> "awaiting-approval-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"awaiting-approval-escalated" -> implementing [label="escalation.resolved / resume"];
+	"awaiting-approval-escalated" -> "ready-to-merge" [label="override.recorded / mergeApproval"];
+	budgets -> dco [label="entered / budgets"];
+	budgets -> "budgets-escalated" [label="entered / escalate"];
+	budgets -> implementing [label="entered / retry"];
+	"budgets-escalated" -> "budgets-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"budgets-escalated" -> implementing [label="escalation.resolved / resume"];
+	"budgets-escalated" -> dco [label="override.recorded / budgets"];
+	checking -> scope [label="result / advance"];
+	checking -> "checking-escalated" [label="result / escalate"];
+	"checking-escalated" -> "checking-escalated" [label="🔄 escalation.resolved / escalate"];
+	"checking-escalated" -> checking [label="escalation.resolved / resume"];
+	"conformance-audit" -> "awaiting-approval" [label="result / conformance"];
+	"conformance-audit" -> "conformance-audit-escalated" [label="result / escalate"];
+	"conformance-audit" -> implementing [label="result / retry"];
+	"conformance-audit-escalated" -> "conformance-audit-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"conformance-audit-escalated" -> implementing [label="escalation.resolved / resume"];
+	"conformance-audit-escalated" -> "awaiting-approval" [label="override.recorded / conformance"];
+	dco -> "outside-checks" [label="entered / dco"];
+	dco -> "dco-escalated" [label="entered / escalate"];
+	dco -> implementing [label="entered / retry"];
+	"dco-escalated" -> "dco-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"dco-escalated" -> implementing [label="escalation.resolved / resume"];
+	"dco-escalated" -> "outside-checks" [label="override.recorded / dco"];
+	implementing -> checking [label="result / advance"];
+	implementing -> "implementing-escalated" [label="result / escalate"];
+	"implementing-escalated" -> "implementing-escalated" [label="🔄 escalation.resolved / escalate"];
+	"implementing-escalated" -> implementing [label="escalation.resolved / resume"];
+	merging -> merged [label="result / advance"];
+	merging -> "merging-escalated" [label="result / escalate"];
+	"merging-escalated" -> "merging-escalated" [label="🔄 escalation.resolved / escalate"];
+	"merging-escalated" -> "ready-to-merge" [label="escalation.resolved / resume"];
+	"outside-checks" -> "outside-checks-escalated" [label="entered / escalate"];
+	"outside-checks" -> "conformance-audit" [label="entered / outsideChecks"];
+	"outside-checks-escalated" -> "outside-checks-escalated" [label="🔄 check.ingested / escalate\l🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"outside-checks-escalated" -> "conformance-audit" [label="check.ingested / outsideChecks\loverride.recorded / outsideChecks\l"];
+	"outside-checks-escalated" -> implementing [label="escalation.resolved / resume"];
+	"plan-review" -> "plan-review-escalated" [label="result / escalate"];
+	"plan-review" -> implementing [label="result / planReview"];
+	"plan-review" -> planning [label="result / retry"];
+	"plan-review-escalated" -> "plan-review-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"plan-review-escalated" -> planning [label="escalation.resolved / resume"];
+	"plan-review-escalated" -> implementing [label="override.recorded / planReview"];
+	planning -> "plan-review" [label="result / advance"];
+	planning -> "second-opinion" [label="result / ask"];
+	planning -> "planning-escalated" [label="result / escalate"];
+	"planning-escalated" -> "planning-escalated" [label="🔄 escalation.resolved / escalate"];
+	"planning-escalated" -> planning [label="escalation.resolved / resume"];
+	"ready-to-merge" -> "ready-to-merge-escalated" [label="entered / escalate"];
+	"ready-to-merge" -> merging [label="entered / merge"];
+	"ready-to-merge" -> implementing [label="entered / retry"];
+	"ready-to-merge-escalated" -> "ready-to-merge-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"ready-to-merge-escalated" -> implementing [label="escalation.resolved / resume"];
+	"ready-to-merge-escalated" -> merging [label="override.recorded / merge"];
+	scope -> "scope-escalated" [label="entered / escalate"];
+	scope -> implementing [label="entered / retry"];
+	scope -> budgets [label="entered / scope"];
+	"scope-escalated" -> "scope-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"scope-escalated" -> implementing [label="escalation.resolved / resume"];
+	"scope-escalated" -> budgets [label="override.recorded / scope"];
+	"second-opinion" -> planning [label="result / ambiguity"];
+	"second-opinion" -> "second-opinion-escalated" [label="result / escalate"];
+	"second-opinion-escalated" -> "second-opinion-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"second-opinion-escalated" -> planning [label="escalation.resolved / resume\loverride.recorded / ambiguity\l"];
+	spec -> "spec-escalated" [label="result / escalate"];
+	spec -> planning [label="result / spec"];
+	"spec-escalated" -> "spec-escalated" [label="🔄 escalation.resolved / escalate\l🔄 override.recorded / escalate\l"];
+	"spec-escalated" -> spec [label="escalation.resolved / resume"];
+	"spec-escalated" -> planning [label="override.recorded / spec"];
+}

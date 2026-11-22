@@ -31,6 +31,7 @@ func TestClassify(t *testing.T) {
 		{"api/go.mod", Slash},
 		{"tools/buf.mod", Slash},
 		{".devcontainer/devcontainer.json", Slash},
+		{"internal/kernel/firstworkflow/testdata/workflow.dot", Slash},
 		{"Makefile", Hash},
 		{".devcontainer/Dockerfile", Hash},
 		{".gitignore", Hash},

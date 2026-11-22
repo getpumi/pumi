@@ -6,6 +6,9 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"getpumi.dev/pumi/api/events"
 
 	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 	"github.com/qmuntal/stateless"
@@ -21,11 +24,29 @@ type Machine struct {
 	load func(context.Context) (string, error)
 }
 
+// firing is the internal trigger of one transition in the stateless
+// machine: the transition's index, which makes it unique, and a label for
+// the graph.
+type firing struct {
+	index int
+	label string
+}
+
+// String returns the label, which the graph shows on the transition.
+func (f firing) String() string { return f.label }
+
+// firingOf returns the internal trigger of tr. Its label is the trigger,
+// with an event type shortened by its dev.getpumi. prefix, and the Cedar
+// action, such as "result / advance".
+func firingOf(tr Transition) firing {
+	return firing{index: tr.Index, label: strings.TrimPrefix(string(tr.Trigger), events.TypePrefix) + " / " + tr.Action}
+}
+
 // NewMachine returns a machine for one plan on the workflow, whose state
 // load reads and store writes. The stateless machine has each superstate
 // as a superstate of its substates, one internal trigger for each
-// transition, which is the transition's index, and no guards, so that it
-// never sees two allowed transitions at once (decision 0169).
+// transition, which is unique by the transition's index, and no guards, so
+// that it never sees two allowed transitions at once (decision 0169).
 func (w *Workflow) NewMachine(load func(context.Context) (string, error), store func(context.Context, string) error) *Machine {
 	sm := stateless.NewStateMachineWithExternalStorage(
 		func(ctx context.Context) (stateless.State, error) { return load(ctx) },
@@ -46,9 +67,9 @@ func (w *Workflow) NewMachine(load func(context.Context) (string, error), store 
 		for _, i := range w.own[s.GetName()] {
 			tr := w.transitions[i]
 			if tr.Target == s.GetName() {
-				cfg.PermitReentry(i)
+				cfg.PermitReentry(firingOf(tr))
 			} else {
-				cfg.Permit(i, tr.Target)
+				cfg.Permit(firingOf(tr), tr.Target)
 			}
 		}
 	}
@@ -124,8 +145,21 @@ func (m *Machine) Fire(ctx context.Context, index int) error {
 	if !found {
 		return fmt.Errorf("transition %d, of state %q, does not apply in the state %q", index, tr.State, s.GetName())
 	}
-	if err := m.sm.FireCtx(ctx, index); err != nil {
+	if err := m.sm.FireCtx(ctx, firingOf(tr)); err != nil {
 		return fmt.Errorf("cannot fire transition %d of state %q to %q: %w", index, tr.State, tr.Target, err)
 	}
 	return nil
+}
+
+// Graph returns the workflow's state machine in the DOT language of
+// Graphviz, as stateless writes it, with the initial state marked. Each
+// transition is labeled with its trigger and the Cedar action that guards
+// it, so that a change to the workflow shows up as a diff of the graph.
+func (w *Workflow) Graph() string {
+	initial := w.def.GetInitial()
+	m := w.NewMachine(
+		func(context.Context) (string, error) { return initial, nil },
+		func(context.Context, string) error { return nil },
+	)
+	return m.sm.ToGraph()
 }

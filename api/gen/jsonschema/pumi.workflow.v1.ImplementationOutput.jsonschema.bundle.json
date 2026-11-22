@@ -1,0 +1,21 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.ImplementationOutput.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ImplementationOutput is the structured output of the implementing stage\n of the first workflow (decision 0171). The code change is the workspace\n itself, whose tree the runner computes (decision 0160), so the output\n only describes it.",
+      "properties": {
+        "summary": {
+          "default": "",
+          "description": "What the change does and why, as Markdown, for the people who review\n it.",
+          "type": "string"
+        }
+      },
+      "title": "Implementation Output",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.ImplementationOutput.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.ImplementationOutput.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -10,6 +10,7 @@
 package workflowv1
 
 import (
+	v1 "getpumi.dev/pumi/api/gen/pumi/facts/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -142,6 +143,141 @@ func (x *SecondOpinion) GetAnswers() []*SecondOpinion_Answer {
 	return nil
 }
 
+// ImplementationOutput is the structured output of the implementing stage
+// of the first workflow (decision 0171). The code change is the workspace
+// itself, whose tree the runner computes (decision 0160), so the output
+// only describes it.
+type ImplementationOutput struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the change does and why, as Markdown, for the people who review
+	// it.
+	Summary       string `protobuf:"bytes,1,opt,name=summary,proto3" json:"summary,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImplementationOutput) Reset() {
+	*x = ImplementationOutput{}
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImplementationOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImplementationOutput) ProtoMessage() {}
+
+func (x *ImplementationOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImplementationOutput.ProtoReflect.Descriptor instead.
+func (*ImplementationOutput) Descriptor() ([]byte, []int) {
+	return file_pumi_workflow_v1_outputs_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ImplementationOutput) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+// CheckingOutput is the structured output of the checking stage of the
+// first workflow (decision 0171): the facts that VERIFY, the path checks,
+// the metrics and DCO produce, which the scope, budgets and DCO gates and
+// the merge read.
+type CheckingOutput struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// verify.passed.
+	VerifyPassed *v1.VerifyPassed `protobuf:"bytes,1,opt,name=verify_passed,json=verifyPassed,proto3" json:"verify_passed,omitempty"`
+	// paths.protected.
+	PathsProtected *v1.PathsProtected `protobuf:"bytes,2,opt,name=paths_protected,json=pathsProtected,proto3" json:"paths_protected,omitempty"`
+	// paths.outside.
+	PathsOutside *v1.PathsOutside `protobuf:"bytes,3,opt,name=paths_outside,json=pathsOutside,proto3" json:"paths_outside,omitempty"`
+	// budgets.breached.
+	BudgetsBreached *v1.BudgetsBreached `protobuf:"bytes,4,opt,name=budgets_breached,json=budgetsBreached,proto3" json:"budgets_breached,omitempty"`
+	// dco.signed.
+	DcoSigned     *v1.DcoSigned `protobuf:"bytes,5,opt,name=dco_signed,json=dcoSigned,proto3" json:"dco_signed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckingOutput) Reset() {
+	*x = CheckingOutput{}
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckingOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckingOutput) ProtoMessage() {}
+
+func (x *CheckingOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckingOutput.ProtoReflect.Descriptor instead.
+func (*CheckingOutput) Descriptor() ([]byte, []int) {
+	return file_pumi_workflow_v1_outputs_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CheckingOutput) GetVerifyPassed() *v1.VerifyPassed {
+	if x != nil {
+		return x.VerifyPassed
+	}
+	return nil
+}
+
+func (x *CheckingOutput) GetPathsProtected() *v1.PathsProtected {
+	if x != nil {
+		return x.PathsProtected
+	}
+	return nil
+}
+
+func (x *CheckingOutput) GetPathsOutside() *v1.PathsOutside {
+	if x != nil {
+		return x.PathsOutside
+	}
+	return nil
+}
+
+func (x *CheckingOutput) GetBudgetsBreached() *v1.BudgetsBreached {
+	if x != nil {
+		return x.BudgetsBreached
+	}
+	return nil
+}
+
+func (x *CheckingOutput) GetDcoSigned() *v1.DcoSigned {
+	if x != nil {
+		return x.DcoSigned
+	}
+	return nil
+}
+
 // Question is one open question.
 type PlanningOutput_Question struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -158,7 +294,7 @@ type PlanningOutput_Question struct {
 
 func (x *PlanningOutput_Question) Reset() {
 	*x = PlanningOutput_Question{}
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[2]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -170,7 +306,7 @@ func (x *PlanningOutput_Question) String() string {
 func (*PlanningOutput_Question) ProtoMessage() {}
 
 func (x *PlanningOutput_Question) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[2]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +356,7 @@ type SecondOpinion_Answer struct {
 
 func (x *SecondOpinion_Answer) Reset() {
 	*x = SecondOpinion_Answer{}
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[3]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -232,7 +368,7 @@ func (x *SecondOpinion_Answer) String() string {
 func (*SecondOpinion_Answer) ProtoMessage() {}
 
 func (x *SecondOpinion_Answer) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[3]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -266,7 +402,7 @@ var File_pumi_workflow_v1_outputs_proto protoreflect.FileDescriptor
 
 const file_pumi_workflow_v1_outputs_proto_rawDesc = "" +
 	"\n" +
-	"\x1epumi/workflow/v1/outputs.proto\x12\x10pumi.workflow.v1\"\xe7\x01\n" +
+	"\x1epumi/workflow/v1/outputs.proto\x12\x10pumi.workflow.v1\x1a\x18pumi/facts/v1/code.proto\"\xe7\x01\n" +
 	"\x0ePlanningOutput\x12\x12\n" +
 	"\x04plan\x18\x01 \x01(\tR\x04plan\x12%\n" +
 	"\x0edeclared_paths\x18\x02 \x03(\tR\rdeclaredPaths\x12G\n" +
@@ -280,7 +416,16 @@ const file_pumi_workflow_v1_outputs_proto_rawDesc = "" +
 	"\x06Answer\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x16\n" +
-	"\x06answer\x18\x02 \x01(\tR\x06answerB\xbc\x01\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\"0\n" +
+	"\x14ImplementationOutput\x12\x18\n" +
+	"\asummary\x18\x01 \x01(\tR\asummary\"\xe0\x02\n" +
+	"\x0eCheckingOutput\x12@\n" +
+	"\rverify_passed\x18\x01 \x01(\v2\x1b.pumi.facts.v1.VerifyPassedR\fverifyPassed\x12F\n" +
+	"\x0fpaths_protected\x18\x02 \x01(\v2\x1d.pumi.facts.v1.PathsProtectedR\x0epathsProtected\x12@\n" +
+	"\rpaths_outside\x18\x03 \x01(\v2\x1b.pumi.facts.v1.PathsOutsideR\fpathsOutside\x12I\n" +
+	"\x10budgets_breached\x18\x04 \x01(\v2\x1e.pumi.facts.v1.BudgetsBreachedR\x0fbudgetsBreached\x127\n" +
+	"\n" +
+	"dco_signed\x18\x05 \x01(\v2\x18.pumi.facts.v1.DcoSignedR\tdcoSignedB\xbc\x01\n" +
 	"\x14com.pumi.workflow.v1B\fOutputsProtoP\x01Z4getpumi.dev/pumi/api/gen/pumi/workflow/v1;workflowv1\xa2\x02\x03PWX\xaa\x02\x10Pumi.Workflow.V1\xca\x02\x10Pumi\\Workflow\\V1\xe2\x02\x1cPumi\\Workflow\\V1\\GPBMetadata\xea\x02\x12Pumi::Workflow::V1b\x06proto3"
 
 var (
@@ -295,21 +440,33 @@ func file_pumi_workflow_v1_outputs_proto_rawDescGZIP() []byte {
 	return file_pumi_workflow_v1_outputs_proto_rawDescData
 }
 
-var file_pumi_workflow_v1_outputs_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pumi_workflow_v1_outputs_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_pumi_workflow_v1_outputs_proto_goTypes = []any{
 	(*PlanningOutput)(nil),          // 0: pumi.workflow.v1.PlanningOutput
 	(*SecondOpinion)(nil),           // 1: pumi.workflow.v1.SecondOpinion
-	(*PlanningOutput_Question)(nil), // 2: pumi.workflow.v1.PlanningOutput.Question
-	(*SecondOpinion_Answer)(nil),    // 3: pumi.workflow.v1.SecondOpinion.Answer
+	(*ImplementationOutput)(nil),    // 2: pumi.workflow.v1.ImplementationOutput
+	(*CheckingOutput)(nil),          // 3: pumi.workflow.v1.CheckingOutput
+	(*PlanningOutput_Question)(nil), // 4: pumi.workflow.v1.PlanningOutput.Question
+	(*SecondOpinion_Answer)(nil),    // 5: pumi.workflow.v1.SecondOpinion.Answer
+	(*v1.VerifyPassed)(nil),         // 6: pumi.facts.v1.VerifyPassed
+	(*v1.PathsProtected)(nil),       // 7: pumi.facts.v1.PathsProtected
+	(*v1.PathsOutside)(nil),         // 8: pumi.facts.v1.PathsOutside
+	(*v1.BudgetsBreached)(nil),      // 9: pumi.facts.v1.BudgetsBreached
+	(*v1.DcoSigned)(nil),            // 10: pumi.facts.v1.DcoSigned
 }
 var file_pumi_workflow_v1_outputs_proto_depIdxs = []int32{
-	2, // 0: pumi.workflow.v1.PlanningOutput.questions:type_name -> pumi.workflow.v1.PlanningOutput.Question
-	3, // 1: pumi.workflow.v1.SecondOpinion.answers:type_name -> pumi.workflow.v1.SecondOpinion.Answer
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	4,  // 0: pumi.workflow.v1.PlanningOutput.questions:type_name -> pumi.workflow.v1.PlanningOutput.Question
+	5,  // 1: pumi.workflow.v1.SecondOpinion.answers:type_name -> pumi.workflow.v1.SecondOpinion.Answer
+	6,  // 2: pumi.workflow.v1.CheckingOutput.verify_passed:type_name -> pumi.facts.v1.VerifyPassed
+	7,  // 3: pumi.workflow.v1.CheckingOutput.paths_protected:type_name -> pumi.facts.v1.PathsProtected
+	8,  // 4: pumi.workflow.v1.CheckingOutput.paths_outside:type_name -> pumi.facts.v1.PathsOutside
+	9,  // 5: pumi.workflow.v1.CheckingOutput.budgets_breached:type_name -> pumi.facts.v1.BudgetsBreached
+	10, // 6: pumi.workflow.v1.CheckingOutput.dco_signed:type_name -> pumi.facts.v1.DcoSigned
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_pumi_workflow_v1_outputs_proto_init() }
@@ -323,7 +480,7 @@ func file_pumi_workflow_v1_outputs_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_workflow_v1_outputs_proto_rawDesc), len(file_pumi_workflow_v1_outputs_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

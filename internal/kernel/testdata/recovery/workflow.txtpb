@@ -52,6 +52,11 @@ states {
     target: "implementing-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
 }
 
 states {
@@ -86,6 +91,11 @@ states {
   }
   transitions {
     trigger { result {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "checking-escalated"
     action: "escalate"
   }
@@ -133,6 +143,11 @@ states {
   }
   transitions {
     trigger { in_doubt {} }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "merging-escalated"
     action: "escalate"
   }

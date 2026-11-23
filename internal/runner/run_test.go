@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
@@ -206,6 +207,12 @@ type fakeService struct {
 	cancelAt int
 	// heartbeatErr is the error of every Heartbeat when set.
 	heartbeatErr error
+	// logFailures is how many of the first SendLog calls fail because the
+	// control plane cannot be reached.
+	logFailures int
+	// leaseTimeout is the lease timeout that each heartbeat gives;
+	// testLeaseTimeout when zero.
+	leaseTimeout time.Duration
 	heartbeats   int
 	logs         []byte
 	reports      []*runnerv1.ReportRequest
@@ -235,7 +242,11 @@ func (f *fakeService) Heartbeat(_ context.Context, req *runnerv1.HeartbeatReques
 	if f.heartbeatErr != nil {
 		return nil, f.heartbeatErr
 	}
-	res := &runnerv1.HeartbeatResponse{LeaseTimeout: durationpb.New(testLeaseTimeout)}
+	timeout := f.leaseTimeout
+	if timeout == 0 {
+		timeout = testLeaseTimeout
+	}
+	res := &runnerv1.HeartbeatResponse{LeaseTimeout: durationpb.New(timeout)}
 	if f.heartbeats == f.cancelAt {
 		res.Cancel = &runnerv1.HeartbeatResponse_Cancel{RequestedBy: "/person/michael"}
 	}
@@ -254,6 +265,10 @@ func (f *fakeService) SendLog(_ context.Context, req *runnerv1.SendLogRequest) (
 	defer f.mu.Unlock()
 	if req.GetInvocation() != "plan-1/1" || req.GetLeaseNumber() != 4 {
 		return nil, fmt.Errorf("a log batch of %s with the lease %d", req.GetInvocation(), req.GetLeaseNumber())
+	}
+	if f.logFailures > 0 {
+		f.logFailures--
+		return nil, unreachable
 	}
 	f.logs = append(f.logs, req.GetOutput()...)
 	return &runnerv1.SendLogResponse{}, nil
@@ -587,7 +602,7 @@ func TestStoppingTheRunnerStopsTheAdapterWithoutAReport(t *testing.T) {
 
 func TestLosingTheLeaseStopsTheAdapterWithoutAReport(t *testing.T) {
 	f := newFixture(t, "stop")
-	f.service.heartbeatErr = errors.New("the lease is not current")
+	f.service.heartbeatErr = connect.NewError(connect.CodeAborted, "the lease is not current")
 	ran, err := RunOne(t.Context(), f.cfg)
 	if !ran || err == nil || !strings.Contains(err.Error(), "the lease is not current") {
 		t.Errorf("RunOne = %v, %v; want true and the heartbeat's error", ran, err)
@@ -596,6 +611,144 @@ func TestLosingTheLeaseStopsTheAdapterWithoutAReport(t *testing.T) {
 		t.Errorf("the runner reported %v after it lost the lease", f.service.reports)
 	}
 	f.checkGone(t)
+}
+
+// unreachable is the error of a call of RunnerService that cannot reach
+// the control plane.
+var unreachable = connect.NewError(connect.CodeUnavailable, "the control plane cannot be reached")
+
+// withLimit gives the fixture's invocation a budget with the wall-time
+// limit seconds, and tokens and cost that the adapter's own figures are
+// not.
+func (f *fixture) withLimit(seconds int64) {
+	f.service.claim.Invocation.Budget = &harnessv1.Usage{Tokens: 5_000, CostMicrodollars: 7_000, Seconds: seconds}
+}
+
+// elapsed reports the wall time of RunOne.
+func (f *fixture) timedRunOne(t *testing.T) (*runnerv1.ReportRequest, time.Duration) {
+	t.Helper()
+	start := time.Now()
+	report := f.runOne(t)
+	return report, time.Since(start)
+}
+
+func TestTheWallTimeLimitStopsTheAdapter(t *testing.T) {
+	f := newFixture(t, "stop")
+	f.withLimit(1)
+	report, elapsed := f.timedRunOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_CAP_REACHED {
+		t.Errorf("the outcome is %v, want cap reached (decision 0193); the log is\n%s", report.GetOutcome(), f.service.log())
+	}
+	if elapsed < time.Second {
+		t.Errorf("the runner stopped the adapter after %v, before the limit of 1s", elapsed)
+	}
+	if !strings.Contains(f.service.log(), fakeAdapterPrefix+"standard input closed") {
+		t.Errorf("the adapter did not see standard input close; the log is\n%s", f.service.log())
+	}
+	if !strings.Contains(f.service.log(), runnerPrefix) || !strings.Contains(f.service.log(), "wall-time limit") {
+		t.Errorf("the log does not say that the invocation reached its wall-time limit; it is\n%s", f.service.log())
+	}
+	// The adapter reported its usage, so the tokens and cost are its own;
+	// the seconds are the measured wall time (decision 0204).
+	u := report.GetResult().GetUsage()
+	if u.GetTokens() != 10 || u.GetCostMicrodollars() != 20 {
+		t.Errorf("the usage is %v, want the adapter's tokens and cost", u)
+	}
+	if u.GetSeconds() < 1 || u.GetSeconds() > int64(elapsed/time.Second)+1 {
+		t.Errorf("the usage has %d seconds, want the measured wall time, %v", u.GetSeconds(), elapsed)
+	}
+	if got := f.changed(t, report.GetResult().GetTree()); len(got) != 1 {
+		t.Errorf("the resulting tree changes %q, want the partial change", got)
+	}
+}
+
+func TestAnAdapterKilledAtTheLimitCountsItsWholeBudget(t *testing.T) {
+	f := newFixture(t, "ignore stop")
+	f.withLimit(1)
+	f.cfg.Grace = 500 * time.Millisecond
+	report, elapsed := f.timedRunOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_CAP_REACHED {
+		t.Errorf("the outcome is %v, want cap reached; the log is\n%s", report.GetOutcome(), f.service.log())
+	}
+	if elapsed < time.Second+f.cfg.Grace {
+		t.Errorf("the runner killed the adapter after %v, before the limit and the grace period", elapsed)
+	}
+	// The adapter wrote no result, so the tokens and cost are the budget's
+	// (decision 0204).
+	u := report.GetResult().GetUsage()
+	if u.GetTokens() != 5_000 || u.GetCostMicrodollars() != 7_000 {
+		t.Errorf("the usage is %v, want the tokens and cost of the budget", u)
+	}
+	if u.GetSeconds() < 1 {
+		t.Errorf("the usage has %d seconds, want the measured wall time, %v", u.GetSeconds(), elapsed)
+	}
+	f.checkGone(t)
+}
+
+func TestAnAdapterDoneBeforeTheLimitSucceeds(t *testing.T) {
+	f := newFixture(t, "success")
+	f.withLimit(3_600)
+	report := f.runOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
+		t.Errorf("the outcome is %v, want succeeded; the log is\n%s", report.GetOutcome(), f.service.log())
+	}
+	if u := report.GetResult().GetUsage(); u.GetTokens() != 10 || u.GetCostMicrodollars() != 20 || u.GetSeconds() != 1 {
+		t.Errorf("the usage is %v, want the adapter's", u)
+	}
+}
+
+func TestTheLimitHoldsWhileHeartbeatsFail(t *testing.T) {
+	f := newFixture(t, "stop")
+	// The lease ends 6 s after the claim, which no heartbeat renews, so the
+	// limit of 3 s comes first (decision 0205).
+	f.service.claim.LeaseTimeout = durationpb.New(6 * time.Second)
+	f.service.heartbeatErr = unreachable
+	f.withLimit(3)
+	report, elapsed := f.timedRunOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_CAP_REACHED {
+		t.Errorf("the outcome is %v, want cap reached; the log is\n%s", report.GetOutcome(), f.service.log())
+	}
+	if elapsed < 3*time.Second {
+		t.Errorf("the runner stopped the adapter after %v, before the limit of 3s", elapsed)
+	}
+	if f.service.heartbeats == 0 {
+		t.Error("the runner sent no heartbeat while the adapter ran")
+	}
+}
+
+func TestAnUnreachableControlPlaneStopsTheAdapterWhenTheLeaseEnds(t *testing.T) {
+	f := newFixture(t, "stop")
+	f.service.claim.LeaseTimeout = durationpb.New(time.Second)
+	f.service.heartbeatErr = unreachable
+	start := time.Now()
+	ran, err := RunOne(t.Context(), f.cfg)
+	if !ran || err == nil || !strings.Contains(err.Error(), "lease") {
+		t.Errorf("RunOne = %v, %v; want true and an error that says the lease ended", ran, err)
+	}
+	if elapsed := time.Since(start); elapsed < time.Second {
+		t.Errorf("the runner stopped the adapter after %v, before the lease of 1s ended (decision 0205)", elapsed)
+	}
+	if f.service.heartbeats < 2 {
+		t.Errorf("the runner sent %d heartbeats, want it to go on after the first failed", f.service.heartbeats)
+	}
+	if len(f.service.reports) != 0 {
+		t.Errorf("the runner reported %v after the lease ended", f.service.reports)
+	}
+	f.checkGone(t)
+}
+
+func TestALogBatchThatCannotBeSentGoesAgain(t *testing.T) {
+	f := newFixture(t, "success")
+	f.service.claim.LeaseTimeout = durationpb.New(time.Minute)
+	f.service.leaseTimeout = time.Minute
+	f.service.logFailures = 1
+	report := f.runOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
+		t.Errorf("the outcome is %v, want succeeded; the log is\n%s", report.GetOutcome(), f.service.log())
+	}
+	if log := f.service.log(); !strings.Contains(log, fakeAdapterPrefix+"pid ") || !strings.Contains(log, fakeAdapterPrefix+"invocation ") {
+		t.Errorf("the log lost the batch that could not be sent; it is\n%s", log)
+	}
 }
 
 func TestNoInvocationToClaim(t *testing.T) {

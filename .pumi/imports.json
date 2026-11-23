@@ -15,7 +15,8 @@
       {"module": "connectrpc.com/connect/v2", "reason": "Serves ControlPlaneService with the generated Connect handlers, in-process and over HTTP, and the conformance suite calls it through the generated clients (decisions 0152 and 0161)."}
     ]},
     {"name": "runner", "path": "internal/runner", "modules": [
-      {"module": "google.golang.org/protobuf", "reason": "Copies the invocation document into the harness invocation and reads and writes the adapter's protojson (decisions 0158 and 0160)."}
+      {"module": "google.golang.org/protobuf", "reason": "Copies the invocation document into the harness invocation and reads and writes the adapter's protojson (decisions 0158 and 0160)."},
+      {"module": "connectrpc.com/connect/v2", "reason": "Reads the code of a failed call of RunnerService, to tell a control plane that cannot be reached from a lease that is not current (decision 0205). The generated RunnerService client already links it."}
     ]},
     {"name": "gateway", "path": "internal/gateway", "modules": []},
     {"name": "CLI", "path": "internal/cli", "modules": []}

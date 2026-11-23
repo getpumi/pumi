@@ -525,7 +525,8 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 }
 
 // triggerOf returns the started plan and the trigger of its state that e
-// is, if any (decision 0170): the result of the state's invocation, the
+// is, if any (decision 0170): the result of the state's invocation, or its
+// cap_reached when it reached its wall-time limit (decision 0203), the
 // entry into the state, as the transition.fired that entered it, or an
 // event about the plan from someone other than the kernel. The entry into
 // the initial state is handled when the plan starts. Of a plan that has
@@ -536,7 +537,7 @@ func (k *kernel) triggerOf(e *cloudeventsv1.CloudEvent) (*planRun, workflow.Trig
 	trigger := workflow.Trigger("")
 	switch e.GetType() {
 	case events.TypeInvocationFinished:
-		r, trigger = k.resultOf(e), workflow.Result
+		r, trigger = k.resultOf(e), resultTrigger(e)
 	case events.TypeTransitionFired:
 		r, trigger = k.enteredBy(e), workflow.Entered
 	default:
@@ -548,6 +549,17 @@ func (k *kernel) triggerOf(e *cloudeventsv1.CloudEvent) (*planRun, workflow.Trig
 		return nil, "", false
 	}
 	return r, trigger, true
+}
+
+// resultTrigger returns the trigger that the invocation.finished e is:
+// cap_reached when the runner stopped the invocation at its wall-time
+// limit, and result otherwise (decision 0203).
+func resultTrigger(e *cloudeventsv1.CloudEvent) workflow.Trigger {
+	var f eventsv1.InvocationFinished
+	if unpack(e, &f) == nil && f.GetOutcome() == eventsv1.InvocationFinished_OUTCOME_CAP_REACHED {
+		return workflow.CapReached
+	}
+	return workflow.Result
 }
 
 // resultOf returns the plan whose current invocation the
@@ -787,6 +799,10 @@ func (r *planRun) question(trigger string, denied []string) string {
 		}
 		return fmt.Sprintf("The lease of the invocation %s of the state %s ended with no result, so it may have run, and running it again was denied: %s denied (decisions 0191 and 0201).",
 			r.invocation, r.state, strings.Join(denied, ", then "))
+	}
+	if trigger == string(workflow.CapReached) {
+		return fmt.Sprintf("The invocation %s of the state %s reached its wall-time limit, and the runner stopped it (decisions 0193 and 0203).",
+			r.invocation, r.state)
 	}
 	if len(denied) == 0 {
 		return fmt.Sprintf("The plan escalated from the state %s on %s.", r.state, trigger)

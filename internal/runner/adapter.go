@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"connectrpc.com/connect/v2"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
@@ -31,6 +32,12 @@ type execution struct {
 	waitErr error
 	// cancelled reports whether a heartbeat carried a cancel request.
 	cancelled bool
+	// capped reports whether the runner stopped the adapter at the
+	// invocation's wall-time limit (decision 0193).
+	capped bool
+	// elapsed is the wall time from the start of the adapter until it
+	// exited.
+	elapsed time.Duration
 	// ended is the error that ends the invocation without a report: ctx's
 	// error when the runner stopped, or the error of a call of
 	// RunnerService while the adapter ran.
@@ -61,6 +68,7 @@ func (r *run) execute(ctx context.Context, inv *harnessv1.Invocation) (*executio
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("the adapter could not start: %w", err)
 	}
+	started := time.Now()
 	// Standard input stays open after the line, until the runner asks the
 	// adapter to stop. The write ends when the adapter reads the line or
 	// standard input closes.
@@ -73,6 +81,7 @@ func (r *run) execute(ctx context.Context, inv *harnessv1.Invocation) (*executio
 	go func() { done <- cmd.Wait() }()
 	s := &supervisor{run: r, process: cmd.Process, stdin: stdin, written: written, done: done}
 	ex := s.supervise(ctx)
+	ex.elapsed = time.Since(started)
 	ex.stdout = stdout.Bytes()
 	// The processes that the adapter started and left behind end with it.
 	if err := killGroup(cmd.Process); err != nil {
@@ -98,6 +107,12 @@ type supervisor struct {
 	batches    <-chan time.Time
 	// kill fires when the grace period after the stop request ends.
 	kill <-chan time.Time
+	// limit fires when the wall time reaches the budget's seconds; nil
+	// when the budget sets none.
+	limit <-chan time.Time
+	// leaseEnd is when the lease ends unless a heartbeat renews it,
+	// counted from the claim or the last heartbeat that renewed it.
+	leaseEnd time.Time
 }
 
 // supervise runs until the adapter exits and returns how it ended.
@@ -107,6 +122,12 @@ func (s *supervisor) supervise(ctx context.Context) *execution {
 	s.logs = time.NewTicker(s.run.cfg.LogInterval)
 	defer s.logs.Stop()
 	s.beats, s.batches = s.beat.C, s.logs.C
+	s.leaseEnd = s.run.claimed.Add(s.run.claim.GetLeaseTimeout().AsDuration())
+	if seconds := s.run.doc.GetBudget().GetSeconds(); seconds > 0 {
+		limit := time.NewTimer(time.Duration(seconds) * time.Second)
+		defer limit.Stop()
+		s.limit = limit.C
+	}
 	stopped := ctx.Done()
 	for {
 		select {
@@ -120,8 +141,11 @@ func (s *supervisor) supervise(ctx context.Context) *execution {
 			s.heartbeat(ctx)
 		case <-s.batches:
 			if err := s.run.sendLog(ctx); err != nil {
-				s.end(err)
+				s.failed(err)
 			}
+		case <-s.limit:
+			s.limit = nil
+			s.capReached()
 		case <-s.kill:
 			s.kill = nil
 			if err := killGroup(s.process); err != nil {
@@ -134,21 +158,56 @@ func (s *supervisor) supervise(ctx context.Context) *execution {
 // heartbeat renews the lease, stops the adapter when the response carries
 // a cancel request, and ends the invocation when the call fails.
 func (s *supervisor) heartbeat(ctx context.Context) {
+	sent := time.Now()
 	res, err := s.run.cfg.Service.Heartbeat(ctx, &runnerv1.HeartbeatRequest{
 		Invocation: s.run.doc.GetInvocation(), LeaseNumber: s.run.claim.GetLeaseNumber(),
 	})
 	if err != nil {
-		s.end(fmt.Errorf("runner: a heartbeat of %s: %w", s.run.doc.GetInvocation(), err))
+		s.failed(fmt.Errorf("runner: a heartbeat of %s: %w", s.run.doc.GetInvocation(), err))
 		return
 	}
+	// The lease is renewed from before the heartbeat was sent.
+	timeout := s.run.claim.GetLeaseTimeout()
 	if res.GetLeaseTimeout() != nil {
-		s.beat.Reset(heartbeatInterval(res.GetLeaseTimeout()))
+		timeout = res.GetLeaseTimeout()
+		s.beat.Reset(heartbeatInterval(timeout))
 	}
-	if res.GetCancel() != nil && !s.ex.cancelled {
+	s.leaseEnd = sent.Add(timeout.AsDuration())
+	if res.GetCancel() != nil && !s.ex.cancelled && !s.ex.capped {
 		s.ex.cancelled = true
 		s.run.log.note("%s asked to cancel the invocation %s", res.GetCancel().GetRequestedBy(), s.run.doc.GetInvocation())
 		s.stop()
 	}
+}
+
+// failed handles the error of a heartbeat or a log batch. While the
+// control plane cannot be reached, the adapter runs on until the lease
+// would end, counted from the claim or the last heartbeat that renewed it;
+// then, or at once for any other error, such as a lease that is not
+// current, the invocation ends without a report (decision 0205).
+func (s *supervisor) failed(err error) {
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		s.end(err)
+		return
+	}
+	if !time.Now().Before(s.leaseEnd) {
+		s.end(fmt.Errorf("runner: the lease of %s ended at %s while the control plane could not be reached: %w",
+			s.run.doc.GetInvocation(), s.leaseEnd.Format(time.RFC3339Nano), err))
+		return
+	}
+	s.run.log.note("the control plane could not be reached; the lease of %s ends at %s: %v",
+		s.run.doc.GetInvocation(), s.leaseEnd.Format(time.RFC3339Nano), err)
+}
+
+// capReached stops the adapter when the wall time reaches the budget's
+// seconds, unless a cancel already stopped it (decision 0193).
+func (s *supervisor) capReached() {
+	if s.ex.cancelled || s.ex.capped {
+		return
+	}
+	s.ex.capped = true
+	s.run.log.note("the invocation %s reached its wall-time limit of %d s", s.run.doc.GetInvocation(), s.run.doc.GetBudget().GetSeconds())
+	s.stop()
 }
 
 // end ends the invocation without a report, with err: it stops the
@@ -192,14 +251,21 @@ func heartbeatInterval(timeout *durationpb.Duration) time.Duration {
 // holds at most the usage.
 func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageType, work, index string, result *eventsv1.InvocationResult) (eventsv1.InvocationFinished_Outcome, error) {
 	failed := eventsv1.InvocationFinished_OUTCOME_FAILED
-	if ex.cancelled {
+	switch {
+	case ex.cancelled:
 		failed = eventsv1.InvocationFinished_OUTCOME_CANCELLED
+	case ex.capped:
+		failed = eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
+		result.Usage = r.cappedUsage(ex, nil)
 	}
 	res, err := parseResult(ex)
 	if err != nil {
 		return failed, err
 	}
 	result.Usage = usageOf(res.GetUsage())
+	if ex.capped {
+		result.Usage = r.cappedUsage(ex, res.GetUsage())
+	}
 	if len(res.GetOutputFiles()) > 0 {
 		return failed, fmt.Errorf("the adapter reported the output files %q, which the runner cannot store before the blob store of epic E7", res.GetOutputFiles())
 	}
@@ -211,12 +277,30 @@ func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageT
 	if err != nil {
 		return failed, err
 	}
-	outcome, err := outcomeOf(res.GetStatus(), ex.cancelled)
+	outcome, err := outcomeOf(res.GetStatus(), ex.cancelled || ex.capped)
 	if err != nil {
 		return failed, err
 	}
+	if ex.capped {
+		outcome = eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
+	}
 	result.Tree, result.Output = tree, output
 	return outcome, nil
+}
+
+// cappedUsage returns the usage of a run that the runner stopped at its
+// wall-time limit: the measured seconds, rounded up, and the tokens and
+// cost of reported, the adapter's figures, or of the budget when the
+// adapter reported none (decision 0204).
+func (r *run) cappedUsage(ex *execution, reported *harnessv1.Usage) *eventsv1.InvocationResult_Usage {
+	from := reported
+	if from == nil {
+		from = r.doc.GetBudget()
+	}
+	return &eventsv1.InvocationResult_Usage{
+		Tokens: from.GetTokens(), CostMicrodollars: from.GetCostMicrodollars(),
+		Seconds: int64((ex.elapsed + time.Second - 1) / time.Second),
+	}
 }
 
 // parseResult parses the adapter's result from its standard output, with
@@ -263,14 +347,15 @@ func parseOutput(mt protoreflect.MessageType, res *harnessv1.Result) (string, er
 	return string(parsed), nil
 }
 
-// outcomeOf returns the outcome of a run that ended with status, when a
-// cancel was requested or not. A run that the runner asked to stop is
-// cancelled whatever its status (decision 0035).
-func outcomeOf(status harnessv1.Result_Status, cancelled bool) (eventsv1.InvocationFinished_Outcome, error) {
+// outcomeOf returns the outcome of a run that ended with status, when the
+// runner asked the adapter to stop or not. A run that the runner asked to
+// stop on a cancel is cancelled whatever its status (decision 0035); the
+// caller makes one stopped at its wall-time limit cap reached.
+func outcomeOf(status harnessv1.Result_Status, stopped bool) (eventsv1.InvocationFinished_Outcome, error) {
 	switch {
 	case status == harnessv1.Result_STATUS_UNSPECIFIED:
 		return 0, errors.New("the adapter's result has no status")
-	case cancelled:
+	case stopped:
 		return eventsv1.InvocationFinished_OUTCOME_CANCELLED, nil
 	case status == harnessv1.Result_STATUS_COMPLETED:
 		return eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, nil
@@ -339,6 +424,17 @@ func (l *logBuffer) note(format string, args ...any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	fmt.Fprintf(&l.buf, runnerPrefix+format+"\n", args...)
+}
+
+// restore puts out, which take returned and which could not be sent,
+// back before the output written since.
+func (l *logBuffer) restore(out []byte) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	rest := bytes.Clone(l.buf.Bytes())
+	l.buf.Reset()
+	l.buf.Write(out)
+	l.buf.Write(rest)
 }
 
 // take returns the log output that has not been sent and forgets it.

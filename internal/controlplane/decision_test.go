@@ -267,6 +267,32 @@ func TestARetryOutsideAGateDenies(t *testing.T) {
 	}
 }
 
+// inDoubtRetry is a retry of plan from a state with no gate, with the
+// in-doubt attempts it reads and the decision it gets.
+type inDoubtRetry struct {
+	plan     string
+	attempts int64
+	allow    bool
+	policies []string
+}
+
+// checkInDoubtRetries decides each retry of tests as the kernel and checks
+// its decision, its determining policies and the attempts in its basis.
+func checkInDoubtRetries(t *testing.T, s *Service, tests []inDoubtRetry) {
+	t.Helper()
+	for _, tt := range tests {
+		d, data := decideAsKernel(t, s, question{action: "retry", plan: tt.plan, keys: projections.Keys{Invocation: "i"}})
+		if d.Allow != tt.allow || !slices.Equal(data.GetDeterminingPolicies(), tt.policies) {
+			t.Errorf("retry of %s: allow %v by %q (reasons %q), want %v by %q",
+				tt.plan, d.Allow, data.GetDeterminingPolicies(), d.Reasons, tt.allow, tt.policies)
+		}
+		want := &factsv1.Attempts{Plan: tt.plan, Gate: "in-doubt", Value: tt.attempts}
+		if got := attemptsIn(t, data); !proto.Equal(got, want) {
+			t.Errorf("retry of %s: the basis has the attempts %v, want %v", tt.plan, got, want)
+		}
+	}
+}
+
 func TestARetryOutsideAGateReadsTheInDoubtAttempts(t *testing.T) {
 	// A retry from a state with no gate is the retry of an invocation in
 	// doubt. It reads the plan's in-doubt attempts, its in-doubt transitions
@@ -285,27 +311,35 @@ func TestARetryOutsideAGateReadsTheInDoubtAttempts(t *testing.T) {
 	againC := proto.CloneOf(again)
 	againC.Plan = "plan-c"
 	write(t, s, "plan-c", &eventsv1.PlanAdded{Plan: "plan-c", Track: "main"}, againC, proto.CloneOf(againC))
-	tests := []struct {
-		plan     string
-		attempts int64
-		allow    bool
-		policies []string
-	}{
+	tests := []inDoubtRetry{
 		{"plan-a", 0, true, []string{"core.workflow-actions", "permit-all"}},
 		{"plan-b", 1, true, []string{"core.workflow-actions", "permit-all"}},
 		{"plan-c", 2, false, []string{"core.attempts-left"}},
 	}
-	for _, tt := range tests {
-		d, data := decideAsKernel(t, s, question{action: "retry", plan: tt.plan, keys: projections.Keys{Invocation: "i"}})
-		if d.Allow != tt.allow || !slices.Equal(data.GetDeterminingPolicies(), tt.policies) {
-			t.Errorf("retry of %s: allow %v by %q (reasons %q), want %v by %q",
-				tt.plan, d.Allow, data.GetDeterminingPolicies(), d.Reasons, tt.allow, tt.policies)
-		}
-		want := &factsv1.Attempts{Plan: tt.plan, Gate: "in-doubt", Value: tt.attempts}
-		if got := attemptsIn(t, data); !proto.Equal(got, want) {
-			t.Errorf("retry of %s: the basis has the attempts %v, want %v", tt.plan, got, want)
-		}
+	checkInDoubtRetries(t, s, tests)
+}
+
+func TestARetryOutsideAGateCountsTheRunsAgainOfAFailedInvocation(t *testing.T) {
+	// A failed invocation fires failed, and a state with no gate runs it
+	// again on retry (decision 0235). Such a retry reads the same in-doubt
+	// attempts, which count the plan's transitions on in-doubt and on failed
+	// back into the state they left, so a run that keeps failing stops at
+	// the profile's maxAttempts for in-doubt (decision 0237).
+	s := testService(t)
+	s.cfg.Settings.MaxAttempts = map[string]int64{"in-doubt": 2}
+	usageFact(s)
+	failedAgain := &eventsv1.TransitionFired{Plan: "plan-a", FromState: "implementing", ToState: "implementing", Trigger: "failed"}
+	inDoubtAgain := &eventsv1.TransitionFired{Plan: "plan-b", FromState: "implementing", ToState: "implementing", Trigger: "in-doubt"}
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"}, failedAgain,
+		&eventsv1.TransitionFired{Plan: "plan-a", FromState: "implementing", ToState: "implementing-escalated", Trigger: "failed"})
+	failedB := proto.CloneOf(failedAgain)
+	failedB.Plan = "plan-b"
+	write(t, s, "plan-b", &eventsv1.PlanAdded{Plan: "plan-b", Track: "main"}, inDoubtAgain, failedB)
+	tests := []inDoubtRetry{
+		{"plan-a", 1, true, []string{"core.workflow-actions", "permit-all"}},
+		{"plan-b", 2, false, []string{"core.attempts-left"}},
 	}
+	checkInDoubtRetries(t, s, tests)
 }
 
 func TestAPlanNeverAddedIsDeniedExceptForThePermissions(t *testing.T) {

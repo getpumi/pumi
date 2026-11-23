@@ -62,6 +62,16 @@ states {
     target: "implementing-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { failed {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
 }
 
 # Implementing, escalated: wait for a person. An answer goes back to

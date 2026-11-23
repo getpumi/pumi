@@ -538,7 +538,8 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 
 // triggerOf returns the started plan and the trigger of its state that e
 // is, if any (decision 0170): the result of the state's invocation, or its
-// cap_reached when it reached its wall-time limit (decision 0203), the
+// failed or cap_reached by the invocation's outcome (decisions 0203 and
+// 0235), the
 // entry into the state, as the transition.fired that entered it, or an
 // event about the plan from someone other than the kernel. The entry into
 // the initial state is handled when the plan starts. Of a plan that has
@@ -557,21 +558,34 @@ func (k *kernel) triggerOf(e *cloudeventsv1.CloudEvent) (*planRun, workflow.Trig
 			r, trigger = p, workflow.Event(e.GetType())
 		}
 	}
-	if r == nil || (!r.started && trigger != workflow.Event(events.TypeCancelRequested)) {
+	if r == nil || trigger == "" || (!r.started && trigger != workflow.Event(events.TypeCancelRequested)) {
 		return nil, "", false
 	}
 	return r, trigger, true
 }
 
-// resultTrigger returns the trigger that the invocation.finished e is:
-// cap_reached when the runner stopped the invocation at its wall-time
-// limit, and result otherwise (decision 0203).
+// resultTrigger returns the trigger that the invocation.finished e is, by
+// its outcome: result when the invocation succeeded, or when it is an
+// external action that happened, resolved on recovery (decisions 0202 and
+// 0235); failed when it failed (decision 0235); and cap_reached when the
+// runner stopped it at its wall-time limit (decision 0203). A cancelled
+// invocation is no trigger: its plan was cancelled first (decision 0192).
 func resultTrigger(e *cloudeventsv1.CloudEvent) workflow.Trigger {
 	var f eventsv1.InvocationFinished
-	if unpack(e, &f) == nil && f.GetOutcome() == eventsv1.InvocationFinished_OUTCOME_CAP_REACHED {
-		return workflow.CapReached
+	if unpack(e, &f) != nil {
+		return ""
 	}
-	return workflow.Result
+	switch f.GetOutcome() {
+	case eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, eventsv1.InvocationFinished_OUTCOME_RESOLVED_ON_RECOVERY:
+		return workflow.Result
+	case eventsv1.InvocationFinished_OUTCOME_FAILED:
+		return workflow.Failed
+	case eventsv1.InvocationFinished_OUTCOME_CAP_REACHED:
+		return workflow.CapReached
+	case eventsv1.InvocationFinished_OUTCOME_CANCELLED, eventsv1.InvocationFinished_OUTCOME_UNSPECIFIED:
+		return ""
+	}
+	return ""
 }
 
 // resultOf returns the plan whose current invocation the
@@ -835,6 +849,13 @@ func (r *planRun) question(trigger string, denied []string) string {
 	if trigger == string(workflow.CapReached) {
 		return fmt.Sprintf("The invocation %s of the state %s reached its wall-time limit, and the runner stopped it (decisions 0193 and 0203).",
 			r.invocation, r.state)
+	}
+	if trigger == string(workflow.Failed) {
+		if len(denied) == 0 {
+			return fmt.Sprintf("The invocation %s of the state %s failed (decision 0235).", r.invocation, r.state)
+		}
+		return fmt.Sprintf("The invocation %s of the state %s failed, and running it again was denied: %s denied (decision 0235).",
+			r.invocation, r.state, strings.Join(denied, ", then "))
 	}
 	if len(denied) == 0 {
 		return fmt.Sprintf("The plan escalated from the state %s on %s.", r.state, trigger)

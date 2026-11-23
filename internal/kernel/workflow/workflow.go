@@ -38,8 +38,9 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// Trigger is what fires a transition (decision 0170): Result, Entered or
-// the CloudEvents type of an event, as Event gives it.
+// Trigger is what fires a transition (decision 0170): Result, Entered,
+// InDoubt, CapReached, Failed or the CloudEvents type of an event, as Event
+// gives it.
 type Trigger string
 
 const (
@@ -55,6 +56,10 @@ const (
 	// of the invocation that the state started when its outcome is cap
 	// reached: the runner stopped it at its wall-time limit (decision 0203).
 	CapReached Trigger = "cap-reached"
+	// Failed fires instead of Result on the invocation.finished event of
+	// the invocation that the state started when its outcome is failed
+	// (decision 0235).
+	Failed Trigger = "failed"
 )
 
 // Event returns the trigger of the event type typ, such as
@@ -355,7 +360,7 @@ func (l *loader) readTask(state, task string) {
 }
 
 // triggerOf returns the trigger of tr, or an error for one that is not
-// result, entered, in doubt, cap reached or an event type.
+// result, entered, in doubt, cap reached, failed or an event type.
 func triggerOf(tr *workflowv1.Trigger) (Trigger, error) {
 	switch k := tr.GetKind().(type) {
 	case *workflowv1.Trigger_Result:
@@ -366,9 +371,11 @@ func triggerOf(tr *workflowv1.Trigger) (Trigger, error) {
 		return InDoubt, nil
 	case *workflowv1.Trigger_CapReached:
 		return CapReached, nil
+	case *workflowv1.Trigger_Failed:
+		return Failed, nil
 	case *workflowv1.Trigger_Event:
 		if !slices.Contains(events.Types(), k.Event) {
-			return "", fmt.Errorf("has the unknown trigger %q, which is not result, entered, in-doubt, cap-reached or an event type", k.Event)
+			return "", fmt.Errorf("has the unknown trigger %q, which is not result, entered, in-doubt, cap-reached, failed or an event type", k.Event)
 		}
 		return Event(k.Event), nil
 	default:
@@ -421,14 +428,17 @@ func (l *loader) checkTransitions(s *workflowv1.State) {
 // checkRequired refuses a state that starts an invocation, a check when
 // check is true, and lacks a transition on a trigger it must declare:
 // in_doubt for an agent run or an external action (decision 0200), and
-// cap_reached for any invocation (decision 0203). last holds the triggers
-// of its transitions.
+// cap_reached and failed for any invocation (decisions 0203 and 0235). last
+// holds the triggers of its transitions.
 func (l *loader) checkRequired(name string, check bool, last map[Trigger]int) {
 	if _, ok := last[InDoubt]; !check && !ok {
 		l.problem("state %q starts an agent run or an external action and has no transition on %q; its invocation may be in doubt (decision 0200)", name, InDoubt)
 	}
 	if _, ok := last[CapReached]; !ok {
 		l.problem("state %q starts an invocation and has no transition on %q; its invocation may reach its wall-time limit (decision 0203)", name, CapReached)
+	}
+	if _, ok := last[Failed]; !ok {
+		l.problem("state %q starts an invocation and has no transition on %q; its invocation may fail (decision 0235)", name, Failed)
 	}
 }
 
@@ -440,7 +450,7 @@ func (l *loader) checkTransition(at string, t *workflowv1.Transition, invokes bo
 	if err != nil {
 		l.problem("%s %w", at, err)
 	}
-	if (trig == Result || trig == InDoubt || trig == CapReached) && !invokes {
+	if (trig == Result || trig == InDoubt || trig == CapReached || trig == Failed) && !invokes {
 		l.problem("%s is triggered by %q, but the state starts no invocation", at, trig)
 	}
 	if _, ok := l.w.states[t.GetTarget()]; !ok {

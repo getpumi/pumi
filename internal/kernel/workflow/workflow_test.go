@@ -83,6 +83,8 @@ func TestTheLoaderRefuses(t *testing.T) {
 		{"in-doubt-without-invoke", []string{`state "planning-escalated", transition 3`, `"in-doubt"`, "starts no invocation"}},
 		{"cap-reached-missing", []string{`state "planning"`, "starts an invocation", `no transition on "cap-reached"`}},
 		{"cap-reached-without-invoke", []string{`state "planning-escalated", transition 3`, `"cap-reached"`, "starts no invocation"}},
+		{"failed-missing", []string{`state "planning"`, "starts an invocation", `no transition on "failed"`}},
+		{"failed-without-invoke", []string{`state "planning-escalated", transition 3`, `"failed"`, "starts no invocation"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -104,8 +106,8 @@ func TestEveryFixtureIsTested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 26 {
-		t.Errorf("testdata has %d workflow fixtures, want the valid one and 25 refusals: %q", len(names), names)
+	if len(names) != 28 {
+		t.Errorf("testdata has %d workflow fixtures, want the valid one and 27 refusals: %q", len(names), names)
 	}
 }
 
@@ -174,6 +176,7 @@ func TestTransitionsAreTheStatesOwnThenItsSuperstatesInFileOrder(t *testing.T) {
 		{Entered, []string{}},
 		{InDoubt, []string{"review:retry>review", "review:escalate>review-escalated"}},
 		{CapReached, []string{"review:escalate>review-escalated"}},
+		{Failed, []string{"review:retry>review", "review:escalate>review-escalated"}},
 	}
 	for _, tt := range tests {
 		got, err := m.Transitions(ctx, tt.trigger)
@@ -197,8 +200,8 @@ func TestEachTransitionHasItsOwnIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := w.Transitions()
-	if len(ts) != 18 {
-		t.Fatalf("the workflow has %d transitions, want 18", len(ts))
+	if len(ts) != 22 {
+		t.Fatalf("the workflow has %d transitions, want 22", len(ts))
 	}
 	for i, tr := range ts {
 		if tr.Index != i {
@@ -270,7 +273,7 @@ func TestFireRefusesATransitionOfAnotherState(t *testing.T) {
 	if s.state != "review-escalated" {
 		t.Errorf("the state is %q, want it unchanged", s.state)
 	}
-	for _, i := range []int{-1, 18} {
+	for _, i := range []int{-1, 22} {
 		if err := m.Fire(ctx, i); err == nil {
 			t.Errorf("Fire(%d) succeeded, want an error", i)
 		}

@@ -547,6 +547,13 @@ var seeds = map[string][]step{
 	// the outcome cap reached; the plan escalates (decisions 0193 and
 	// 0203).
 	"spike/wall-time-limit": {addPlanA, claimStep, reportCapReachedOf("plan-a/1")},
+	// The runner reports the agent run as failed; with maxAttempts 1 for
+	// in-doubt, it runs again as plan-a/2, which succeeds, and the plan goes
+	// to done (decision 0235).
+	"spike/failed-runs-again": {addPlanA, claimStep, reportFailedOf("plan-a/1"), claimStep, reportOf("plan-a/2", underCaps)},
+	// plan-a/2 fails too; the retry has no attempts left, so it is denied,
+	// and the plan escalates on failed (decisions 0235 and 0237).
+	"spike/failed-attempts-escalate": {addPlanA, claimStep, reportFailedOf("plan-a/1"), claimStep, reportFailedOf("plan-a/2")},
 	// With parallelism 1, b1 waits while a1 runs; the person cancels b1,
 	// and b1 does not start when a1 has merged.
 	"tracks/cancel-while-waiting": {

@@ -127,11 +127,17 @@ func each[T any, P interface {
 // transitions that recover one (decisions 0200 and 0201).
 const InDoubt = "in-doubt"
 
+// Failed is the trigger of the transitions of a failed invocation, whose
+// runs again from a state with no gate count with the in-doubt attempts
+// (decisions 0235 and 0237).
+const Failed = "failed"
+
 // attempts projects attempts: the number of transition.fired events into
 // the gate of the plan (decision 0136), 0 for a plan that exists and never
 // entered the gate (decision 0174). For the gate key InDoubt, it is the
-// number of the plan's transitions on in-doubt back into the state they
-// left: the times it ran an invocation in doubt again.
+// number of the plan's transitions on in-doubt or failed back into the
+// state they left: the times it ran an invocation in doubt or a failed
+// invocation again from a state with no gate (decisions 0201 and 0237).
 func attempts() Projection {
 	return Projection{
 		Fact:  "attempts",
@@ -145,7 +151,7 @@ func attempts() Projection {
 				switch {
 				case fired.GetPlan() != keys.Plan:
 				case keys.Gate == InDoubt:
-					if fired.GetTrigger() == InDoubt && fired.GetToState() == fired.GetFromState() {
+					if (fired.GetTrigger() == InDoubt || fired.GetTrigger() == Failed) && fired.GetToState() == fired.GetFromState() {
 						n++
 					}
 				case fired.GetGate() == keys.Gate:

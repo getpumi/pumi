@@ -111,7 +111,9 @@ message Transition {
 // fires at most once.
 message Trigger {
   // InvocationResult fires on the invocation.finished event of the
-  // invocation that the state started.
+  // invocation that the state started when its outcome is succeeded, or
+  // resolved on recovery for an external action that happened (decisions
+  // 0202 and 0235).
   message InvocationResult {}
 
   // StateEntered fires as the state is entered, for a state that only
@@ -130,6 +132,12 @@ message Trigger {
   // invocation declares it.
   message InvocationCapReached {}
 
+  // InvocationFailed fires on the invocation.finished event of the
+  // invocation that the state started when its outcome is failed, instead
+  // of InvocationResult (decision 0235). Every state that starts an
+  // invocation declares it.
+  message InvocationFailed {}
+
   // The kind of trigger.
   oneof kind {
     // The result of the state's invocation.
@@ -143,5 +151,7 @@ message Trigger {
     InvocationInDoubt in_doubt = 4;
     // The state's invocation reached its wall-time limit.
     InvocationCapReached cap_reached = 5;
+    // The state's invocation failed.
+    InvocationFailed failed = 6;
   }
 }

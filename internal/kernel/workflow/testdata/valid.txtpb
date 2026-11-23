@@ -52,6 +52,16 @@ states {
     target: "planning-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { failed {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
 }
 
 states {
@@ -107,6 +117,16 @@ states {
   }
   transitions {
     trigger { cap_reached {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "review"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
     target: "review-escalated"
     action: "escalate"
   }

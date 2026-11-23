@@ -124,6 +124,12 @@ message Trigger {
   // check in doubt runs again, so a state that starts one does not.
   message InvocationInDoubt {}
 
+  // InvocationCapReached fires on the invocation.finished event of the
+  // invocation that the state started when its outcome is cap reached,
+  // instead of InvocationResult (decision 0203). Every state that starts an
+  // invocation declares it.
+  message InvocationCapReached {}
+
   // The kind of trigger.
   oneof kind {
     // The result of the state's invocation.
@@ -135,5 +141,7 @@ message Trigger {
     string event = 3;
     // The state's invocation is in doubt.
     InvocationInDoubt in_doubt = 4;
+    // The state's invocation reached its wall-time limit.
+    InvocationCapReached cap_reached = 5;
   }
 }

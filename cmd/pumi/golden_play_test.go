@@ -543,6 +543,10 @@ var seeds = map[string][]step{
 	// The person cancels the plan while it waits in its escalated state,
 	// with no running invocation.
 	"spike/cancel-while-escalated": {addPlanA, claimStep, reportStep(overCaps), cancelStep(casePlan)},
+	// The runner stops the agent run at its wall-time limit and reports
+	// the outcome cap reached; the plan escalates (decisions 0193 and
+	// 0203).
+	"spike/wall-time-limit": {addPlanA, claimStep, reportCapReachedOf("plan-a/1")},
 	// With parallelism 1, b1 waits while a1 runs; the person cancels b1,
 	// and b1 does not start when a1 has merged.
 	"tracks/cancel-while-waiting": {

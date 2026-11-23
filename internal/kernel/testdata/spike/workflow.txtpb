@@ -29,7 +29,8 @@ states {
 # otherwise escalate.
 # When its invocation is in doubt, it runs again on retry, which the
 # in-doubt attempts and the hard caps guard; otherwise it escalates
-# (decisions 0200 and 0201).
+# (decisions 0200 and 0201). When its invocation reaches its wall-time limit,
+# it escalates (decision 0203).
 states {
   name: "implementing"
   parent: "active"
@@ -56,6 +57,11 @@ states {
   }
   transitions {
     trigger { in_doubt {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "implementing-escalated"
     action: "escalate"
   }

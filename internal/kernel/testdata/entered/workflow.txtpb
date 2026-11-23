@@ -55,6 +55,11 @@ states {
     target: "escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "escalated"
+    action: "escalate"
+  }
 }
 
 # Reviewing: starts nothing and decides as it is entered. To done on

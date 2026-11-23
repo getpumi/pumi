@@ -35,6 +35,11 @@ states {
     target: "planning-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
 }
 
 states {
@@ -75,6 +80,11 @@ states {
   }
   transitions {
     trigger { result {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "review-escalated"
     action: "escalate"
   }

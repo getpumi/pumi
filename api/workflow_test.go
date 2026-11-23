@@ -124,11 +124,11 @@ func TestATransitionHasATriggerATargetAndAnAction(t *testing.T) {
 	}
 }
 
-func TestATriggerIsExactlyOneOfResultEnteredInDoubtOrAnEventType(t *testing.T) {
+func TestATriggerIsExactlyOneOfResultEnteredInDoubtCapReachedOrAnEventType(t *testing.T) {
 	trig := (&workflowv1.Trigger{}).ProtoReflect().Descriptor()
 	kind := oneofOf(t, trig, "kind")
-	if got, want := oneofFieldNames(kind), []string{"entered", "event", "in_doubt", "result"}; !slices.Equal(got, want) || kind.IsSynthetic() {
-		t.Fatalf("Trigger is one of %q, want exactly one of %q (decisions 0170 and 0200)", got, want)
+	if got, want := oneofFieldNames(kind), []string{"cap_reached", "entered", "event", "in_doubt", "result"}; !slices.Equal(got, want) || kind.IsSynthetic() {
+		t.Fatalf("Trigger is one of %q, want exactly one of %q (decisions 0170, 0200 and 0203)", got, want)
 	}
 	if got, want := fieldNames(trig), oneofFieldNames(kind); !slices.Equal(got, want) {
 		t.Errorf("Trigger has %q outside its oneof", got)
@@ -136,7 +136,7 @@ func TestATriggerIsExactlyOneOfResultEnteredInDoubtOrAnEventType(t *testing.T) {
 	if f := fieldOf(t, trig, "event"); f.Kind() != protoreflect.StringKind {
 		t.Errorf("Trigger.event is not a string")
 	}
-	for _, name := range []string{"result", "entered"} {
+	for _, name := range []string{"result", "entered", "in_doubt", "cap_reached"} {
 		if f := fieldOf(t, trig, name); f.Message() == nil || f.Message().Fields().Len() != 0 {
 			t.Errorf("Trigger.%s is not a message with no fields", name)
 		}

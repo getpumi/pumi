@@ -112,10 +112,16 @@ func Run(ctx context.Context, cfg Config) error {
 //
 // When a heartbeat carries a cancel request, the runner closes the
 // adapter's standard input, kills it after the grace period and reports
-// the outcome cancelled (decision 0035). When ctx is done, or a call of
-// RunnerService fails while the adapter runs, it stops the adapter the
-// same way, reports nothing and returns the error: an invocation with no
-// result is in doubt when pumi starts again (decision 0182).
+// the outcome cancelled (decision 0035). When the wall time reaches the
+// budget's seconds, it stops the adapter the same way and reports the
+// outcome cap reached, with the measured seconds and, when the adapter
+// reported none, the tokens and cost of the budget (decisions 0193 and
+// 0204). When ctx is done, or a call of RunnerService fails while the
+// adapter runs, it stops the adapter the same way, reports nothing and
+// returns the error: an invocation with no result is in doubt (decisions
+// 0182 and 0199). A call that cannot reach the control plane ends the
+// invocation only once the lease would have ended, so the wall-time limit
+// holds meanwhile (decision 0205).
 func RunOne(ctx context.Context, cfg Config) (bool, error) {
 	if err := cfg.check(); err != nil {
 		return false, err
@@ -124,6 +130,9 @@ func RunOne(ctx context.Context, cfg Config) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// The lease is counted from before the claim, so that the runner never
+	// takes it to end later than the control plane does (decision 0205).
+	claimed := time.Now()
 	claim, err := cfg.Service.Claim(ctx, &runnerv1.ClaimRequest{ProtocolVersions: protocolVersions})
 	if err != nil {
 		return false, fmt.Errorf("runner: the claim: %w", err)
@@ -131,7 +140,7 @@ func RunOne(ctx context.Context, cfg Config) (bool, error) {
 	if claim.GetInvocation() == nil {
 		return false, nil
 	}
-	r := &run{cfg: cfg, repo: repo, claim: claim, doc: claim.GetInvocation(), log: &logBuffer{}}
+	r := &run{cfg: cfg, repo: repo, claim: claim, claimed: claimed, doc: claim.GetInvocation(), log: &logBuffer{}}
 	return true, r.do(ctx)
 }
 
@@ -140,8 +149,10 @@ type run struct {
 	cfg   Config
 	repo  repository
 	claim *runnerv1.ClaimResponse
-	doc   *runnerv1.Invocation
-	log   *logBuffer
+	// claimed is when the runner asked for the claim.
+	claimed time.Time
+	doc     *runnerv1.Invocation
+	log     *logBuffer
 }
 
 // do runs the invocation in a new directory, which it removes after, and
@@ -216,6 +227,8 @@ func (r *run) sendLog(ctx context.Context) error {
 		Invocation: r.doc.GetInvocation(), LeaseNumber: r.claim.GetLeaseNumber(), Output: out,
 	})
 	if err != nil {
+		// The batch goes again with the next one.
+		r.log.restore(out)
 		return fmt.Errorf("runner: a log batch of %s: %w", r.doc.GetInvocation(), err)
 	}
 	return nil

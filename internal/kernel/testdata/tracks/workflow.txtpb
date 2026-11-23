@@ -57,6 +57,11 @@ states {
     target: "implementing-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
 }
 
 # Implementing, escalated: wait for a person. An answer goes back to

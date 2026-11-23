@@ -596,6 +596,7 @@ type Trigger struct {
 	//	*Trigger_Entered
 	//	*Trigger_Event
 	//	*Trigger_InDoubt
+	//	*Trigger_CapReached
 	Kind          isTrigger_Kind `protobuf_oneof:"kind"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -674,6 +675,15 @@ func (x *Trigger) GetInDoubt() *Trigger_InvocationInDoubt {
 	return nil
 }
 
+func (x *Trigger) GetCapReached() *Trigger_InvocationCapReached {
+	if x != nil {
+		if x, ok := x.Kind.(*Trigger_CapReached); ok {
+			return x.CapReached
+		}
+	}
+	return nil
+}
+
 type isTrigger_Kind interface {
 	isTrigger_Kind()
 }
@@ -699,6 +709,11 @@ type Trigger_InDoubt struct {
 	InDoubt *Trigger_InvocationInDoubt `protobuf:"bytes,4,opt,name=in_doubt,json=inDoubt,proto3,oneof"`
 }
 
+type Trigger_CapReached struct {
+	// The state's invocation reached its wall-time limit.
+	CapReached *Trigger_InvocationCapReached `protobuf:"bytes,5,opt,name=cap_reached,json=capReached,proto3,oneof"`
+}
+
 func (*Trigger_Result) isTrigger_Kind() {}
 
 func (*Trigger_Entered) isTrigger_Kind() {}
@@ -706,6 +721,8 @@ func (*Trigger_Entered) isTrigger_Kind() {}
 func (*Trigger_Event) isTrigger_Kind() {}
 
 func (*Trigger_InDoubt) isTrigger_Kind() {}
+
+func (*Trigger_CapReached) isTrigger_Kind() {}
 
 // InvocationResult fires on the invocation.finished event of the
 // invocation that the state started.
@@ -823,6 +840,46 @@ func (*Trigger_InvocationInDoubt) Descriptor() ([]byte, []int) {
 	return file_pumi_workflow_v1_workflow_proto_rawDescGZIP(), []int{6, 2}
 }
 
+// InvocationCapReached fires on the invocation.finished event of the
+// invocation that the state started when its outcome is cap reached,
+// instead of InvocationResult (decision 0203). Every state that starts an
+// invocation declares it.
+type Trigger_InvocationCapReached struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Trigger_InvocationCapReached) Reset() {
+	*x = Trigger_InvocationCapReached{}
+	mi := &file_pumi_workflow_v1_workflow_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Trigger_InvocationCapReached) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Trigger_InvocationCapReached) ProtoMessage() {}
+
+func (x *Trigger_InvocationCapReached) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_workflow_v1_workflow_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Trigger_InvocationCapReached.ProtoReflect.Descriptor instead.
+func (*Trigger_InvocationCapReached) Descriptor() ([]byte, []int) {
+	return file_pumi_workflow_v1_workflow_proto_rawDescGZIP(), []int{6, 3}
+}
+
 var File_pumi_workflow_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
@@ -865,15 +922,18 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"Transition\x123\n" +
 	"\atrigger\x18\x01 \x01(\v2\x19.pumi.workflow.v1.TriggerR\atrigger\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x16\n" +
-	"\x06action\x18\x03 \x01(\tR\x06action\"\xb6\x02\n" +
+	"\x06action\x18\x03 \x01(\tR\x06action\"\xa1\x03\n" +
 	"\aTrigger\x12D\n" +
 	"\x06result\x18\x01 \x01(\v2*.pumi.workflow.v1.Trigger.InvocationResultH\x00R\x06result\x12B\n" +
 	"\aentered\x18\x02 \x01(\v2&.pumi.workflow.v1.Trigger.StateEnteredH\x00R\aentered\x12\x16\n" +
 	"\x05event\x18\x03 \x01(\tH\x00R\x05event\x12H\n" +
-	"\bin_doubt\x18\x04 \x01(\v2+.pumi.workflow.v1.Trigger.InvocationInDoubtH\x00R\ainDoubt\x1a\x12\n" +
+	"\bin_doubt\x18\x04 \x01(\v2+.pumi.workflow.v1.Trigger.InvocationInDoubtH\x00R\ainDoubt\x12Q\n" +
+	"\vcap_reached\x18\x05 \x01(\v2..pumi.workflow.v1.Trigger.InvocationCapReachedH\x00R\n" +
+	"capReached\x1a\x12\n" +
 	"\x10InvocationResult\x1a\x0e\n" +
 	"\fStateEntered\x1a\x13\n" +
-	"\x11InvocationInDoubtB\x06\n" +
+	"\x11InvocationInDoubt\x1a\x16\n" +
+	"\x14InvocationCapReachedB\x06\n" +
 	"\x04kindB\xbd\x01\n" +
 	"\x14com.pumi.workflow.v1B\rWorkflowProtoP\x01Z4getpumi.dev/pumi/api/gen/pumi/workflow/v1;workflowv1\xa2\x02\x03PWX\xaa\x02\x10Pumi.Workflow.V1\xca\x02\x10Pumi\\Workflow\\V1\xe2\x02\x1cPumi\\Workflow\\V1\\GPBMetadata\xea\x02\x12Pumi::Workflow::V1b\x06proto3"
 
@@ -890,20 +950,21 @@ func file_pumi_workflow_v1_workflow_proto_rawDescGZIP() []byte {
 }
 
 var file_pumi_workflow_v1_workflow_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_pumi_workflow_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_pumi_workflow_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_pumi_workflow_v1_workflow_proto_goTypes = []any{
-	(Invoke_Role)(0),                  // 0: pumi.workflow.v1.Invoke.Role
-	(Invoke_Kind)(0),                  // 1: pumi.workflow.v1.Invoke.Kind
-	(*Workflow)(nil),                  // 2: pumi.workflow.v1.Workflow
-	(*State)(nil),                     // 3: pumi.workflow.v1.State
-	(*Invoke)(nil),                    // 4: pumi.workflow.v1.Invoke
-	(*Wait)(nil),                      // 5: pumi.workflow.v1.Wait
-	(*Final)(nil),                     // 6: pumi.workflow.v1.Final
-	(*Transition)(nil),                // 7: pumi.workflow.v1.Transition
-	(*Trigger)(nil),                   // 8: pumi.workflow.v1.Trigger
-	(*Trigger_InvocationResult)(nil),  // 9: pumi.workflow.v1.Trigger.InvocationResult
-	(*Trigger_StateEntered)(nil),      // 10: pumi.workflow.v1.Trigger.StateEntered
-	(*Trigger_InvocationInDoubt)(nil), // 11: pumi.workflow.v1.Trigger.InvocationInDoubt
+	(Invoke_Role)(0),                     // 0: pumi.workflow.v1.Invoke.Role
+	(Invoke_Kind)(0),                     // 1: pumi.workflow.v1.Invoke.Kind
+	(*Workflow)(nil),                     // 2: pumi.workflow.v1.Workflow
+	(*State)(nil),                        // 3: pumi.workflow.v1.State
+	(*Invoke)(nil),                       // 4: pumi.workflow.v1.Invoke
+	(*Wait)(nil),                         // 5: pumi.workflow.v1.Wait
+	(*Final)(nil),                        // 6: pumi.workflow.v1.Final
+	(*Transition)(nil),                   // 7: pumi.workflow.v1.Transition
+	(*Trigger)(nil),                      // 8: pumi.workflow.v1.Trigger
+	(*Trigger_InvocationResult)(nil),     // 9: pumi.workflow.v1.Trigger.InvocationResult
+	(*Trigger_StateEntered)(nil),         // 10: pumi.workflow.v1.Trigger.StateEntered
+	(*Trigger_InvocationInDoubt)(nil),    // 11: pumi.workflow.v1.Trigger.InvocationInDoubt
+	(*Trigger_InvocationCapReached)(nil), // 12: pumi.workflow.v1.Trigger.InvocationCapReached
 }
 var file_pumi_workflow_v1_workflow_proto_depIdxs = []int32{
 	3,  // 0: pumi.workflow.v1.Workflow.states:type_name -> pumi.workflow.v1.State
@@ -917,11 +978,12 @@ var file_pumi_workflow_v1_workflow_proto_depIdxs = []int32{
 	9,  // 8: pumi.workflow.v1.Trigger.result:type_name -> pumi.workflow.v1.Trigger.InvocationResult
 	10, // 9: pumi.workflow.v1.Trigger.entered:type_name -> pumi.workflow.v1.Trigger.StateEntered
 	11, // 10: pumi.workflow.v1.Trigger.in_doubt:type_name -> pumi.workflow.v1.Trigger.InvocationInDoubt
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	12, // 11: pumi.workflow.v1.Trigger.cap_reached:type_name -> pumi.workflow.v1.Trigger.InvocationCapReached
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_pumi_workflow_v1_workflow_proto_init() }
@@ -939,6 +1001,7 @@ func file_pumi_workflow_v1_workflow_proto_init() {
 		(*Trigger_Entered)(nil),
 		(*Trigger_Event)(nil),
 		(*Trigger_InDoubt)(nil),
+		(*Trigger_CapReached)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -946,7 +1009,7 @@ func file_pumi_workflow_v1_workflow_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_workflow_v1_workflow_proto_rawDesc), len(file_pumi_workflow_v1_workflow_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -20,6 +20,9 @@
 # caps guard; otherwise it escalates. A check in doubt runs again, so its state
 # has no transition on in_doubt (decision 0191).
 #
+# A state that starts an invocation escalates when the invocation reaches its
+# wall-time limit, on cap_reached (decision 0203).
+#
 # The task of each invocation is the text file <task>.md beside this file.
 name: "spec-to-merge"
 version: "1"
@@ -60,6 +63,11 @@ states {
   }
   transitions {
     trigger { result {} }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "spec-escalated"
     action: "escalate"
   }
@@ -135,6 +143,11 @@ states {
     target: "planning-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
 }
 
 # Planning, escalated: wait for a person. Planning escalates when advance is
@@ -188,6 +201,11 @@ states {
   }
   transitions {
     trigger { in_doubt {} }
+    target: "second-opinion-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "second-opinion-escalated"
     action: "escalate"
   }
@@ -264,6 +282,11 @@ states {
     target: "plan-review-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "plan-review-escalated"
+    action: "escalate"
+  }
 }
 
 # Plan review, escalated: wait for a person (decision 0170). An override goes
@@ -330,6 +353,11 @@ states {
     target: "implementing-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
 }
 
 # Implementing, escalated: wait for a person. Implementing escalates when
@@ -370,6 +398,11 @@ states {
   }
   transitions {
     trigger { result {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "checking-escalated"
     action: "escalate"
   }
@@ -664,6 +697,11 @@ states {
     target: "conformance-audit-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { cap_reached {} }
+    target: "conformance-audit-escalated"
+    action: "escalate"
+  }
 }
 
 # Conformance audit, escalated: wait for a person (decision 0170). An override
@@ -842,6 +880,11 @@ states {
   }
   transitions {
     trigger { in_doubt {} }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
     target: "merging-escalated"
     action: "escalate"
   }

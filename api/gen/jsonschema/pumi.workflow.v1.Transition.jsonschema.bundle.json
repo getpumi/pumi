@@ -23,6 +23,14 @@
       "title": "Transition",
       "type": "object"
     },
+    "pumi.workflow.v1.Trigger.InvocationCapReached.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationCapReached fires on the invocation.finished event of the\n invocation that the state started when its outcome is cap reached,\n instead of InvocationResult (decision 0203). Every state that starts an\n invocation declares it.",
+      "properties": {},
+      "title": "Invocation Cap Reached",
+      "type": "object"
+    },
     "pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -52,12 +60,20 @@
       "additionalProperties": false,
       "description": "Trigger is what fires a transition (decision 0170): exactly one of these.\n The kernel reads triggers from Subscribe in log order, and each event\n fires at most once.",
       "patternProperties": {
+        "^(cap_reached)$": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationCapReached.jsonschema.json",
+          "description": "The state's invocation reached its wall-time limit."
+        },
         "^(in_doubt)$": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json",
           "description": "The state's invocation is in doubt."
         }
       },
       "properties": {
+        "capReached": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationCapReached.jsonschema.json",
+          "description": "The state's invocation reached its wall-time limit."
+        },
         "entered": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.StateEntered.jsonschema.json",
           "description": "The state was entered."

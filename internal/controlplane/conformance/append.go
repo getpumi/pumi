@@ -277,6 +277,15 @@ func appendOfType(t *testing.T, c Clients, caller Caller, typ string) bool {
 	t.Helper()
 	_, err := c(caller).Append(t.Context(), &controlplanev1.AppendRequest{Events: []*cloudeventsv1.CloudEvent{ofType(t, typ)}})
 	a, ok := appenderOf[caller]
+	if caller == Kernel && typ == events.TypeInvocationFinished {
+		// The kernel finishes only an invocation in doubt, with the outcome
+		// resolved on recovery, which TheKernelFinishesOnlyAnInvocationInDoubt
+		// shows (decision 0202); this one has neither.
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("a %s appending %s with no outcome: %v, want the code invalid_argument", caller, typ, err)
+		}
+		return false
+	}
 	if ok && events.MayAppend(typ, a) {
 		if err != nil {
 			t.Errorf("a %s appending %s: %v, want it written", caller, typ, err)

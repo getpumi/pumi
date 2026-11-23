@@ -95,7 +95,8 @@ func keysOf(data proto.Message, plan *string) projections.Keys {
 // decides again when it has moved. When one is denied, it writes the
 // decisions that denied, refuses the append with permission denied and
 // writes none of evs. A plan.added is checked against the log as of the
-// same head (decision 0196). It returns the positions of evs.
+// same head (decision 0196), and so is an invocation.finished of the kernel
+// (decision 0202). It returns the positions of evs.
 func (s *Service) appendAs(ctx context.Context, p principal, evs []*cloudeventsv1.CloudEvent,
 	conditions []*controlplanev1.Condition,
 ) ([]uint64, error) {
@@ -107,8 +108,12 @@ func (s *Service) appendAs(ctx context.Context, p principal, evs []*cloudeventsv
 	if err != nil {
 		return nil, err
 	}
+	recovered, err := recoveredBy(p, evs)
+	if err != nil {
+		return nil, err
+	}
 	check := func(version func(string) uint64) error { return conflicts(conditions, version) }
-	if len(perms) == 0 && len(added) == 0 {
+	if len(perms) == 0 && len(added) == 0 && len(recovered) == 0 {
 		positions, err := s.log.Append(evs, check)
 		return positions, appendError(err)
 	}
@@ -116,7 +121,7 @@ func (s *Service) appendAs(ctx context.Context, p principal, evs []*cloudeventsv
 		if err := ctx.Err(); err != nil {
 			return nil, connect.NewError(connect.CodeCanceled, "the append was cancelled").WithCause(err)
 		}
-		positions, err := s.appendAtHead(p, evs, perms, added, check)
+		positions, err := s.appendAtHead(p, evs, perms, checked{added: added, recovered: recovered}, check)
 		if errors.Is(err, embeddedlog.ErrHeadMoved) {
 			continue
 		}
@@ -124,14 +129,25 @@ func (s *Service) appendAs(ctx context.Context, p principal, evs []*cloudeventsv
 	}
 }
 
-// appendAtHead checks added and decides perms with the log as of its head,
-// and appends the decisions and evs while the head is still there. It
-// returns embeddedlog.ErrHeadMoved when the head moved.
+// checked are the events of an append that the control plane checks
+// against the log as of its head: the plan.added events, and the
+// invocation.finished events of the kernel, by their index in the append.
+type checked struct {
+	added     map[int]*eventsv1.PlanAdded
+	recovered map[int]*eventsv1.InvocationFinished
+}
+
+// appendAtHead checks c and decides perms with the log as of its head, and
+// appends the decisions and evs while the head is still there. It returns
+// embeddedlog.ErrHeadMoved when the head moved.
 func (s *Service) appendAtHead(p principal, evs []*cloudeventsv1.CloudEvent, perms []permission,
-	added map[int]*eventsv1.PlanAdded, check func(version func(string) uint64) error,
+	c checked, check func(version func(string) uint64) error,
 ) ([]uint64, error) {
 	at, hash := s.log.Snapshot()
-	if err := s.checkAdded(at, added, len(evs)); err != nil {
+	if err := s.checkAdded(at, c.added, len(evs)); err != nil {
+		return nil, err
+	}
+	if err := s.checkRecovered(c.recovered); err != nil {
 		return nil, err
 	}
 	decisions, denied, err := s.decidePermissions(at, hash, p, perms)

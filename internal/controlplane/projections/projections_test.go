@@ -266,6 +266,54 @@ func TestUsageIsWhatTheNamedInvocationOfThePlanUsed(t *testing.T) {
 	}
 }
 
+// requestedWithBudget returns an invocation.requested event of invocation
+// for plan-a whose document has budget.
+func requestedWithBudget(t *testing.T, n int, invocation string, budget *harnessv1.Usage) *cloudeventsv1.CloudEvent {
+	t.Helper()
+	data, err := events.InvocationRequested("plan-a", &runnerv1.Invocation{
+		Invocation: invocation, IdempotencyKey: invocation, Role: harnessv1.Role_ROLE_AGENT,
+		Component: &harnessv1.Component{Kind: harnessv1.Component_KIND_AGENT_RUN, Name: "agent", Version: "1"},
+		Budget:    budget,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return event(t, n, data)
+}
+
+func TestUsageOfAnInvocationInDoubtIsItsWholeBudget(t *testing.T) {
+	p := byFact(t, "usage")
+	budget := &harnessv1.Usage{Tokens: 500, CostMicrodollars: 600, Seconds: 700}
+	log := []*cloudeventsv1.CloudEvent{
+		added(t, 1, "plan-a"),
+		requestedWithBudget(t, 2, "expired", budget),
+		requestedWithBudget(t, 3, "released", budget),
+		requestedWithBudget(t, 4, "current", budget),
+		requestedWithBudget(t, 5, "unclaimed", budget),
+		requestedWithBudget(t, 6, "granted-again", budget),
+		event(t, 7, &eventsv1.LeaseGranted{Lease: "expired", Number: 1}),
+		event(t, 8, &eventsv1.LeaseExpired{Lease: "expired", Number: 1}),
+		event(t, 9, &eventsv1.LeaseGranted{Lease: "released", Number: 1}),
+		event(t, 10, &eventsv1.LeaseReleased{Lease: "released", Number: 1}),
+		event(t, 11, &eventsv1.LeaseGranted{Lease: "current", Number: 1}),
+		event(t, 12, &eventsv1.LeaseGranted{Lease: "granted-again", Number: 1}),
+		event(t, 13, &eventsv1.LeaseExpired{Lease: "granted-again", Number: 1}),
+		event(t, 14, &eventsv1.LeaseGranted{Lease: "granted-again", Number: 2}),
+	}
+	whole := &factsv1.Usage_Totals{Tokens: 500, CostMicrodollars: 600, Seconds: 700}
+	for _, inv := range []string{"expired", "released"} {
+		want := &factsv1.Usage{Invocation: inv, Plan: "plan-a", Value: whole}
+		if got := project(t, p, projections.Keys{Plan: "plan-a", Invocation: inv}, log); !proto.Equal(got, want) {
+			t.Errorf("usage of the invocation %s, whose last lease ended with no result, = %v, want its budget %v (decision 0191)", inv, got, want)
+		}
+	}
+	for _, inv := range []string{"current", "unclaimed", "granted-again"} {
+		if got := project(t, p, projections.Keys{Plan: "plan-a", Invocation: inv}, log); got != nil {
+			t.Errorf("usage of the invocation %s, which is not in doubt, = %v, want no fact (decision 0199)", inv, got)
+		}
+	}
+}
+
 func TestQuestionsOpenCountsTheQuestionsOfThePlanningOutput(t *testing.T) {
 	p := byFact(t, "questions.open")
 	two := &workflowv1.PlanningOutput{Plan: "p", Questions: []*workflowv1.PlanningOutput_Question{

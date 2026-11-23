@@ -1,5 +1,13 @@
 {
   "$defs": {
+    "pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationInDoubt fires when the invocation that the state started is\n in doubt: its last lease ended with no result (decisions 0199 and 0200).\n A state that starts an agent run or an external action declares it; a\n check in doubt runs again, so a state that starts one does not.",
+      "properties": {},
+      "title": "Invocation In Doubt",
+      "type": "object"
+    },
     "pumi.workflow.v1.Trigger.InvocationResult.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -20,6 +28,12 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "description": "Trigger is what fires a transition (decision 0170): exactly one of these.\n The kernel reads triggers from Subscribe in log order, and each event\n fires at most once.",
+      "patternProperties": {
+        "^(in_doubt)$": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json",
+          "description": "The state's invocation is in doubt."
+        }
+      },
       "properties": {
         "entered": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.StateEntered.jsonschema.json",
@@ -28,6 +42,10 @@
         "event": {
           "description": "An event whose subject is the plan, by its CloudEvents type, such as\n \"dev.getpumi.approval.recorded\" (decision 0135).",
           "type": "string"
+        },
+        "inDoubt": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json",
+          "description": "The state's invocation is in doubt."
         },
         "result": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationResult.jsonschema.json",

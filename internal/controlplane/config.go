@@ -56,8 +56,10 @@ type Project struct {
 // parallelism setting, which the kernel reads.
 type Settings struct {
 	// MaxAttempts is maxAttempts for each gate, by the gate's Cedar action,
-	// such as planReview (decision 0044). A gate with no entry has no
-	// maxAttempts, so a decision that reads it denies (decision 0143).
+	// such as planReview (decision 0044), and, by "in-doubt", for the retry
+	// of an invocation in doubt from a state with no gate (decision 0201). A
+	// gate with no entry has no maxAttempts, so a decision that reads it
+	// denies (decision 0143).
 	MaxAttempts map[string]int64
 	// OutsideChecksEnforced is outsideChecksEnforced.
 	OutsideChecksEnforced []string

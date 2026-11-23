@@ -47,6 +47,9 @@ const (
 	Result Trigger = "result"
 	// Entered fires as the state is entered, for a state that only decides.
 	Entered Trigger = "entered"
+	// InDoubt fires when the invocation that the state started is in doubt:
+	// its last lease ended with no result (decisions 0199 and 0200).
+	InDoubt Trigger = "in-doubt"
 )
 
 // Event returns the trigger of the event type typ, such as
@@ -126,8 +129,11 @@ const taskHeader = "<!--\nSPDX-License-Identifier: Apache-2.0\nSPDX-FileCopyrigh
 // It also refuses what the machine could not run: a state with no entry, a
 // transition with no trigger, an invocation with no role or kind, a
 // superstate that does more than wait or that a transition or the initial
-// state names, a final state with transitions, and a result trigger in a
-// state that starts no invocation.
+// state names, a final state with transitions, a result or in-doubt
+// trigger in a state that starts no invocation, an in-doubt trigger in a
+// state that starts a check, which runs again, and a state that starts an
+// agent run or an external action with no transition on in-doubt
+// (decision 0200).
 func Load(fsys fs.FS, name string) (*Workflow, error) {
 	src, err := fs.ReadFile(fsys, name)
 	if err != nil {
@@ -343,16 +349,18 @@ func (l *loader) readTask(state, task string) {
 }
 
 // triggerOf returns the trigger of tr, or an error for one that is not
-// result, entered or an event type.
+// result, entered, in doubt or an event type.
 func triggerOf(tr *workflowv1.Trigger) (Trigger, error) {
 	switch k := tr.GetKind().(type) {
 	case *workflowv1.Trigger_Result:
 		return Result, nil
 	case *workflowv1.Trigger_Entered:
 		return Entered, nil
+	case *workflowv1.Trigger_InDoubt:
+		return InDoubt, nil
 	case *workflowv1.Trigger_Event:
 		if !slices.Contains(events.Types(), k.Event) {
-			return "", fmt.Errorf("has the unknown trigger %q, which is not result, entered or an event type", k.Event)
+			return "", fmt.Errorf("has the unknown trigger %q, which is not result, entered, in-doubt or an event type", k.Event)
 		}
 		return Event(k.Event), nil
 	default:
@@ -365,16 +373,21 @@ func triggerOf(tr *workflowv1.Trigger) (Trigger, error) {
 func (l *loader) checkTransitions(s *workflowv1.State) {
 	name := s.GetName()
 	_, final := s.GetEntry().(*workflowv1.State_Final)
-	_, invokes := s.GetEntry().(*workflowv1.State_Invoke)
+	inv, invokes := s.GetEntry().(*workflowv1.State_Invoke)
 	switch {
 	case final && len(s.GetTransitions()) > 0:
 		l.problem("state %q is final and has transitions", name)
 	case !final && len(s.GetTransitions()) == 0:
 		l.problem("state %q is not final and has no transitions", name)
 	}
+	check := invokes && inv.Invoke.GetKind() == workflowv1.Invoke_KIND_CHECK
 	last := map[Trigger]int{}
 	for i, t := range s.GetTransitions() {
-		trig := l.checkTransition(fmt.Sprintf("state %q, transition %d", name, i+1), t, invokes)
+		at := fmt.Sprintf("state %q, transition %d", name, i+1)
+		trig := l.checkTransition(at, t, invokes)
+		if trig == InDoubt && check {
+			l.problem("%s is triggered by %q, but the state starts a check, which runs again when it is in doubt (decision 0200)", at, InDoubt)
+		}
 		if trig != "" {
 			last[trig] = i
 		}
@@ -382,6 +395,9 @@ func (l *loader) checkTransitions(s *workflowv1.State) {
 		l.w.transitions = append(l.w.transitions, Transition{
 			Index: len(l.w.transitions), State: name, Trigger: trig, Target: t.GetTarget(), Action: t.GetAction(),
 		})
+	}
+	if _, ok := last[InDoubt]; invokes && !check && !ok {
+		l.problem("state %q starts an agent run or an external action and has no transition on %q; its invocation may be in doubt (decision 0200)", name, InDoubt)
 	}
 	always := policy.AlwaysAllowed()
 	for _, i := range slices.Sorted(maps.Values(last)) {
@@ -402,8 +418,8 @@ func (l *loader) checkTransition(at string, t *workflowv1.Transition, invokes bo
 	if err != nil {
 		l.problem("%s %w", at, err)
 	}
-	if trig == Result && !invokes {
-		l.problem("%s is triggered by %q, but the state starts no invocation", at, Result)
+	if (trig == Result || trig == InDoubt) && !invokes {
+		l.problem("%s is triggered by %q, but the state starts no invocation", at, trig)
 	}
 	if _, ok := l.w.states[t.GetTarget()]; !ok {
 		l.problem("%s goes to the unknown state %q", at, t.GetTarget())

@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The workflow of the golden cases of recovery (decisions 0191 and 0200 to
+# 0202): an agent run, implementing, then a check, checking, then an external
+# action, merging, each to the next state on advance and otherwise escalated,
+# and then the final state merged. implementing and merging run their
+# invocation again on retry when it is in doubt, and otherwise escalate; a
+# check in doubt runs again, so checking has no transition on in_doubt. It is
+# test data, not a workflow of the release (decision 0166).
+name: "recovery"
+version: "1"
+initial: "implementing"
+
+# The superstate of the states of a plan that is not finished.
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+states {
+  name: "implementing"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    task: "implement"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "implementing-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "checking"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    task: "check"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "merging"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "checking-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "checking"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "merging"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_EXTERNAL_ACTION
+    task: "merge"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "merged"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "merging"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "merging-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "merging"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+}
+
+# The plan has merged.
+states {
+  name: "merged"
+  final { merged: true }
+}
+
+# The plan was cancelled.
+states {
+  name: "cancelled"
+  final {}
+}

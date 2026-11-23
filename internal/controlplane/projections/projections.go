@@ -122,9 +122,16 @@ func each[T any, P interface {
 	return nil
 }
 
+// InDoubt is the gate key of the attempts of a retry from a state with no
+// gate, which retries an invocation in doubt, and the trigger of the
+// transitions that recover one (decisions 0200 and 0201).
+const InDoubt = "in-doubt"
+
 // attempts projects attempts: the number of transition.fired events into
 // the gate of the plan (decision 0136), 0 for a plan that exists and never
-// entered the gate (decision 0174).
+// entered the gate (decision 0174). For the gate key InDoubt, it is the
+// number of the plan's transitions on in-doubt back into the state they
+// left: the times it ran an invocation in doubt again.
 func attempts() Projection {
 	return Projection{
 		Fact:  "attempts",
@@ -135,7 +142,13 @@ func attempts() Projection {
 			}
 			n := int64(0)
 			err := each(evs, events.TypeTransitionFired, func(fired *eventsv1.TransitionFired) {
-				if fired.GetPlan() == keys.Plan && fired.GetGate() == keys.Gate {
+				switch {
+				case fired.GetPlan() != keys.Plan:
+				case keys.Gate == InDoubt:
+					if fired.GetTrigger() == InDoubt && fired.GetToState() == fired.GetFromState() {
+						n++
+					}
+				case fired.GetGate() == keys.Gate:
 					n++
 				}
 			})
@@ -286,12 +299,14 @@ func ofPlan(plan, invocation string, evs []*cloudeventsv1.CloudEvent) (req *even
 
 // usage projects usage: what the named invocation of the plan used, from
 // its invocation.result. With no invocation named, the usage of a plan
-// that exists is zero (decision 0175). An invocation that has no result
-// yet, or is not the plan's, has no usage.
+// that exists is zero (decision 0175). An invocation in doubt, whose last
+// lease ended with no result, counts as having spent its whole budget, the
+// budget of its document (decisions 0191 and 0199). Any other invocation
+// that has no result yet, or one that is not the plan's, has no usage.
 func usage() Projection {
 	return Projection{
 		Fact:  "usage",
-		Types: invocationTypes,
+		Types: slices.Concat(invocationTypes, leaseTypes),
 		Project: func(keys Keys, evs []*cloudeventsv1.CloudEvent) (proto.Message, error) {
 			if keys.Invocation == "" {
 				if ok, err := planned(keys.Plan, evs); err != nil || !ok {
@@ -299,16 +314,84 @@ func usage() Projection {
 				}
 				return &factsv1.Usage{Plan: keys.Plan, Value: &factsv1.Usage_Totals{}}, nil
 			}
-			_, res, ok, err := ofPlan(keys.Plan, keys.Invocation, evs)
-			if err != nil || !ok || res == nil {
-				return nil, err
-			}
-			u := res.GetUsage()
-			return &factsv1.Usage{Invocation: keys.Invocation, Plan: keys.Plan, Value: &factsv1.Usage_Totals{
-				Tokens: u.GetTokens(), CostMicrodollars: u.GetCostMicrodollars(), Seconds: u.GetSeconds(),
-			}}, nil
+			return invocationUsage(keys, evs)
 		},
 	}
+}
+
+// invocationUsage returns the usage of the invocation of keys: what its
+// result says it used or, when it is in doubt, its whole budget.
+func invocationUsage(keys Keys, evs []*cloudeventsv1.CloudEvent) (proto.Message, error) {
+	req, res, ok, err := ofPlan(keys.Plan, keys.Invocation, evs)
+	if err != nil || !ok {
+		return nil, err
+	}
+	if res != nil {
+		u := res.GetUsage()
+		return totals(keys, u.GetTokens(), u.GetCostMicrodollars(), u.GetSeconds()), nil
+	}
+	ended, err := leaseEnded(keys.Invocation, evs)
+	if err != nil || !ended {
+		return nil, err
+	}
+	doc, err := events.Document(req)
+	if err != nil {
+		return nil, err
+	}
+	b := doc.GetBudget()
+	return totals(keys, b.GetTokens(), b.GetCostMicrodollars(), b.GetSeconds()), nil
+}
+
+// leaseTypes are the event types of the leases of invocations.
+var leaseTypes = []string{events.TypeLeaseGranted, events.TypeLeaseReleased, events.TypeLeaseExpired}
+
+// totals returns the usage fact of the invocation of keys with the totals
+// tokens, cost and seconds.
+func totals(keys Keys, tokens, cost, seconds int64) *factsv1.Usage {
+	return &factsv1.Usage{Invocation: keys.Invocation, Plan: keys.Plan, Value: &factsv1.Usage_Totals{
+		Tokens: tokens, CostMicrodollars: cost, Seconds: seconds,
+	}}
+}
+
+// leaseEnded reports whether the last lease of invocation in evs ended,
+// released or expired (decision 0199). An invocation with no lease has
+// not run, and one whose last lease is current is running.
+func leaseEnded(invocation string, evs []*cloudeventsv1.CloudEvent) (bool, error) {
+	ended, leased := false, false
+	for _, e := range evs {
+		lease, granted, err := leaseOf(e)
+		if err != nil {
+			return false, err
+		}
+		if lease != invocation {
+			continue
+		}
+		leased, ended = leased || granted, !granted
+	}
+	return leased && ended, nil
+}
+
+// leaseOf returns the lease that e, a lease event, names, and whether e
+// grants it. It returns no lease for an event of another type.
+func leaseOf(e *cloudeventsv1.CloudEvent) (string, bool, error) {
+	var msg interface {
+		proto.Message
+		GetLease() string
+	}
+	switch e.GetType() {
+	case events.TypeLeaseGranted:
+		msg = &eventsv1.LeaseGranted{}
+	case events.TypeLeaseReleased:
+		msg = &eventsv1.LeaseReleased{}
+	case events.TypeLeaseExpired:
+		msg = &eventsv1.LeaseExpired{}
+	default:
+		return "", false, nil
+	}
+	if err := data(e, msg); err != nil {
+		return "", false, err
+	}
+	return msg.GetLease(), e.GetType() == events.TypeLeaseGranted, nil
 }
 
 // planningOutput is the output message of a planning invocation, whose

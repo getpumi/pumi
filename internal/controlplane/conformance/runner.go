@@ -40,6 +40,7 @@ var runnerTests = []struct {
 	{"AnAgentRoleInvocationIsRefusedWhenItReportsAVerdict", anAgentRoleInvocationIsRefusedWhenItReportsAVerdict},
 	{"ReportRefusesAnInvalidReport", reportRefusesAnInvalidReport},
 	{"ALogBatchWithAnOldLeaseNumberIsRefused", aLogBatchWithAnOldLeaseNumberIsRefused},
+	{"TheKernelFinishesOnlyAnInvocationInDoubt", theKernelFinishesOnlyAnInvocationInDoubt},
 }
 
 // version1 is the protocol version that the suite's runners support.
@@ -535,4 +536,56 @@ func aLogBatchWithAnOldLeaseNumberIsRefused(t *testing.T, p Plane) {
 	if err := batch(b, current); err != nil {
 		t.Fatalf("SendLog under the new lease: %v", err)
 	}
+}
+
+// finishAsKernel has the kernel append invocation.finished of invocation
+// with outcome.
+func finishAsKernel(t *testing.T, p Plane, invocation string, outcome eventsv1.InvocationFinished_Outcome) error {
+	t.Helper()
+	e := build(t, &eventsv1.InvocationFinished{Invocation: invocation, Outcome: outcome}, invocation)
+	_, err := p.Clients(Kernel).Append(t.Context(), &controlplanev1.AppendRequest{Events: []*cloudeventsv1.CloudEvent{e}})
+	return err
+}
+
+// theKernelFinishesOnlyAnInvocationInDoubt: the kernel appends
+// invocation.finished only for an invocation in doubt, whose last lease
+// ended with no result, and only with the outcome resolved on recovery,
+// when the adapter of an external action answers that the action happened
+// (decisions 0199 and 0202). An external action is granted once, so no
+// runner reports it after its lease ended.
+func theKernelFinishesOnlyAnInvocationInDoubt(t *testing.T, p Plane) {
+	action := func(invocation string) *runnerv1.Invocation {
+		doc := document(invocation, Gate)
+		doc.Component = &harnessv1.Component{Kind: harnessv1.Component_KIND_EXTERNAL_ACTION, Name: "forge", Version: "1"}
+		return doc
+	}
+	r := p.Runner("runner-a", Gate)
+	request(t, p, action("invocation-1"))
+	res := claim(t, r)
+	p.Advance(res.GetLeaseTimeout().AsDuration())
+	request(t, p, action("current"))
+	claim(t, r)
+	request(t, p, action("unclaimed"))
+	recovered := eventsv1.InvocationFinished_OUTCOME_RESOLVED_ON_RECOVERY
+	for _, tt := range []struct {
+		name       string
+		invocation string
+		outcome    eventsv1.InvocationFinished_Outcome
+		code       connect.Code
+	}{
+		{"another outcome", "invocation-1", eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, connect.CodeInvalidArgument},
+		{"a current lease", "current", recovered, connect.CodeFailedPrecondition},
+		{"no lease", "unclaimed", recovered, connect.CodeFailedPrecondition},
+		{"no request", "never-requested", recovered, connect.CodeFailedPrecondition},
+	} {
+		if err := finishAsKernel(t, p, tt.invocation, tt.outcome); connect.CodeOf(err) != tt.code {
+			t.Errorf("the kernel's invocation.finished with %s: %v, want the code %v", tt.name, err, tt.code)
+		}
+	}
+	if err := finishAsKernel(t, p, "invocation-1", recovered); err != nil {
+		t.Fatalf("the kernel's invocation.finished of the invocation in doubt: %v", err)
+	}
+	wantInvocationEvents(t, p, events.TypeLeaseGranted, events.TypeInvocationStarted, events.TypeLeaseExpired, events.TypeInvocationFinished)
+	err := finishAsKernel(t, p, "invocation-1", recovered)
+	wantCode(t, err, connect.CodeFailedPrecondition)
 }

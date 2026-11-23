@@ -11,6 +11,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -266,9 +268,6 @@ func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageT
 	if ex.capped {
 		result.Usage = r.cappedUsage(ex, res.GetUsage())
 	}
-	if len(res.GetOutputFiles()) > 0 {
-		return failed, fmt.Errorf("the adapter reported the output files %q, which the runner cannot store before the blob store of epic E7", res.GetOutputFiles())
-	}
 	tree, err := r.resultingTree(ctx, work, index)
 	if err != nil {
 		return failed, err
@@ -284,8 +283,67 @@ func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageT
 	if ex.capped {
 		outcome = eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
 	}
-	result.Tree, result.Output = tree, output
+	// The output files are uploaded last, so that the blob store gets none
+	// of an invocation that fails.
+	files, err := r.upload(ctx, work, res.GetOutputFiles())
+	if err != nil {
+		return failed, err
+	}
+	result.Tree, result.Output, result.OutputFiles = tree, output, files
 	return outcome, nil
+}
+
+// upload stores each of the output files paths, relative to the workspace
+// work and separated by slashes, in the blob store, and returns them with
+// their hashes, each path cleaned (decision 0160). A path that is not
+// local to the workspace, a link that leads out of it and a path that is
+// not a regular file are refused.
+func (r *run) upload(ctx context.Context, work string, paths []string) ([]*eventsv1.InvocationResult_OutputFile, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	// The root refuses a path, a link included, that leads out of the
+	// workspace.
+	root, err := os.OpenRoot(work)
+	if err != nil {
+		return nil, fmt.Errorf("the workspace could not be opened for the output files: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	files := make([]*eventsv1.InvocationResult_OutputFile, 0, len(paths))
+	for _, p := range paths {
+		name := filepath.FromSlash(p)
+		if !filepath.IsLocal(name) {
+			return nil, fmt.Errorf("the output file %q is not a path in the workspace", p)
+		}
+		hash, err := r.put(ctx, root, name)
+		if err != nil {
+			return nil, fmt.Errorf("the output file %q: %w", p, err)
+		}
+		files = append(files, &eventsv1.InvocationResult_OutputFile{Path: path.Clean(p), BlobHash: hash})
+	}
+	return files, nil
+}
+
+// put stores the regular file name of root in the blob store and returns
+// its hash.
+func (r *run) put(ctx context.Context, root *os.Root, name string) (string, error) {
+	f, err := root.Open(name)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("it is not a regular file but %v", info.Mode().Type())
+	}
+	hash, err := r.cfg.Blobs.Put(ctx, f)
+	if err != nil {
+		return "", fmt.Errorf("the blob store: %w", err)
+	}
+	return hash, nil
 }
 
 // cappedUsage returns the usage of a run that the runner stopped at its

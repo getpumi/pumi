@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -45,6 +47,17 @@ const (
 	adapterOverCaps = "over caps"
 	// adapterWaits runs until the runner closes its standard input.
 	adapterWaits = "waits"
+	// adapterReportsAFile writes outputFileContent to outputFilePath and
+	// reports it as an output file.
+	adapterReportsAFile = "reports a file"
+)
+
+// The output file of the mode adapterReportsAFile, in a directory that the
+// test clone's .gitignore ignores, so that the resulting tree does not
+// change a file outside the allowed paths.
+const (
+	outputFilePath    = "out/report.txt"
+	outputFileContent = "the report\n"
 )
 
 // testPerson is the git user.email of the test clones.
@@ -77,8 +90,17 @@ func testAdapter(mode string) int {
 	}
 	fmt.Fprintf(os.Stderr, "%sruns %s on the tree %s\n", testAdapterPrefix, inv.GetInvocation(), inv.GetInput().GetTree())
 	usage := &harnessv1.Usage{Tokens: 10, CostMicrodollars: 20, Seconds: 1}
+	var files []string
 	switch mode {
 	case adapterSucceeds:
+	case adapterReportsAFile:
+		if err := os.MkdirAll(filepath.Dir(outputFilePath), 0o750); err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(outputFilePath, []byte(outputFileContent), 0o600); err != nil {
+			panic(err)
+		}
+		files = []string{outputFilePath}
 	case adapterOverCaps:
 		usage.CostMicrodollars = policy.DefaultHardCaps().CostMicrodollars + 1
 	case adapterWaits:
@@ -90,7 +112,7 @@ func testAdapter(mode string) int {
 		return 9
 	}
 	out, err := protojson.Marshal(&harnessv1.Result{
-		Status: harnessv1.Result_STATUS_COMPLETED, Output: `{"summary":"Implemented the plan."}`, Usage: usage,
+		Status: harnessv1.Result_STATUS_COMPLETED, Output: `{"summary":"Implemented the plan."}`, Usage: usage, OutputFiles: files,
 	})
 	if err != nil {
 		panic(err)
@@ -345,6 +367,41 @@ func TestRunRunsThePlansAndPrintsTheRunnersOutput(t *testing.T) {
 		if e.GetSource() != "/person/"+testPerson {
 			t.Errorf("the plan.added %s has the source %q, want the person's /person/%s", e.GetId(), e.GetSource(), testPerson)
 		}
+	}
+}
+
+// TestRunStoresTheOutputFilesInTheBlobStore: the runner of pumi run
+// uploads the file that the adapter reports to the local blob store, at
+// pumi/blobs/local/<sha256> in the clone's common git directory, and the
+// invocation's result records its path and hash (decision 0232).
+func TestRunStoresTheOutputFilesInTheBlobStore(t *testing.T) {
+	c := newCommandClone(t, "tracks", adapterReportsAFile)
+	writeFile(t, c.dir, ".gitignore", "/out/\n")
+	git(t, c.dir, exec.CommandContext(t.Context(), "git", "add", ".gitignore"))
+	git(t, c.dir, exec.CommandContext(t.Context(), "git", "commit", "--quiet", "--message=ignore out"))
+	r := c.start()
+	c.must("add", "--track", "a", "a1")
+	c.waitState(r, "a1", "merged")
+	r.stop(t)
+	results := ofType(c.log(), events.TypeInvocationResult)
+	if len(results) != 1 {
+		t.Fatalf("the log has %d invocation.result events, want 1", len(results))
+	}
+	result := dataOf(t, results[0], &eventsv1.InvocationResult{})
+	sum := sha256.Sum256([]byte(outputFileContent))
+	name := hex.EncodeToString(sum[:])
+	files := result.GetOutputFiles()
+	if len(files) != 1 || files[0].GetPath() != outputFilePath || files[0].GetBlobHash() != "sha256:"+name {
+		t.Fatalf("the result's output files are %v, want %s with sha256:%s", files, outputFilePath, name)
+	}
+	root, err := os.OpenRoot(filepath.Join(c.dir, ".git", "pumi"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	content, err := root.ReadFile(filepath.Join("blobs", "local", name))
+	if err != nil || string(content) != outputFileContent {
+		t.Errorf("pumi/blobs/local/%s holds %q, %v; want the output file's content", name, content, err)
 	}
 }
 

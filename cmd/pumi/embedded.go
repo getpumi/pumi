@@ -19,6 +19,7 @@ import (
 	"getpumi.dev/pumi/api/gen/pumi/runner/v1/runnerv1connect"
 	"getpumi.dev/pumi/internal/cli"
 	"getpumi.dev/pumi/internal/controlplane"
+	"getpumi.dev/pumi/internal/controlplane/blobstore"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
 	"getpumi.dev/pumi/internal/kernel"
 	"getpumi.dev/pumi/internal/runner"
@@ -123,7 +124,8 @@ func personClient(log *embeddedlog.Log, cfg *config, id controlplane.Identity) (
 // served to the person on the socket beside it (decision 0206), the kernel
 // on the file's workflow, starting each plan from the trunk's tree
 // (decision 0209), and the in-process runner with the file's adapter,
-// whose output goes to out. It stops when any of them fails.
+// whose output goes to out and whose output files go to the local blob
+// store beside the log (decision 0232). It stops when any of them fails.
 func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) error {
 	cfg, err := readConfig(configPath)
 	if err != nil {
@@ -146,6 +148,13 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 	if err != nil {
 		return err
 	}
+	// The local blob store is beside the log, in the pumi directory
+	// (decision 0232).
+	blobs, err := blobstore.OpenLocal(log.Dir())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = blobs.Close() }()
 	kernelClient, runnerClient, err := newClients(svc)
 	if err != nil {
 		return err
@@ -174,6 +183,7 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		func() error {
 			return runner.Run(ctx, runner.Config{
 				Service: runnerClient, Adapter: cfg.path(cfg.file.GetAdapter()), Repository: dir, WorkDir: work, Output: out,
+				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant),
 			})
 		},
 		func() error {

@@ -324,7 +324,7 @@ func TestARetryOutsideAGateCountsTheRunsAgainOfAFailedInvocation(t *testing.T) {
 	// again on retry (decision 0235). Such a retry reads the same in-doubt
 	// attempts, which count the plan's transitions on in-doubt and on failed
 	// back into the state they left, so a run that keeps failing stops at
-	// the profile's maxAttempts for in-doubt.
+	// the profile's maxAttempts for in-doubt (decision 0237).
 	s := testService(t)
 	s.cfg.Settings.MaxAttempts = map[string]int64{"in-doubt": 2}
 	usageFact(s)

@@ -13,8 +13,8 @@ import (
 )
 
 // failedSettings are the settings of the cases in which an agent run
-// fails: one run again, counted with the in-doubt attempts (decisions 0201
-// and 0235).
+// fails: one run again, counted with the in-doubt attempts (decisions 0235
+// and 0237).
 var failedSettings = caseSettings{MaxAttempts: map[string]int64{"in-doubt": 1}}
 
 // reportFailedOf reports the claimed invocation with the outcome failed, as

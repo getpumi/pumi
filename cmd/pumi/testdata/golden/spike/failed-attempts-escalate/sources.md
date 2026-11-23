@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: The Pumi Authors
 -->
 # failed-attempts-escalate
 
-The runner reports the agent run as failed, and with maxAttempts 1 for in-doubt it runs again as plan-a/2. When plan-a/2 fails too, the plan has one in-doubt attempt, so core.attempts-left denies the retry, and the plan escalates on failed to implementing-escalated with escalation.raised (decisions 0169, 0201 and 0235).
+The runner reports the agent run as failed, and with maxAttempts 1 for in-doubt it runs again as plan-a/2. When plan-a/2 fails too, the plan has one in-doubt attempt, so core.attempts-left denies the retry, and the plan escalates on failed to implementing-escalated with escalation.raised (decisions 0169, 0235 and 0237).
 
 Regime sources, in `WalkingDisaster/scale-wholesale` at `9842f55`:
 

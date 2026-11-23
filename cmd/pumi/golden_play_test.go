@@ -552,7 +552,7 @@ var seeds = map[string][]step{
 	// to done (decision 0235).
 	"spike/failed-runs-again": {addPlanA, claimStep, reportFailedOf("plan-a/1"), claimStep, reportOf("plan-a/2", underCaps)},
 	// plan-a/2 fails too; the retry has no attempts left, so it is denied,
-	// and the plan escalates on failed (decisions 0201 and 0235).
+	// and the plan escalates on failed (decisions 0235 and 0237).
 	"spike/failed-attempts-escalate": {addPlanA, claimStep, reportFailedOf("plan-a/1"), claimStep, reportFailedOf("plan-a/2")},
 	// With parallelism 1, b1 waits while a1 runs; the person cancels b1,
 	// and b1 does not start when a1 has merged.

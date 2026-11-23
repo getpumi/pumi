@@ -32,7 +32,7 @@ states {
 # (decisions 0200 and 0201). When its invocation reaches its wall-time limit,
 # it escalates (decision 0203). When its invocation fails, it runs again on
 # retry, which counts with the in-doubt attempts and which the hard caps
-# guard; otherwise it escalates (decision 0235).
+# guard; otherwise it escalates (decisions 0235 and 0237).
 states {
   name: "implementing"
   parent: "active"

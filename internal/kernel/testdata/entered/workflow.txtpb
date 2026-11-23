@@ -23,6 +23,9 @@ states {
 
 # Implementing (initial): an agent implements the plan. To reviewing on
 # advance; otherwise escalate.
+# When its invocation is in doubt, it runs again on retry, which the
+# in-doubt attempts and the hard caps guard; otherwise it escalates
+# (decisions 0200 and 0201).
 states {
   name: "implementing"
   parent: "active"
@@ -39,6 +42,16 @@ states {
   }
   transitions {
     trigger { result {} }
+    target: "escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
     target: "escalated"
     action: "escalate"
   }

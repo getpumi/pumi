@@ -35,6 +35,16 @@ states {
     target: "planning-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { in_doubt {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
 }
 
 states {
@@ -65,6 +75,16 @@ states {
   }
   transitions {
     trigger { result {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "review"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
     target: "review-escalated"
     action: "escalate"
   }

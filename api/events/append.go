@@ -61,7 +61,10 @@ var appendTable = map[string][]Appender{
 	TypeInvocationResult: {
 		AppenderRunnerReportAgentRole, AppenderRunnerReportGateRole, AppenderRunnerReportExternalAction,
 	},
+	// The kernel also finishes an external action in doubt that its adapter
+	// says happened, with the outcome resolved on recovery (decision 0202).
 	TypeInvocationFinished: {
+		AppenderKernel,
 		AppenderRunnerReportAgentRole, AppenderRunnerReportGateRole, AppenderRunnerReportExternalAction,
 	},
 	TypeVerdictRecorded: {AppenderRunnerReportGateRole},

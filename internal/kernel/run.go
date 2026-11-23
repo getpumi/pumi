@@ -28,9 +28,9 @@ import (
 const Source = "/kernel"
 
 // InDoubt is the trigger that a transition.fired names when the kernel
-// escalates a plan whose invocation's lease ended with no result
-// (decisions 0019 and 0182).
-const InDoubt = "in-doubt"
+// recovers an invocation in doubt, whose last lease ended with no result
+// (decisions 0191, 0199 and 0200).
+const InDoubt = string(workflow.InDoubt)
 
 // escalate is the Cedar action of the transitions that escalate a plan to a
 // person; firing one appends escalation.raised (decision 0169).
@@ -54,6 +54,10 @@ type Config struct {
 	// plans run at once across all tracks (decisions 0172 and 0189). 0
 	// counts as 1.
 	Parallelism int
+	// Resolve asks the adapter of an external action in doubt whether the
+	// action happened (decision 0202). The forge adapter of epic E11 gives
+	// the first answer; the golden cases give a fake one.
+	Resolve func(ctx context.Context, invocation *runnerv1.Invocation) (happened bool, err error)
 	// Idle, when set, is called each time the kernel has handled every
 	// event up to head, the head of the log, and waits for more. The golden
 	// cases use it to know when the kernel waits (decision 0183).
@@ -91,6 +95,11 @@ type kernel struct {
 	// and finished the invocations that finished.
 	invocations map[string]*planRun
 	finished    map[string]bool
+	// documents holds the document of each invocation that the log
+	// requests, and resolved the external actions in doubt whose
+	// invocation.finished the kernel appended.
+	documents map[string]*runnerv1.Invocation
+	resolved  map[string]bool
 	// ended holds the invocations whose last lease ended, released or
 	// expired, by the event that ended it.
 	ended map[string]bool
@@ -137,8 +146,9 @@ type planRun struct {
 // 0189 and 0198). It reads the log with Subscribe. On start it reads the
 // log up to its head and rebuilds each plan's state from it, handling any
 // trigger that has no transition yet. Then it handles each new event in
-// log order. It escalates an invocation in doubt, one whose lease ended
-// with no result, when it starts and when the lease ends.
+// log order. It recovers an invocation in doubt, one whose lease ended
+// with no result, when it starts and when the lease ends (decisions 0191
+// and 0200 to 0202).
 //
 // A plan starts when every plan it depends on is in a final state that has
 // merged (decision 0197) and fewer plans than the parallelism setting run,
@@ -223,7 +233,8 @@ func newKernel(cfg Config) (*kernel, error) {
 	}
 	k := &kernel{
 		cfg: cfg, states: map[string]*workflowv1.State{}, plans: map[string]*planRun{},
-		invocations: map[string]*planRun{}, finished: map[string]bool{}, ended: map[string]bool{}, firedBy: map[string]fired{},
+		invocations: map[string]*planRun{}, finished: map[string]bool{},
+		documents: map[string]*runnerv1.Invocation{}, resolved: map[string]bool{}, ended: map[string]bool{}, firedBy: map[string]fired{},
 		requestedBy: map[string]bool{}, decisions: map[string][]decision{}, positionOf: map[string]uint64{},
 	}
 	for _, s := range cfg.Workflow.Definition().GetStates() {
@@ -305,7 +316,7 @@ func (r *planRun) running() bool {
 
 // start handles the events of the log up to its head, known, which it
 // indexes first, so that it knows which triggers already fired a
-// transition. It then escalates each invocation in doubt that handling
+// transition. It then recovers each invocation in doubt that handling
 // the log did not.
 func (k *kernel) start(ctx context.Context, known []*controlplanev1.Entry) error {
 	for _, e := range known {
@@ -317,7 +328,7 @@ func (k *kernel) start(ctx context.Context, known []*controlplanev1.Entry) error
 		}
 	}
 	for _, r := range k.order {
-		if err := r.escalateInDoubt(ctx); err != nil {
+		if err := r.recoverInDoubt(ctx); err != nil {
 			return err
 		}
 	}
@@ -326,7 +337,9 @@ func (k *kernel) start(ctx context.Context, known []*controlplanev1.Entry) error
 
 // index records what the kernel needs to know of e ahead of handling it:
 // its position, and, for a transition.fired, an invocation.requested of
-// the kernel and a decision, the event that caused it.
+// the kernel and a decision, the event that caused it, and, for an
+// invocation.finished of the kernel, that it resolved the invocation, so
+// that the lease.expired before it does not ask the adapter again.
 func (k *kernel) index(entry *controlplanev1.Entry) {
 	e := entry.GetEvent()
 	if _, seen := k.positionOf[e.GetId()]; seen {
@@ -346,6 +359,11 @@ func (k *kernel) index(entry *controlplanev1.Entry) {
 	case events.TypeInvocationRequested:
 		if e.GetSource() == Source {
 			k.requestedBy[cause] = true
+		}
+	case events.TypeInvocationFinished:
+		var f eventsv1.InvocationFinished
+		if e.GetSource() == Source && unpack(e, &f) == nil {
+			k.resolved[f.GetInvocation()] = true
 		}
 	case events.TypeDecisionMade:
 		var d eventsv1.DecisionMade
@@ -384,16 +402,16 @@ func (k *kernel) handle(ctx context.Context, entry *controlplanev1.Entry) error 
 	if err := k.fireFor(ctx, e); err != nil {
 		return err
 	}
-	if err := k.escalateEnded(ctx, e); err != nil {
+	if err := k.recoverEnded(ctx, e); err != nil {
 		return err
 	}
 	return k.schedule(ctx)
 }
 
-// escalateEnded escalates the plan of the invocation whose lease e ends,
-// when e is a lease.released or a lease.expired and the invocation has no
-// result: the invocation is in doubt.
-func (k *kernel) escalateEnded(ctx context.Context, e *cloudeventsv1.CloudEvent) error {
+// recoverEnded recovers the invocation whose lease e ends, when e is a
+// lease.released or a lease.expired and the invocation has no result: the
+// invocation is in doubt.
+func (k *kernel) recoverEnded(ctx context.Context, e *cloudeventsv1.CloudEvent) error {
 	if e.GetType() != events.TypeLeaseReleased && e.GetType() != events.TypeLeaseExpired {
 		return nil
 	}
@@ -401,7 +419,7 @@ func (k *kernel) escalateEnded(ctx context.Context, e *cloudeventsv1.CloudEvent)
 	if !ok {
 		return nil
 	}
-	return r.escalateInDoubt(ctx)
+	return r.recoverInDoubt(ctx)
 }
 
 // fireFor fires the transition of the trigger that e is, if any.
@@ -458,6 +476,11 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 		if err := unpack(e, &req); err != nil {
 			return err
 		}
+		doc, err := events.Document(&req)
+		if err != nil {
+			return err
+		}
+		k.documents[req.GetInvocation()] = doc
 		if r, ok := k.plans[req.GetPlan()]; ok {
 			r.invocation, r.requested = req.GetInvocation(), e.GetId()
 			r.requests++
@@ -723,8 +746,12 @@ func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, t
 // state on trigger, after the actions denied were denied.
 func (r *planRun) question(trigger string, denied []string) string {
 	if trigger == InDoubt {
-		return fmt.Sprintf("The lease of the invocation %s of the state %s ended with no result, so it may have run. It is not run again (decisions 0182 and 0199).",
-			r.invocation, r.state)
+		if len(denied) == 0 {
+			return fmt.Sprintf("The lease of the invocation %s of the state %s ended with no result, so it may have run (decisions 0191 and 0199).",
+				r.invocation, r.state)
+		}
+		return fmt.Sprintf("The lease of the invocation %s of the state %s ended with no result, so it may have run, and running it again was denied: %s denied (decisions 0191 and 0201).",
+			r.invocation, r.state, strings.Join(denied, ", then "))
 	}
 	if len(denied) == 0 {
 		return fmt.Sprintf("The plan escalated from the state %s on %s.", r.state, trigger)
@@ -804,35 +831,85 @@ func (r *planRun) append(ctx context.Context, evs []*cloudeventsv1.CloudEvent) e
 	return nil
 }
 
-// escalateInDoubt escalates the plan when the state invokes and its
-// invocation was requested, its last lease ended and it has no result: the
-// invocation may have run, and an agent run is not idempotent, so it is
-// not run again (decisions 0019 and 0182). An invocation that no runner
-// claimed has not run, and one whose lease is current may still report,
-// so neither is in doubt; a lease that is current when pumi starts again
-// gets its full timeout and expires if no runner renews it. The transition is the state's first on result
-// that escalate guards, with the invocation.requested as its cause, and
-// InDoubt as its trigger.
-func (r *planRun) escalateInDoubt(ctx context.Context) error {
-	if !r.started || r.invocation == "" || r.k.finished[r.invocation] || !r.k.ended[r.invocation] {
+// recoverInDoubt recovers the plan's invocation when the state invokes and
+// the invocation was requested, its last lease ended and it has no result:
+// it is in doubt and may have run (decisions 0191 and 0199). An invocation
+// that no runner claimed has not run, and one whose lease is current may
+// still report, so neither is in doubt; a lease that is current when pumi
+// starts again gets its full timeout and expires if no runner renews it.
+//
+// A check in doubt runs again: the control plane grants it again, so the
+// kernel does nothing. For an external action, the kernel asks its adapter
+// whether the action happened (decision 0202); when it did, the kernel
+// appends the invocation's invocation.finished, resolved on recovery, which
+// is the state's result when the kernel reads it. Otherwise, and for an
+// agent run, the kernel fires the state's transitions on in-doubt, with the
+// invocation.requested as their cause (decision 0200): retry runs the
+// invocation again as a new one, and escalate escalates.
+func (r *planRun) recoverInDoubt(ctx context.Context) error {
+	k := r.k
+	inv := r.invocation
+	if !r.started || inv == "" || k.finished[inv] || k.resolved[inv] || !k.ended[inv] {
 		return nil
 	}
-	if _, ok := r.k.states[r.state].GetEntry().(*workflowv1.State_Invoke); !ok {
+	invoke, ok := k.states[r.state].GetEntry().(*workflowv1.State_Invoke)
+	if !ok {
 		return nil
 	}
-	if _, ok := r.k.firedBy[r.requested]; ok {
+	if _, ok := k.firedBy[r.requested]; ok {
 		return nil
 	}
-	ts, err := r.m.Transitions(ctx, workflow.Result)
+	switch invoke.Invoke.GetKind() {
+	case workflowv1.Invoke_KIND_CHECK:
+		return nil
+	case workflowv1.Invoke_KIND_EXTERNAL_ACTION:
+		happened, err := r.ask(ctx)
+		if err != nil || happened {
+			return err
+		}
+	case workflowv1.Invoke_KIND_HARNESS, workflowv1.Invoke_KIND_UNSPECIFIED:
+		// An agent run in doubt runs again through the transitions on
+		// in-doubt; the loader refuses a kind that is not given.
+	}
+	ts, err := r.m.Transitions(ctx, workflow.InDoubt)
 	if err != nil {
 		return err
 	}
-	for _, t := range ts {
-		if t.Action == escalate {
-			req := &cloudeventsv1.CloudEvent{Id: r.requested}
-			return r.fire(ctx, req, InDoubt, []workflow.Transition{t}, nil)
-		}
+	if len(ts) == 0 {
+		return fmt.Errorf("the invocation %s of the state %s is in doubt, and the state has no transition on %s (decision 0200)",
+			inv, r.state, workflow.InDoubt)
 	}
-	return fmt.Errorf("the invocation %s of the state %s is in doubt, and the state has no transition on result that %s guards",
-		r.invocation, r.state, escalate)
+	return r.fire(ctx, &cloudeventsv1.CloudEvent{Id: r.requested}, InDoubt, ts, nil)
+}
+
+// ask asks the adapter of the plan's external action in doubt whether the
+// action happened, and when it did, appends the invocation's
+// invocation.finished with the outcome resolved on recovery (decision
+// 0202). It reports whether the action happened. With no Resolve, the
+// kernel cannot know whether running the action again is safe, so it
+// returns an error.
+func (r *planRun) ask(ctx context.Context) (bool, error) {
+	k := r.k
+	inv := r.invocation
+	if k.cfg.Resolve == nil {
+		return false, fmt.Errorf("the external action %s is in doubt, and the kernel has no adapter to ask whether it happened (decision 0202)", inv)
+	}
+	happened, err := k.cfg.Resolve(ctx, proto.CloneOf(k.documents[inv]))
+	if err != nil {
+		return false, fmt.Errorf("cannot ask whether the external action %s happened: %w", inv, err)
+	}
+	if !happened {
+		return false, nil
+	}
+	e, err := events.New(&eventsv1.InvocationFinished{
+		Invocation: inv, Outcome: eventsv1.InvocationFinished_OUTCOME_RESOLVED_ON_RECOVERY,
+	}, events.Attributes{ID: "kernel-" + rand.Text(), Source: Source, Subject: inv, Tenant: "kernel", Cause: r.requested})
+	if err != nil {
+		return false, fmt.Errorf("cannot build the kernel's event: %w", err)
+	}
+	if err := r.append(ctx, []*cloudeventsv1.CloudEvent{e}); err != nil {
+		return false, err
+	}
+	k.resolved[inv] = true
+	return true, nil
 }

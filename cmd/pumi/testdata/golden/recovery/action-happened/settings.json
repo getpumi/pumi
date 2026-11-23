@@ -1,0 +1,11 @@
+{
+  "maxAttempts": {
+    "in-doubt": 2
+  },
+  "budget": {
+    "tokens": 200000,
+    "cost_microdollars": 2000000,
+    "seconds": 1200
+  },
+  "actionHappened": true
+}

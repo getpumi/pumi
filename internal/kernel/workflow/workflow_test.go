@@ -78,6 +78,9 @@ func TestTheLoaderRefuses(t *testing.T) {
 		{"no-trigger", []string{`state "planning", transition 1`, "no trigger"}},
 		{"unspecified-role", []string{`state "planning"`, "no role"}},
 		{"unparsable", []string{"unparsable.txtpb"}},
+		{"in-doubt-missing", []string{`state "planning"`, "agent run", `no transition on "in-doubt"`}},
+		{"in-doubt-on-check", []string{`state "review", transition 4`, `"in-doubt"`, "check", "runs again"}},
+		{"in-doubt-without-invoke", []string{`state "planning-escalated", transition 3`, `"in-doubt"`, "starts no invocation"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -99,8 +102,8 @@ func TestEveryFixtureIsTested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 21 {
-		t.Errorf("testdata has %d workflow fixtures, want the valid one and 20 refusals: %q", len(names), names)
+	if len(names) != 24 {
+		t.Errorf("testdata has %d workflow fixtures, want the valid one and 23 refusals: %q", len(names), names)
 	}
 }
 
@@ -167,6 +170,7 @@ func TestTransitionsAreTheStatesOwnThenItsSuperstatesInFileOrder(t *testing.T) {
 		{Event(events.TypeCancelRequested), []string{"active:cancel>cancelled"}},
 		{Event(events.TypeApprovalRecorded), []string{}},
 		{Entered, []string{}},
+		{InDoubt, []string{"review:retry>review", "review:escalate>review-escalated"}},
 	}
 	for _, tt := range tests {
 		got, err := m.Transitions(ctx, tt.trigger)
@@ -190,8 +194,8 @@ func TestEachTransitionHasItsOwnIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	ts := w.Transitions()
-	if len(ts) != 12 {
-		t.Fatalf("the workflow has %d transitions, want 12", len(ts))
+	if len(ts) != 16 {
+		t.Fatalf("the workflow has %d transitions, want 16", len(ts))
 	}
 	for i, tr := range ts {
 		if tr.Index != i {
@@ -263,7 +267,7 @@ func TestFireRefusesATransitionOfAnotherState(t *testing.T) {
 	if s.state != "review-escalated" {
 		t.Errorf("the state is %q, want it unchanged", s.state)
 	}
-	for _, i := range []int{-1, 12} {
+	for _, i := range []int{-1, 16} {
 		if err := m.Fire(ctx, i); err == nil {
 			t.Errorf("Fire(%d) succeeded, want an error", i)
 		}

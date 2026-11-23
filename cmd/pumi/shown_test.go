@@ -463,8 +463,9 @@ func TestShownRunReachesTheFinalState(t *testing.T) {
 
 // TestShownRunKilledAndStartedAgain starts pumi as a child process, kills
 // it while the adapter runs, and starts pumi again: the invocation is in
-// doubt, so the plan escalates and the invocation is not run again after
-// its lease expires (decision 0182). It shows the log.
+// doubt after its lease expires. Its wiring sets no maxAttempts for
+// in-doubt, so the retry is denied, the plan escalates on in_doubt, and the
+// invocation is not run again (decisions 0191 and 0201). It shows the log.
 func TestShownRunKilledAndStartedAgain(t *testing.T) {
 	clone, plan, adapter := shownSetup(t)
 	run := prepare(t, clone, plan, adapter)
@@ -503,7 +504,7 @@ func TestShownRunKilledAndStartedAgain(t *testing.T) {
 	go func() { done <- embedded(ctx, run, nil) }()
 	waitFor(t, run, time.Minute, events.TypeEscalationRaised)
 	// The killed run's lease expires after the restart. The runner must
-	// not claim the invocation again (decision 0182).
+	// not claim the invocation again (decisions 0182 and 0202).
 	time.Sleep(controlplane.DefaultLeaseTimeout + afterExpiry)
 	cancel()
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {

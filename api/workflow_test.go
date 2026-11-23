@@ -124,11 +124,11 @@ func TestATransitionHasATriggerATargetAndAnAction(t *testing.T) {
 	}
 }
 
-func TestATriggerIsExactlyOneOfResultEnteredOrAnEventType(t *testing.T) {
+func TestATriggerIsExactlyOneOfResultEnteredInDoubtOrAnEventType(t *testing.T) {
 	trig := (&workflowv1.Trigger{}).ProtoReflect().Descriptor()
 	kind := oneofOf(t, trig, "kind")
-	if got, want := oneofFieldNames(kind), []string{"entered", "event", "result"}; !slices.Equal(got, want) || kind.IsSynthetic() {
-		t.Fatalf("Trigger is one of %q, want exactly one of %q (decision 0170)", got, want)
+	if got, want := oneofFieldNames(kind), []string{"entered", "event", "in_doubt", "result"}; !slices.Equal(got, want) || kind.IsSynthetic() {
+		t.Fatalf("Trigger is one of %q, want exactly one of %q (decisions 0170 and 0200)", got, want)
 	}
 	if got, want := fieldNames(trig), oneofFieldNames(kind); !slices.Equal(got, want) {
 		t.Errorf("Trigger has %q outside its oneof", got)

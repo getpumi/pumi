@@ -123,7 +123,8 @@ func actionUID(action string) cedar.EntityUID {
 // (decisions 0143 and 0155). The profile settings and the hard caps come
 // from the wiring. The gate of the facts and of maxAttempts is the action
 // itself, except for a retry, whose gate is the gate of the state the plan
-// is in.
+// is in, or, for a state with no gate, in-doubt: such a retry runs an
+// invocation in doubt again (decision 0201).
 func (s *Service) decide(at uint64, hash string, p principal, q question) (decided, error) {
 	attrs, ok := s.decider.contextAttributes(actionUID(q.action))
 	if !ok {
@@ -146,6 +147,9 @@ func (s *Service) decide(at uint64, hash string, p principal, q question) (decid
 			return decided{}, err
 		}
 		keys.Gate = gate
+		if gate == "" {
+			keys.Gate = projections.InDoubt
+		}
 	}
 	context, basis, err := s.context(at, attrs, keys)
 	if err != nil {
@@ -212,8 +216,8 @@ func (s *Service) added(at uint64, plan string) (bool, error) {
 // gateOf returns the gate of the state that plan is in, as of the position
 // at: the gate of the last transition.fired of the plan, which names the
 // gate of the state the workflow entered. It is empty when the plan has no
-// transition or its state has no gate, and then a retry has no attempts and
-// no maxAttempts, and is denied (decision 0143).
+// transition or its state has no gate, and then a retry reads the in-doubt
+// attempts and maxAttempts (decision 0201).
 func (s *Service) gateOf(at uint64, plan string) (string, error) {
 	found, _, err := s.log.Read(embeddedlog.Filter{Types: []string{events.TypeTransitionFired}})
 	if err != nil {

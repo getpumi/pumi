@@ -464,9 +464,11 @@ func answerStep(answer string) step {
 // seeds are the steps that write each case's log.jsonl with -update, by
 // the case's directory under goldenDir.
 var seeds = map[string][]step{
-	"spike/advance-to-final":           {addPlanA, claimStep, reportStep(underCaps)},
-	"spike/over-caps-escalates":        {addPlanA, claimStep, reportStep(overCaps)},
-	"spike/in-doubt-escalates":         {addPlanA, claimStep, expireStep},
+	"spike/advance-to-final":    {addPlanA, claimStep, reportStep(underCaps)},
+	"spike/over-caps-escalates": {addPlanA, claimStep, reportStep(overCaps)},
+	// The lease of the agent run expires, and it runs again as a new
+	// invocation (decisions 0191 and 0200).
+	"spike/in-doubt-runs-again":        {addPlanA, claimStep, expireStep, claimStep, reportStep(underCaps)},
 	"spike/answer-over-caps-escalates": {addPlanA, claimStep, reportStep(overCaps), answerStep("Go on.")},
 	"entered/decide-on-entry":          {addPlanA, claimStep, reportStep(underCaps)},
 	// With parallelism 2, a1 and b1 start at once, and a2 starts when a1
@@ -484,6 +486,35 @@ var seeds = map[string][]step{
 	"tracks/escalation-while-another-goes-on": slices.Concat(addTwoTracks, []step{
 		claimStep, claimStep, reportOf("a1/1", overCaps), reportOf("b1/1", underCaps),
 	}),
+	// The agent run's lease expires; it runs again as plan-a/2, and the
+	// plan goes on through the check and the merge.
+	"recovery/agent-run-runs-again": {
+		addPlanA, claimStep, expireStep, claimStep, reportStep(underCaps), claimStep, reportStep(underCaps),
+		claimStep, reportStep(underCaps),
+	},
+	// The check's lease expires; the runner claims the same invocation
+	// again, under a new lease number.
+	"recovery/check-runs-again": {
+		addPlanA, claimStep, reportStep(underCaps), claimStep, expireStep, claimStep, reportStep(underCaps),
+		claimStep, reportStep(underCaps),
+	},
+	// The merge's lease expires and its adapter answers that it happened:
+	// the kernel finishes it, resolved on recovery, and the plan merges.
+	"recovery/action-happened": {
+		addPlanA, claimStep, reportStep(underCaps), claimStep, reportStep(underCaps), claimStep, expireStep,
+	},
+	// The merge's lease expires and its adapter answers that it did not
+	// happen: it runs again as plan-a/4.
+	"recovery/action-did-not-happen": {
+		addPlanA, claimStep, reportStep(underCaps), claimStep, reportStep(underCaps), claimStep, expireStep,
+		claimStep, reportStep(underCaps),
+	},
+	// With maxAttempts 1 for in-doubt, the agent run runs again once; the
+	// second time it is in doubt, the retry is denied and the plan escalates.
+	"recovery/attempts-deny-the-retry": {addPlanA, claimStep, expireStep, claimStep, expireStep},
+	// The budget is over the cost cap, so the lost run counts as having
+	// spent more than the cap, the retry is denied and the plan escalates.
+	"recovery/caps-deny-the-retry": {addPlanA, claimStep, expireStep},
 }
 
 // seed runs the steps of a case with the settings s on a new log and

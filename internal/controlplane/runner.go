@@ -151,7 +151,7 @@ func (s *Service) claim(id Identity) (*runnerv1.ClaimResponse, error) {
 // claimOne claims doc's invocation for holder when a runner may claim it,
 // reading its state again when another append changed it first. A runner
 // may claim an invocation that has not finished and has no current lease,
-// and an agent run only when it has had no lease.
+// and an invocation that is not a check only when it has had no lease.
 func (s *Service) claimOne(doc *runnerv1.Invocation, holder string) (*runnerv1.ClaimResponse, error) {
 	for {
 		st, err := s.state(doc.GetInvocation())
@@ -175,11 +175,13 @@ func (s *Service) claimOne(doc *runnerv1.Invocation, holder string) (*runnerv1.C
 }
 
 // idempotent reports whether doc's component may run again after a lease
-// of it ended without a result. An agent run is not idempotent, so it is
-// granted only once: an agent run whose lease expired may have run, and the
-// kernel escalates it when pumi starts again (decisions 0019 and 0182).
+// of it ended without a result: only a check, which runs again when it is
+// in doubt. An agent run or an external action whose lease ended may have
+// run, so it is granted only once, and the kernel recovers it: it runs an
+// agent run again as a new invocation, and asks an external action's
+// adapter whether the action happened (decisions 0191 and 0202).
 func idempotent(doc *runnerv1.Invocation) bool {
-	return doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN
+	return doc.GetComponent().GetKind() == harnessv1.Component_KIND_CHECK
 }
 
 // Heartbeat renews the runner's lease of the invocation and returns the

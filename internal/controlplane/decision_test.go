@@ -250,7 +250,9 @@ func TestRetryReadsTheAttemptsAndTheMaxAttemptsOfTheGateItRetries(t *testing.T) 
 
 func TestARetryOutsideAGateDenies(t *testing.T) {
 	// A plan with no transition, or in a state with no gate, has no gate to
-	// retry, so attempts and maxAttempts are missing (decision 0143).
+	// retry, so its retry reads the in-doubt attempts and maxAttempts, and
+	// with no maxAttempts for in-doubt it is denied (decisions 0143 and
+	// 0191).
 	s := testService(t)
 	usageFact(s)
 	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"})
@@ -261,6 +263,47 @@ func TestARetryOutsideAGateDenies(t *testing.T) {
 		d, _ := decideAsKernel(t, s, question{action: "retry", plan: plan, keys: projections.Keys{Invocation: "i"}})
 		if d.Allow || !slices.Contains(d.Reasons, "the context lacks the attribute maxAttempts") {
 			t.Errorf("retry of %s: allow %v, reasons %q; want a deny that names maxAttempts", plan, d.Allow, d.Reasons)
+		}
+	}
+}
+
+func TestARetryOutsideAGateReadsTheInDoubtAttempts(t *testing.T) {
+	// A retry from a state with no gate is the retry of an invocation in
+	// doubt. It reads the plan's in-doubt attempts, its in-doubt transitions
+	// back into the state they left, and the profile's maxAttempts for
+	// in-doubt (decisions 0191 and 0201).
+	s := testService(t)
+	s.cfg.Settings.MaxAttempts = map[string]int64{"in-doubt": 2, "dco": 5}
+	usageFact(s)
+	again := &eventsv1.TransitionFired{Plan: "plan-b", FromState: "implementing", ToState: "implementing", Trigger: "in-doubt"}
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"})
+	write(t, s, "plan-b", &eventsv1.PlanAdded{Plan: "plan-b", Track: "main"},
+		&eventsv1.TransitionFired{Plan: "plan-b", FromState: "dco", ToState: "implementing", Trigger: "t", Gate: "dco"},
+		again,
+		&eventsv1.TransitionFired{Plan: "plan-b", FromState: "implementing", ToState: "implementing-escalated", Trigger: "in-doubt"},
+		&eventsv1.TransitionFired{Plan: "plan-b", FromState: "implementing-escalated", ToState: "implementing", Trigger: "dev.getpumi.escalation.resolved"})
+	againC := proto.CloneOf(again)
+	againC.Plan = "plan-c"
+	write(t, s, "plan-c", &eventsv1.PlanAdded{Plan: "plan-c", Track: "main"}, againC, proto.CloneOf(againC))
+	tests := []struct {
+		plan     string
+		attempts int64
+		allow    bool
+		policies []string
+	}{
+		{"plan-a", 0, true, []string{"core.workflow-actions", "permit-all"}},
+		{"plan-b", 1, true, []string{"core.workflow-actions", "permit-all"}},
+		{"plan-c", 2, false, []string{"core.attempts-left"}},
+	}
+	for _, tt := range tests {
+		d, data := decideAsKernel(t, s, question{action: "retry", plan: tt.plan, keys: projections.Keys{Invocation: "i"}})
+		if d.Allow != tt.allow || !slices.Equal(data.GetDeterminingPolicies(), tt.policies) {
+			t.Errorf("retry of %s: allow %v by %q (reasons %q), want %v by %q",
+				tt.plan, d.Allow, data.GetDeterminingPolicies(), d.Reasons, tt.allow, tt.policies)
+		}
+		want := &factsv1.Attempts{Plan: tt.plan, Gate: "in-doubt", Value: tt.attempts}
+		if got := attemptsIn(t, data); !proto.Equal(got, want) {
+			t.Errorf("retry of %s: the basis has the attempts %v, want %v", tt.plan, got, want)
 		}
 	}
 }

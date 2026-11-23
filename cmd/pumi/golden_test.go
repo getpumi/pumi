@@ -82,10 +82,11 @@ const (
 
 // base is the part of each invocation document that the wiring of the
 // cases sets (decision 0165).
-func base() *runnerv1.Invocation {
+func base(s caseSettings) *runnerv1.Invocation {
 	return &runnerv1.Invocation{
 		Component: &harnessv1.Component{Name: "scripted", Version: "1"},
 		Input:     &harnessv1.Input{Repo: "case", Tree: "tree-0"},
+		Budget:    s.Budget,
 	}
 }
 
@@ -95,6 +96,15 @@ type caseSettings struct {
 	// Parallelism is the parallelism setting (decision 0189); 0 counts as
 	// 1.
 	Parallelism int `json:"parallelism"`
+	// MaxAttempts is the profile's maxAttempts, by gate or by "in-doubt"
+	// (decision 0201).
+	MaxAttempts map[string]int64 `json:"maxAttempts"`
+	// Budget is the budget of each invocation document, which is what a
+	// lost run counts as having spent (decision 0191).
+	Budget *harnessv1.Usage `json:"budget"`
+	// ActionHappened is the fake answer of the adapter of an external
+	// action in doubt to whether the action happened (decision 0202).
+	ActionHappened bool `json:"actionHappened"`
 }
 
 // readSettings returns the settings of the case in dir, from its
@@ -118,7 +128,7 @@ func readSettings(t *testing.T, dir string) caseSettings {
 // leases, so that a lease does not expire while a case runs.
 func planeConfig(s caseSettings) controlplane.Config {
 	return controlplane.Config{
-		Settings:     controlplane.Settings{Parallelism: s.Parallelism},
+		Settings:     controlplane.Settings{Parallelism: s.Parallelism, MaxAttempts: s.MaxAttempts},
 		HardCaps:     policy.DefaultHardCaps(),
 		Project:      controlplane.Project{Name: "case"},
 		LeaseTimeout: time.Hour,
@@ -243,7 +253,8 @@ func (p *pumi) startPlane() {
 		return controlplanev1connect.NewControlPlaneServiceClient(c)
 	}
 	runner, err := svc.Client(controlplane.Identity{
-		Caller: controlplane.CallerRunner, Principal: runnerName, Roles: []string{controlplane.RoleAgent}, Tenant: embeddedlog.Tenant,
+		Caller: controlplane.CallerRunner, Principal: runnerName, Roles: []string{controlplane.RoleAgent, controlplane.RoleGate},
+		Tenant: embeddedlog.Tenant,
 	})
 	if err != nil {
 		p.t.Fatal(err)
@@ -264,8 +275,11 @@ func (p *pumi) startKernel() {
 	p.done = make(chan error, 1)
 	p.idle = make(chan uint64, 64)
 	cfg := kernel.Config{
-		Client: p.kernelClient, Workflow: p.wf, Base: base(),
+		Client: p.kernelClient, Workflow: p.wf, Base: base(p.settings),
 		Parallelism: planeConfig(p.settings).Settings.Parallelism,
+		Resolve: func(context.Context, *runnerv1.Invocation) (bool, error) {
+			return p.settings.ActionHappened, nil
+		},
 		Idle: func(head uint64) {
 			select {
 			case p.idle <- head:
@@ -356,10 +370,15 @@ func (p *pumi) waitIdle() {
 	}
 }
 
-// claim claims the next invocation as the scripted runner.
+// claim claims the next invocation as the scripted runner. The kernel
+// waits, so an invocation that is ready is claimed at once; Claim would
+// wait for one on the control plane's clock, which does not move, so it
+// fails after idleTimeout instead.
 func (p *pumi) claim() {
 	p.t.Helper()
-	res, err := p.runner.Claim(p.t.Context(), &runnerv1.ClaimRequest{ProtocolVersions: []*runnerv1.ProtocolVersion{{Major: 1}}})
+	ctx, cancel := context.WithTimeout(p.t.Context(), idleTimeout)
+	defer cancel()
+	res, err := p.runner.Claim(ctx, &runnerv1.ClaimRequest{ProtocolVersions: []*runnerv1.ProtocolVersion{{Major: 1}}})
 	if err != nil || res.GetInvocation() == nil {
 		p.t.Fatalf("the scripted runner's Claim = %v, %v; want an invocation", res, err)
 	}

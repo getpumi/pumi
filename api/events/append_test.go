@@ -41,7 +41,9 @@ var decision0156 = map[string][]Appender{
 	TypeWarningReviewed:    {AppenderPerson},
 	TypeInvocationStarted:  {AppenderRunnerClaim},
 	TypeInvocationResult:   everyReport,
-	TypeInvocationFinished: everyReport,
+	// The kernel resolves an external action in doubt that happened
+	// (decision 0202).
+	TypeInvocationFinished: append([]Appender{AppenderKernel}, everyReport...),
 	TypeVerdictRecorded:    {AppenderRunnerReportGateRole},
 	TypeWarningRaised:      {AppenderRunnerReportGateRole},
 	TypeMergePerformed:     {AppenderRunnerReportExternalAction},

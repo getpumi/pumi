@@ -118,6 +118,12 @@ message Trigger {
   // decides.
   message StateEntered {}
 
+  // InvocationInDoubt fires when the invocation that the state started is
+  // in doubt: its last lease ended with no result (decisions 0199 and 0200).
+  // A state that starts an agent run or an external action declares it; a
+  // check in doubt runs again, so a state that starts one does not.
+  message InvocationInDoubt {}
+
   // The kind of trigger.
   oneof kind {
     // The result of the state's invocation.
@@ -127,5 +133,7 @@ message Trigger {
     // An event whose subject is the plan, by its CloudEvents type, such as
     // "dev.getpumi.approval.recorded" (decision 0135).
     string event = 3;
+    // The state's invocation is in doubt.
+    InvocationInDoubt in_doubt = 4;
   }
 }

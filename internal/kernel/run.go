@@ -157,7 +157,9 @@ type planRun struct {
 // the entry into its initial state: invocation.requested when the state
 // invokes, caused by the plan.added, and the state's transitions on entry.
 // The slots are counted from the log, with no lease events (decision
-// 0190). The kernel handles no trigger of a plan that has not started.
+// 0190). The kernel handles no trigger of a plan that has not started,
+// except a cancel.requested, which cancels a plan that waits to start
+// (decision 0192).
 //
 // For a trigger of a plan's state the kernel asks the control plane to
 // decide each of the state's transitions for it in file order and fires
@@ -526,7 +528,9 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 // is, if any (decision 0170): the result of the state's invocation, the
 // entry into the state, as the transition.fired that entered it, or an
 // event about the plan from someone other than the kernel. The entry into
-// the initial state is handled when the plan starts.
+// the initial state is handled when the plan starts. Of a plan that has
+// not started, only a cancel.requested is a trigger: a person may cancel a
+// plan that waits to start (decision 0192).
 func (k *kernel) triggerOf(e *cloudeventsv1.CloudEvent) (*planRun, workflow.Trigger, bool) {
 	var r *planRun
 	trigger := workflow.Trigger("")
@@ -540,7 +544,7 @@ func (k *kernel) triggerOf(e *cloudeventsv1.CloudEvent) (*planRun, workflow.Trig
 			r, trigger = p, workflow.Event(e.GetType())
 		}
 	}
-	if r == nil || !r.started {
+	if r == nil || (!r.started && trigger != workflow.Event(events.TypeCancelRequested)) {
 		return nil, "", false
 	}
 	return r, trigger, true
@@ -574,14 +578,15 @@ func (k *kernel) enteredBy(e *cloudeventsv1.CloudEvent) *planRun {
 
 // schedule starts, in the order they were added, the plans that may start
 // while fewer plans than the parallelism setting run (decisions 0189 and
-// 0190). A plan may start when every plan it depends on has merged.
+// 0190). A plan may start when every plan it depends on has merged. A plan
+// that was cancelled before it started never starts.
 func (k *kernel) schedule(ctx context.Context) error {
 	limit := max(k.cfg.Parallelism, 1)
 	for _, r := range k.order {
 		if k.runningCount() >= limit {
 			return nil
 		}
-		if r.started || !k.mergedAll(r.dependsOn) {
+		if r.started || r.final() || !k.mergedAll(r.dependsOn) {
 			continue
 		}
 		if err := r.begin(ctx); err != nil {
@@ -708,8 +713,11 @@ func (r *planRun) decide(ctx context.Context, action, cause string) (decision, e
 
 // transition fires t for the trigger e, allowed by d: it appends
 // transition.fired with e as its cause, invocation.requested when the
-// target invokes, and escalation.raised when t escalates, and moves the
-// plan to the target.
+// target invokes, cancel.requested for the plan's running invocation when
+// the target is final, and escalation.raised when t escalates, and moves
+// the plan to the target. The runner stops an invocation whose cancel it
+// learns of in a heartbeat and reports it cancelled, and a result that
+// comes after the plan is final fires nothing (decisions 0035 and 0192).
 func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, trigger string, t workflow.Transition,
 	d decision, denied []string,
 ) error {
@@ -728,6 +736,15 @@ func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, t
 		}
 		evs = append(evs, req)
 	}
+	if target.GetFinal() != nil && r.runningInvocation() {
+		stop, err := r.event(&eventsv1.CancelRequested{
+			Invocation: r.invocation, Plan: r.plan, RequestedBy: requestedBy(e),
+		}, tf.GetId())
+		if err != nil {
+			return err
+		}
+		evs = append(evs, stop)
+	}
 	if t.Action == escalate {
 		raised, err := r.event(&eventsv1.EscalationRaised{Plan: r.plan, Question: r.question(trigger, denied)}, tf.GetId())
 		if err != nil {
@@ -740,6 +757,24 @@ func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, t
 	}
 	r.k.firedBy[e.GetId()] = fired{id: tf.GetId(), plan: r.plan, to: t.Target}
 	return r.m.Fire(ctx, t.Index)
+}
+
+// runningInvocation reports whether the plan's last invocation was
+// requested and has not finished.
+func (r *planRun) runningInvocation() bool {
+	inv := r.invocation
+	return inv != "" && !r.k.finished[inv] && !r.k.resolved[inv]
+}
+
+// requestedBy returns who asked for the cancel that the trigger e is, for
+// the kernel's cancel of the plan's running invocation: the person who
+// cancelled the plan, or the kernel when e is not a cancel.requested.
+func requestedBy(e *cloudeventsv1.CloudEvent) string {
+	var c eventsv1.CancelRequested
+	if e.GetType() == events.TypeCancelRequested && unpack(e, &c) == nil && c.GetRequestedBy() != "" {
+		return c.GetRequestedBy()
+	}
+	return "kernel"
 }
 
 // question returns the question of the escalation of the plan from its

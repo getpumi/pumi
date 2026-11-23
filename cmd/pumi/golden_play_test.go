@@ -303,6 +303,8 @@ func (p *pumi) play(want []*cloudeventsv1.CloudEvent, running bool) {
 			p.report(result, outcomeAfter(p.t, want, m, result.GetInvocation()), leaseNumber(p.t, want, m, result.GetInvocation()))
 		case strings.HasPrefix(next.GetSource(), personSource):
 			p.appendAsPerson(personEvent(p.t, next, got))
+		case permissionOfPerson(want, m) != nil:
+			p.appendAsPerson(personEvent(p.t, permissionOfPerson(want, m), got))
 		case !running:
 			p.startKernel()
 			running = true
@@ -313,6 +315,22 @@ func (p *pumi) play(want []*cloudeventsv1.CloudEvent, running bool) {
 			restartedAt = m
 		}
 	}
+}
+
+// permissionOfPerson returns the person's event of want whose permission
+// the decision.made at line at+1 decides, when it is one: the control
+// plane appends that decision just before the event, in the person's
+// append (decision 0156). It returns nil for any other line.
+func permissionOfPerson(want []*cloudeventsv1.CloudEvent, at int) *cloudeventsv1.CloudEvent {
+	if want[at].GetType() != events.TypeDecisionMade || at+1 >= len(want) {
+		return nil
+	}
+	next := want[at+1]
+	cause := want[at].GetAttributes()[events.ExtensionCause].GetCeString()
+	if cause != next.GetId() || !strings.HasPrefix(next.GetSource(), personSource) {
+		return nil
+	}
+	return next
 }
 
 // outcomeAfter returns the outcome of the invocation.finished of
@@ -515,6 +533,21 @@ var seeds = map[string][]step{
 	// The budget is over the cost cap, so the lost run counts as having
 	// spent more than the cap, the retry is denied and the plan escalates.
 	"recovery/caps-deny-the-retry": {addPlanA, claimStep, expireStep},
+	// The person cancels the plan while its agent run runs: the plan goes
+	// to cancelled, the kernel asks the invocation to stop, and the runner
+	// reports it cancelled (decision 0192).
+	"spike/cancel-while-running": {addPlanA, claimStep, cancelStep(casePlan), reportCancelledOf("plan-a/1")},
+	// The runner finishes the agent run before it learns of the cancel and
+	// reports it succeeded; the plan stays cancelled.
+	"spike/result-after-cancel": {addPlanA, claimStep, cancelStep(casePlan), reportOf("plan-a/1", underCaps)},
+	// The person cancels the plan while it waits in its escalated state,
+	// with no running invocation.
+	"spike/cancel-while-escalated": {addPlanA, claimStep, reportStep(overCaps), cancelStep(casePlan)},
+	// With parallelism 1, b1 waits while a1 runs; the person cancels b1,
+	// and b1 does not start when a1 has merged.
+	"tracks/cancel-while-waiting": {
+		addStep("a1", "a"), addStep("b1", "b"), cancelStep("b1"), claimStep, reportOf("a1/1", underCaps),
+	},
 }
 
 // seed runs the steps of a case with the settings s on a new log and

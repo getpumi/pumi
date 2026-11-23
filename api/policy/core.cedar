@@ -25,6 +25,16 @@ permit (
   resource
 );
 
+// A person cancels a plan with pumi cancel. The control plane decides the
+// person's cancel before it appends their cancel.requested for the plan
+// (decision 0192).
+@id("core.person-cancel")
+permit (
+  principal is Pumi::Person,
+  action == Pumi::Action::"cancel",
+  resource
+);
+
 // The kernel retries a gate, advances a plan to the next stage, resumes it
 // after a person answered, and asks for a second opinion.
 @id("core.workflow-actions")

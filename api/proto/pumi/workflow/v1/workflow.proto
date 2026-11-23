@@ -88,7 +88,12 @@ message Invoke {
 message Wait {}
 
 // Final is an entry that finishes the plan.
-message Final {}
+message Final {
+  // Whether the plan has merged when it is in this state. A plan that
+  // depends on another starts only when that plan is in a final state that
+  // has merged (decision 0197).
+  bool merged = 1;
+}
 
 // Transition is one transition of a state (decision 0168).
 message Transition {

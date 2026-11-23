@@ -28,31 +28,32 @@ import (
 const Source = "/kernel"
 
 // InDoubt is the trigger that a transition.fired names when the kernel
-// escalates a plan whose invocation was requested and has no result when
-// the kernel starts (decisions 0019 and 0182).
+// escalates a plan whose invocation's lease ended with no result
+// (decisions 0019 and 0182).
 const InDoubt = "in-doubt"
 
 // escalate is the Cedar action of the transitions that escalate a plan to a
 // person; firing one appends escalation.raised (decision 0169).
 const escalate = "escalate"
 
-// Config is what the wiring gives the kernel to run one plan (decision
-// 0180).
+// Config is what the wiring gives the kernel to run the plans of the log
+// (decisions 0180 and 0198).
 type Config struct {
 	// Client is the kernel's client of the control plane, with the
 	// kernel's identity.
 	Client controlplanev1connect.ControlPlaneServiceClient
-	// Workflow is the workflow the plan runs on.
+	// Workflow is the workflow the plans run on.
 	Workflow *workflow.Workflow
-	// Plan is the plan, and Track the track it joins.
-	Plan  string
-	Track string
 	// Base is the part of each invocation document that the wiring sets,
 	// such as the component's name and version, the repository and its
 	// tree, the image, the capabilities and the budget. The kernel sets the
 	// invocation, the idempotency key, the role, the kind of component, the
 	// task and the output message from the state that invokes.
 	Base *runnerv1.Invocation
+	// Parallelism is the parallelism setting of the control plane: how many
+	// plans run at once across all tracks (decisions 0172 and 0189). 0
+	// counts as 1.
+	Parallelism int
 	// Idle, when set, is called each time the kernel has handled every
 	// event up to head, the head of the log, and waits for more. The golden
 	// cases use it to know when the kernel waits (decision 0183).
@@ -63,10 +64,11 @@ type Config struct {
 	Wrote func(position uint64)
 }
 
-// fired is what the kernel keeps of a transition.fired of the plan.
+// fired is what the kernel keeps of a transition.fired of a plan.
 type fired struct {
-	id string
-	to string
+	id   string
+	plan string
+	to   string
 }
 
 // decision is what the kernel keeps of a decision.made.
@@ -75,27 +77,28 @@ type decision struct {
 	allow bool
 }
 
-// planRun is the state of the run of one plan: the plan's state and what
-// the log says about it, which the kernel projects from the log (decision
-// 0018).
-type planRun struct {
+// kernel is the state of the run of every plan of the log, which the
+// kernel projects from the log (decision 0018).
+type kernel struct {
 	cfg    Config
 	states map[string]*workflowv1.State
-	m      *workflow.Machine
 
-	// added is whether the log has the plan's plan.added, and state the
-	// plan's state.
-	added bool
-	state string
-	// invocation is the plan's last invocation and requested the id of its
-	// invocation.requested; requests counts the plan's invocations.
-	invocation string
-	requested  string
-	requests   int
-	// finished holds the plan's invocations that finished.
-	finished map[string]bool
-	// firedBy holds the plan's transitions by the id of their cause.
-	firedBy map[string]fired
+	// plans holds the plans that the log adds, by name, and order the same
+	// plans in the order they were added.
+	plans map[string]*planRun
+	order []*planRun
+	// invocations holds the plan of each invocation that the log requests,
+	// and finished the invocations that finished.
+	invocations map[string]*planRun
+	finished    map[string]bool
+	// ended holds the invocations whose last lease ended, released or
+	// expired, by the event that ended it.
+	ended map[string]bool
+	// firedBy holds the transitions of the plans by the id of their cause,
+	// and requestedBy the ids of the causes of the kernel's
+	// invocation.requested events.
+	firedBy     map[string]fired
+	requestedBy map[string]bool
 	// decisions holds the decisions by the id of their cause, in log
 	// order, and positionOf the position of each event the kernel has read.
 	decisions  map[string][]decision
@@ -104,29 +107,65 @@ type planRun struct {
 	last uint64
 }
 
-// Run runs the plan on the workflow until the plan is in a final state or
-// ctx is done (decisions 0169, 0170 and 0182). It reads the log with
-// Subscribe. On start it reads the log up to its head and rebuilds the
-// plan's state from it, handling any trigger that has no transition yet;
-// it escalates an invocation of the plan that was requested and has no
-// result, and adds the plan when the log does not have it. Then it handles
-// each new event in log order. For a trigger of the plan's state it asks
-// the control plane to decide each of the state's transitions for it in
-// file order and fires the first one allowed: it appends transition.fired,
-// with the trigger as its cause, and, on entry to a state that invokes,
-// invocation.requested naming the plan, and, for a transition guarded by
-// escalate, escalation.raised. Each event fires at most once: an event is
-// the cause of at most one transition.fired, and a decision already made
-// for a trigger is not made again. It returns nil when the plan is final
-// and ctx's error when ctx is done.
+// planRun is the state of the run of one plan: the plan's state and what
+// the log says about it.
+type planRun struct {
+	k *kernel
+	m *workflow.Machine
+
+	// plan, track and dependsOn are what its plan.added says, and added
+	// is the id of that event.
+	plan      string
+	track     string
+	dependsOn []string
+	added     string
+	// state is the plan's state. started is whether the kernel has started
+	// the plan: handled the entry into its initial state, which it does
+	// only when the plans it depends on have merged and a slot is free
+	// (decision 0189).
+	state   string
+	started bool
+	// invocation is the plan's last invocation and requested the id of its
+	// invocation.requested; requests counts the plan's invocations.
+	invocation string
+	requested  string
+	requests   int
+}
+
+// Run runs every plan that a plan.added of the log adds on the workflow
+// until ctx is done, and returns ctx's error (decisions 0169, 0170, 0182,
+// 0189 and 0198). It reads the log with Subscribe. On start it reads the
+// log up to its head and rebuilds each plan's state from it, handling any
+// trigger that has no transition yet. Then it handles each new event in
+// log order. It escalates an invocation in doubt, one whose lease ended
+// with no result, when it starts and when the lease ends.
+//
+// A plan starts when every plan it depends on is in a final state that has
+// merged (decision 0197) and fewer plans than the parallelism setting run,
+// where a plan runs from its start until it is final; when more plans are
+// ready, they start in the order they were added. Starting a plan handles
+// the entry into its initial state: invocation.requested when the state
+// invokes, caused by the plan.added, and the state's transitions on entry.
+// The slots are counted from the log, with no lease events (decision
+// 0190). The kernel handles no trigger of a plan that has not started.
+//
+// For a trigger of a plan's state the kernel asks the control plane to
+// decide each of the state's transitions for it in file order and fires
+// the first one allowed: it appends transition.fired, with the trigger as
+// its cause, and, on entry to a state that invokes, invocation.requested
+// naming the plan, and, for a transition guarded by escalate,
+// escalation.raised. Each event fires at most once: an event is the cause
+// of at most one transition.fired, a decision already made for a trigger
+// is not made again, and a plan.added is the cause of at most one
+// invocation.requested.
 func Run(ctx context.Context, cfg Config) error {
-	r, err := newPlanRun(cfg)
+	k, err := newKernel(cfg)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	head, err := r.head(ctx)
+	head, err := k.head(ctx)
 	if err != nil {
 		return err
 	}
@@ -135,74 +174,81 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("cannot subscribe to the log: %w", err)
 	}
 	defer func() { _ = stream.Close() }()
-	known, err := r.receiveUpTo(ctx, stream, head)
+	known, err := k.receiveUpTo(ctx, stream, head)
 	if err != nil {
 		return err
 	}
-	if err := r.start(ctx, known); err != nil {
+	if err := k.start(ctx, known); err != nil {
 		return err
 	}
 	for {
-		if r.final() {
-			return nil
-		}
-		if err := r.reportIdle(ctx); err != nil {
+		if err := k.reportIdle(ctx); err != nil {
 			return err
 		}
 		res, err := stream.Receive()
 		if err != nil {
-			return r.streamError(ctx, err)
+			return k.streamError(ctx, err)
 		}
-		r.index(res.GetEntry())
-		if err := r.handle(ctx, res.GetEntry()); err != nil {
+		k.index(res.GetEntry())
+		if err := k.handle(ctx, res.GetEntry()); err != nil {
 			return err
 		}
 	}
 }
 
 // receiveUpTo receives the events of stream up to the position head.
-func (r *planRun) receiveUpTo(ctx context.Context, stream controlplanev1connect.ControlPlaneServiceSubscribeClientStream,
+func (k *kernel) receiveUpTo(ctx context.Context, stream controlplanev1connect.ControlPlaneServiceSubscribeClientStream,
 	head uint64,
 ) ([]*controlplanev1.Entry, error) {
 	var known []*controlplanev1.Entry
 	for head > 0 && (len(known) == 0 || known[len(known)-1].GetPosition() < head) {
 		res, err := stream.Receive()
 		if err != nil {
-			return nil, r.streamError(ctx, err)
+			return nil, k.streamError(ctx, err)
 		}
 		known = append(known, res.GetEntry())
 	}
 	return known, nil
 }
 
-// newPlanRun returns the run of the plan of cfg, which has not read the
-// log yet.
-func newPlanRun(cfg Config) (*planRun, error) {
+// newKernel returns the kernel of cfg, which has not read the log yet.
+func newKernel(cfg Config) (*kernel, error) {
 	switch {
 	case cfg.Client == nil:
 		return nil, errors.New("the kernel has no client of the control plane")
 	case cfg.Workflow == nil:
 		return nil, errors.New("the kernel has no workflow")
-	case cfg.Plan == "":
-		return nil, errors.New("the kernel has no plan to run")
+	case cfg.Parallelism < 0:
+		return nil, fmt.Errorf("the parallelism setting is %d, want 0 or more", cfg.Parallelism)
 	}
-	r := &planRun{
-		cfg: cfg, states: map[string]*workflowv1.State{}, finished: map[string]bool{},
-		firedBy: map[string]fired{}, decisions: map[string][]decision{}, positionOf: map[string]uint64{},
+	k := &kernel{
+		cfg: cfg, states: map[string]*workflowv1.State{}, plans: map[string]*planRun{},
+		invocations: map[string]*planRun{}, finished: map[string]bool{}, ended: map[string]bool{}, firedBy: map[string]fired{},
+		requestedBy: map[string]bool{}, decisions: map[string][]decision{}, positionOf: map[string]uint64{},
 	}
 	for _, s := range cfg.Workflow.Definition().GetStates() {
-		r.states[s.GetName()] = s
+		k.states[s.GetName()] = s
 	}
-	r.m = cfg.Workflow.NewMachine(
+	return k, nil
+}
+
+// newPlan returns the run of the plan that a's plan.added, the event id,
+// adds, in the workflow's initial state.
+func (k *kernel) newPlan(a *eventsv1.PlanAdded, id string) *planRun {
+	r := &planRun{
+		k: k, plan: a.GetPlan(), track: a.GetTrack(), dependsOn: a.GetDependsOn(), added: id,
+		state: k.cfg.Workflow.Definition().GetInitial(),
+	}
+	r.m = k.cfg.Workflow.NewMachine(
 		func(context.Context) (string, error) { return r.state, nil },
 		func(_ context.Context, s string) error { r.state = s; return nil },
 	)
-	return r, nil
+	return r
 }
 
 // streamError returns the error that ends the run when the stream of
 // Subscribe ends with err: ctx's error when ctx is done.
-func (r *planRun) streamError(ctx context.Context, err error) error {
+func (k *kernel) streamError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -210,8 +256,8 @@ func (r *planRun) streamError(ctx context.Context, err error) error {
 }
 
 // head returns the head of the log.
-func (r *planRun) head(ctx context.Context) (uint64, error) {
-	res, err := r.cfg.Client.Query(ctx, &controlplanev1.QueryRequest{Limit: 1})
+func (k *kernel) head(ctx context.Context) (uint64, error) {
+	res, err := k.cfg.Client.Query(ctx, &controlplanev1.QueryRequest{Limit: 1})
 	if err != nil {
 		return 0, fmt.Errorf("cannot read the head of the log: %w", err)
 	}
@@ -219,75 +265,92 @@ func (r *planRun) head(ctx context.Context) (uint64, error) {
 }
 
 // reportIdle calls Idle when the kernel has handled every event of the log.
-func (r *planRun) reportIdle(ctx context.Context) error {
-	if r.cfg.Idle == nil {
+func (k *kernel) reportIdle(ctx context.Context) error {
+	if k.cfg.Idle == nil {
 		return nil
 	}
-	head, err := r.head(ctx)
+	head, err := k.head(ctx)
 	if err != nil {
 		return err
 	}
-	if head == r.last {
-		r.cfg.Idle(head)
+	if head == k.last {
+		k.cfg.Idle(head)
 	}
 	return nil
 }
 
 // wrote calls Wrote with position.
-func (r *planRun) wrote(position uint64) {
-	if r.cfg.Wrote != nil {
-		r.cfg.Wrote(position)
+func (k *kernel) wrote(position uint64) {
+	if k.cfg.Wrote != nil {
+		k.cfg.Wrote(position)
 	}
 }
 
 // final reports whether the plan is in a final state.
 func (r *planRun) final() bool {
-	_, ok := r.states[r.state].GetEntry().(*workflowv1.State_Final)
-	return r.added && ok
+	return r.k.states[r.state].GetFinal() != nil
+}
+
+// merged reports whether the plan is in a final state that has merged
+// (decision 0197).
+func (r *planRun) merged() bool {
+	return r.k.states[r.state].GetFinal().GetMerged()
+}
+
+// running reports whether the plan holds a slot: it started and is not
+// final (decision 0189).
+func (r *planRun) running() bool {
+	return r.started && !r.final()
 }
 
 // start handles the events of the log up to its head, known, which it
 // indexes first, so that it knows which triggers already fired a
-// transition. It then escalates an invocation in doubt and adds the plan
-// when the log does not have it.
-func (r *planRun) start(ctx context.Context, known []*controlplanev1.Entry) error {
+// transition. It then escalates each invocation in doubt that handling
+// the log did not.
+func (k *kernel) start(ctx context.Context, known []*controlplanev1.Entry) error {
 	for _, e := range known {
-		r.index(e)
+		k.index(e)
 	}
 	for _, e := range known {
-		if err := r.handle(ctx, e); err != nil {
+		if err := k.handle(ctx, e); err != nil {
 			return err
 		}
 	}
-	if err := r.escalateInDoubt(ctx); err != nil {
-		return err
+	for _, r := range k.order {
+		if err := r.escalateInDoubt(ctx); err != nil {
+			return err
+		}
 	}
-	if !r.added {
-		return r.add(ctx)
-	}
-	return nil
+	return k.schedule(ctx)
 }
 
 // index records what the kernel needs to know of e ahead of handling it:
-// its position, and, for a transition.fired of the plan and a decision,
-// the event that caused it.
-func (r *planRun) index(entry *controlplanev1.Entry) {
+// its position, and, for a transition.fired, an invocation.requested of
+// the kernel and a decision, the event that caused it.
+func (k *kernel) index(entry *controlplanev1.Entry) {
 	e := entry.GetEvent()
-	if _, seen := r.positionOf[e.GetId()]; seen {
+	if _, seen := k.positionOf[e.GetId()]; seen {
 		return
 	}
-	r.positionOf[e.GetId()] = entry.GetPosition()
+	k.positionOf[e.GetId()] = entry.GetPosition()
 	cause := e.GetAttributes()[events.ExtensionCause].GetCeString()
+	if cause == "" {
+		return
+	}
 	switch e.GetType() {
 	case events.TypeTransitionFired:
 		var tf eventsv1.TransitionFired
-		if e.GetSource() == Source && unpack(e, &tf) == nil && tf.GetPlan() == r.cfg.Plan && cause != "" {
-			r.firedBy[cause] = fired{id: e.GetId(), to: tf.GetToState()}
+		if e.GetSource() == Source && unpack(e, &tf) == nil {
+			k.firedBy[cause] = fired{id: e.GetId(), plan: tf.GetPlan(), to: tf.GetToState()}
+		}
+	case events.TypeInvocationRequested:
+		if e.GetSource() == Source {
+			k.requestedBy[cause] = true
 		}
 	case events.TypeDecisionMade:
 		var d eventsv1.DecisionMade
-		if cause != "" && unpack(e, &d) == nil {
-			r.decisions[cause] = append(r.decisions[cause], decision{
+		if unpack(e, &d) == nil {
+			k.decisions[cause] = append(k.decisions[cause], decision{
 				id: e.GetId(), allow: d.GetOutcome() == eventsv1.DecisionMade_OUTCOME_ALLOW,
 			})
 		}
@@ -304,24 +367,55 @@ func unpack(e *cloudeventsv1.CloudEvent, data proto.Message) error {
 	return e.GetProtoData().UnmarshalTo(data)
 }
 
-// handle handles the event of entry in log order: it follows the plan's
-// state and invocations, and fires the transition of a trigger of the
-// plan's state. A trigger that already fired a transition moves the plan
-// to its target at once, as when the kernel fired it.
-func (r *planRun) handle(ctx context.Context, entry *controlplanev1.Entry) error {
-	if entry.GetPosition() <= r.last {
+// handle handles the event of entry in log order: it follows the plans,
+// their states and invocations, fires the transition of a trigger of a
+// started plan's state, and then starts the plans that may start. A
+// trigger that already fired a transition moves the plan to its target at
+// once, as when the kernel fired it.
+func (k *kernel) handle(ctx context.Context, entry *controlplanev1.Entry) error {
+	if entry.GetPosition() <= k.last {
 		return nil
 	}
-	r.last = entry.GetPosition()
+	k.last = entry.GetPosition()
 	e := entry.GetEvent()
-	if err := r.follow(e); err != nil {
+	if err := k.follow(e); err != nil {
 		return err
 	}
-	if f, ok := r.firedBy[e.GetId()]; ok {
-		r.state = f.to
+	if err := k.fireFor(ctx, e); err != nil {
+		return err
+	}
+	if err := k.escalateEnded(ctx, e); err != nil {
+		return err
+	}
+	return k.schedule(ctx)
+}
+
+// escalateEnded escalates the plan of the invocation whose lease e ends,
+// when e is a lease.released or a lease.expired and the invocation has no
+// result: the invocation is in doubt.
+func (k *kernel) escalateEnded(ctx context.Context, e *cloudeventsv1.CloudEvent) error {
+	if e.GetType() != events.TypeLeaseReleased && e.GetType() != events.TypeLeaseExpired {
 		return nil
 	}
-	trigger, ok := r.triggerOf(e)
+	r, ok := k.invocations[subjectOf(e)]
+	if !ok {
+		return nil
+	}
+	return r.escalateInDoubt(ctx)
+}
+
+// fireFor fires the transition of the trigger that e is, if any.
+func (k *kernel) fireFor(ctx context.Context, e *cloudeventsv1.CloudEvent) error {
+	if e.GetType() == events.TypePlanAdded {
+		return nil
+	}
+	if f, ok := k.firedBy[e.GetId()]; ok {
+		if r, ok := k.plans[f.plan]; ok {
+			r.state = f.to
+		}
+		return nil
+	}
+	r, trigger, ok := k.triggerOf(e)
 	if !ok {
 		return nil
 	}
@@ -332,63 +426,196 @@ func (r *planRun) handle(ctx context.Context, entry *controlplanev1.Entry) error
 	return r.fire(ctx, e, string(trigger), ts, nil)
 }
 
-// follow follows the plan's additions, invocations and their ends.
-func (r *planRun) follow(e *cloudeventsv1.CloudEvent) error {
-	switch e.GetType() {
-	case events.TypePlanAdded:
-		var a eventsv1.PlanAdded
-		if err := unpack(e, &a); err != nil {
-			return fmt.Errorf("the data of the event %s: %w", e.GetId(), err)
-		}
-		if a.GetPlan() == r.cfg.Plan && !r.added {
-			r.added = true
-			r.state = r.cfg.Workflow.Definition().GetInitial()
-		}
-	case events.TypeInvocationRequested:
-		var req eventsv1.InvocationRequested
-		if err := unpack(e, &req); err != nil {
-			return fmt.Errorf("the data of the event %s: %w", e.GetId(), err)
-		}
-		if req.GetPlan() == r.cfg.Plan {
-			r.invocation, r.requested = req.GetInvocation(), e.GetId()
-			r.requests++
-		}
-	case events.TypeInvocationFinished:
-		var f eventsv1.InvocationFinished
-		if err := unpack(e, &f); err != nil {
-			return fmt.Errorf("the data of the event %s: %w", e.GetId(), err)
-		}
-		r.finished[f.GetInvocation()] = true
+// follow follows the plans' additions, their invocations, the ends of the
+// invocations and their leases.
+func (k *kernel) follow(e *cloudeventsv1.CloudEvent) error {
+	f, ok := followers[e.GetType()]
+	if !ok {
+		return nil
+	}
+	if err := f(k, e); err != nil {
+		return fmt.Errorf("the data of the event %s: %w", e.GetId(), err)
 	}
 	return nil
 }
 
-// triggerOf returns the trigger of the plan's state that e is, if any
-// (decision 0170): the result of the state's invocation, the entry into the
-// state, as the plan.added or transition.fired that entered it, or an
-// event about the plan from someone other than the kernel.
-func (r *planRun) triggerOf(e *cloudeventsv1.CloudEvent) (workflow.Trigger, bool) {
-	if !r.added {
-		return "", false
-	}
+// followers give, by event type, what the kernel follows of an event.
+var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
+	events.TypePlanAdded: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
+		var a eventsv1.PlanAdded
+		if err := unpack(e, &a); err != nil {
+			return err
+		}
+		if _, ok := k.plans[a.GetPlan()]; !ok && a.GetPlan() != "" {
+			r := k.newPlan(&a, e.GetId())
+			k.plans[r.plan] = r
+			k.order = append(k.order, r)
+		}
+		return nil
+	},
+	events.TypeInvocationRequested: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
+		var req eventsv1.InvocationRequested
+		if err := unpack(e, &req); err != nil {
+			return err
+		}
+		if r, ok := k.plans[req.GetPlan()]; ok {
+			r.invocation, r.requested = req.GetInvocation(), e.GetId()
+			r.requests++
+			k.invocations[req.GetInvocation()] = r
+		}
+		return nil
+	},
+	events.TypeInvocationFinished: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
+		var f eventsv1.InvocationFinished
+		if err := unpack(e, &f); err != nil {
+			return err
+		}
+		k.finished[f.GetInvocation()] = true
+		return nil
+	},
+	events.TypeLeaseGranted: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
+		var g eventsv1.LeaseGranted
+		if err := unpack(e, &g); err != nil {
+			return err
+		}
+		k.ended[g.GetLease()] = false
+		return nil
+	},
+	events.TypeLeaseReleased: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
+		var l eventsv1.LeaseReleased
+		if err := unpack(e, &l); err != nil {
+			return err
+		}
+		k.ended[l.GetLease()] = true
+		return nil
+	},
+	events.TypeLeaseExpired: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
+		var l eventsv1.LeaseExpired
+		if err := unpack(e, &l); err != nil {
+			return err
+		}
+		k.ended[l.GetLease()] = true
+		return nil
+	},
+}
+
+// triggerOf returns the started plan and the trigger of its state that e
+// is, if any (decision 0170): the result of the state's invocation, the
+// entry into the state, as the transition.fired that entered it, or an
+// event about the plan from someone other than the kernel. The entry into
+// the initial state is handled when the plan starts.
+func (k *kernel) triggerOf(e *cloudeventsv1.CloudEvent) (*planRun, workflow.Trigger, bool) {
+	var r *planRun
+	trigger := workflow.Trigger("")
 	switch e.GetType() {
 	case events.TypeInvocationFinished:
-		var f eventsv1.InvocationFinished
-		if unpack(e, &f) == nil && f.GetInvocation() == r.invocation && r.invocation != "" {
-			return workflow.Result, true
-		}
-		return "", false
-	case events.TypePlanAdded:
-		return workflow.Entered, subjectOf(e) == r.cfg.Plan
+		r, trigger = k.resultOf(e), workflow.Result
 	case events.TypeTransitionFired:
-		var tf eventsv1.TransitionFired
-		entered := e.GetSource() == Source && unpack(e, &tf) == nil && tf.GetPlan() == r.cfg.Plan && tf.GetToState() == r.state
-		return workflow.Entered, entered
+		r, trigger = k.enteredBy(e), workflow.Entered
+	default:
+		if p, ok := k.plans[subjectOf(e)]; ok && e.GetSource() != Source {
+			r, trigger = p, workflow.Event(e.GetType())
+		}
 	}
-	if e.GetSource() == Source || subjectOf(e) != r.cfg.Plan {
-		return "", false
+	if r == nil || !r.started {
+		return nil, "", false
 	}
-	return workflow.Event(e.GetType()), true
+	return r, trigger, true
+}
+
+// resultOf returns the plan whose current invocation the
+// invocation.finished e ends, or nil.
+func (k *kernel) resultOf(e *cloudeventsv1.CloudEvent) *planRun {
+	var f eventsv1.InvocationFinished
+	if unpack(e, &f) != nil || f.GetInvocation() == "" {
+		return nil
+	}
+	if r, ok := k.invocations[f.GetInvocation()]; ok && r.invocation == f.GetInvocation() {
+		return r
+	}
+	return nil
+}
+
+// enteredBy returns the plan whose current state the kernel's
+// transition.fired e entered, or nil.
+func (k *kernel) enteredBy(e *cloudeventsv1.CloudEvent) *planRun {
+	var tf eventsv1.TransitionFired
+	if e.GetSource() != Source || unpack(e, &tf) != nil {
+		return nil
+	}
+	if r, ok := k.plans[tf.GetPlan()]; ok && tf.GetToState() == r.state {
+		return r
+	}
+	return nil
+}
+
+// schedule starts, in the order they were added, the plans that may start
+// while fewer plans than the parallelism setting run (decisions 0189 and
+// 0190). A plan may start when every plan it depends on has merged.
+func (k *kernel) schedule(ctx context.Context) error {
+	limit := max(k.cfg.Parallelism, 1)
+	for _, r := range k.order {
+		if k.runningCount() >= limit {
+			return nil
+		}
+		if r.started || !k.mergedAll(r.dependsOn) {
+			continue
+		}
+		if err := r.begin(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runningCount returns how many plans hold a slot.
+func (k *kernel) runningCount() int {
+	n := 0
+	for _, r := range k.order {
+		if r.running() {
+			n++
+		}
+	}
+	return n
+}
+
+// mergedAll reports whether every plan of plans has merged.
+func (k *kernel) mergedAll(plans []string) bool {
+	for _, p := range plans {
+		if r, ok := k.plans[p]; !ok || !r.merged() {
+			return false
+		}
+	}
+	return true
+}
+
+// begin starts the plan: it handles the entry into its initial state, with
+// the plan.added as its trigger. When the state invokes, it appends the
+// invocation.requested of its first invocation, caused by the plan.added,
+// unless the log has it; then it fires the state's transitions on entry,
+// as for any trigger.
+func (r *planRun) begin(ctx context.Context) error {
+	r.started = true
+	initial := r.k.states[r.state]
+	if inv, ok := initial.GetEntry().(*workflowv1.State_Invoke); ok && !r.k.requestedBy[r.added] {
+		req, err := r.request(r.state, inv.Invoke, r.added)
+		if err != nil {
+			return err
+		}
+		if err := r.append(ctx, []*cloudeventsv1.CloudEvent{req}); err != nil {
+			return err
+		}
+		r.k.requestedBy[r.added] = true
+	}
+	if f, ok := r.k.firedBy[r.added]; ok {
+		r.state = f.to
+		return nil
+	}
+	ts, err := r.m.Transitions(ctx, workflow.Entered)
+	if err != nil || len(ts) == 0 {
+		return err
+	}
+	return r.fire(ctx, &cloudeventsv1.CloudEvent{Id: r.added}, string(workflow.Entered), ts, nil)
 }
 
 // fire decides the transitions ts for the trigger e in order and fires the
@@ -398,7 +625,7 @@ func (r *planRun) triggerOf(e *cloudeventsv1.CloudEvent) (workflow.Trigger, bool
 // transition is denied, nothing fires. denied lists the actions that were
 // denied before ts, for the question of an escalation.
 func (r *planRun) fire(ctx context.Context, e *cloudeventsv1.CloudEvent, trigger string, ts []workflow.Transition, denied []string) error {
-	made := r.madeFor(e.GetId())
+	made := r.k.madeFor(e.GetId())
 	for i, t := range ts {
 		var d decision
 		if i < len(made) {
@@ -420,11 +647,11 @@ func (r *planRun) fire(ctx context.Context, e *cloudeventsv1.CloudEvent, trigger
 // madeFor returns the decisions that the log has for the trigger id, made
 // after it. A permission's decision names the event it allows and comes
 // before it, so it is not one of them (decision 0156).
-func (r *planRun) madeFor(id string) []decision {
+func (k *kernel) madeFor(id string) []decision {
 	var out []decision
-	at := r.positionOf[id]
-	for _, d := range r.decisions[id] {
-		if r.positionOf[d.id] > at {
+	at := k.positionOf[id]
+	for _, d := range k.decisions[id] {
+		if k.positionOf[d.id] > at {
 			out = append(out, d)
 		}
 	}
@@ -435,22 +662,22 @@ func (r *planRun) madeFor(id string) []decision {
 // plan's last invocation as the key of its facts and cause as the
 // decision's cause, and returns the decision.
 func (r *planRun) decide(ctx context.Context, action, cause string) (decision, error) {
-	res, err := r.cfg.Client.Decide(ctx, &controlplanev1.DecideRequest{
-		Action: action, Plan: r.cfg.Plan, Cause: cause,
+	res, err := r.k.cfg.Client.Decide(ctx, &controlplanev1.DecideRequest{
+		Action: action, Plan: r.plan, Cause: cause,
 		Keys: &controlplanev1.FactKeys{Invocation: r.invocation},
 	})
 	if err != nil {
-		return decision{}, fmt.Errorf("cannot decide %s for the plan %s: %w", action, r.cfg.Plan, err)
+		return decision{}, fmt.Errorf("cannot decide %s for the plan %s: %w", action, r.plan, err)
 	}
-	r.wrote(res.GetPosition())
-	q, err := r.cfg.Client.Query(ctx, &controlplanev1.QueryRequest{After: res.GetPosition() - 1, Limit: 1})
+	r.k.wrote(res.GetPosition())
+	q, err := r.k.cfg.Client.Query(ctx, &controlplanev1.QueryRequest{After: res.GetPosition() - 1, Limit: 1})
 	if err != nil {
 		return decision{}, fmt.Errorf("cannot read the decision of %s at %d: %w", action, res.GetPosition(), err)
 	}
 	if len(q.GetEvents()) != 1 {
 		return decision{}, fmt.Errorf("the log has no decision of %s at %d", action, res.GetPosition())
 	}
-	r.index(q.GetEvents()[0])
+	r.k.index(q.GetEvents()[0])
 	return decision{
 		id: q.GetEvents()[0].GetEvent().GetId(), allow: res.GetOutcome() == eventsv1.DecisionMade_OUTCOME_ALLOW,
 	}, nil
@@ -463,9 +690,9 @@ func (r *planRun) decide(ctx context.Context, action, cause string) (decision, e
 func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, trigger string, t workflow.Transition,
 	d decision, denied []string,
 ) error {
-	target := r.states[t.Target]
+	target := r.k.states[t.Target]
 	tf, err := r.event(&eventsv1.TransitionFired{
-		Plan: r.cfg.Plan, FromState: r.state, ToState: t.Target, Trigger: trigger, Decision: d.id, Gate: target.GetGate(),
+		Plan: r.plan, FromState: r.state, ToState: t.Target, Trigger: trigger, Decision: d.id, Gate: target.GetGate(),
 	}, e.GetId())
 	if err != nil {
 		return err
@@ -479,7 +706,7 @@ func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, t
 		evs = append(evs, req)
 	}
 	if t.Action == escalate {
-		raised, err := r.event(&eventsv1.EscalationRaised{Plan: r.cfg.Plan, Question: r.question(trigger, denied)}, tf.GetId())
+		raised, err := r.event(&eventsv1.EscalationRaised{Plan: r.plan, Question: r.question(trigger, denied)}, tf.GetId())
 		if err != nil {
 			return err
 		}
@@ -488,7 +715,7 @@ func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, t
 	if err := r.append(ctx, evs); err != nil {
 		return err
 	}
-	r.firedBy[e.GetId()] = fired{id: tf.GetId(), to: t.Target}
+	r.k.firedBy[e.GetId()] = fired{id: tf.GetId(), plan: r.plan, to: t.Target}
 	return r.m.Fire(ctx, t.Index)
 }
 
@@ -496,7 +723,7 @@ func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, t
 // state on trigger, after the actions denied were denied.
 func (r *planRun) question(trigger string, denied []string) string {
 	if trigger == InDoubt {
-		return fmt.Sprintf("The invocation %s of the state %s was requested and has no result after pumi started again, so it may have run. It is not run again (decision 0182).",
+		return fmt.Sprintf("The lease of the invocation %s of the state %s ended with no result, so it may have run. It is not run again (decisions 0182 and 0199).",
 			r.invocation, r.state)
 	}
 	if len(denied) == 0 {
@@ -511,15 +738,15 @@ func (r *planRun) question(trigger string, denied []string) string {
 // idempotency key is the invocation, both derived from the log (decision
 // 0019).
 func (r *planRun) request(state string, inv *workflowv1.Invoke, cause string) (*cloudeventsv1.CloudEvent, error) {
-	task, ok := r.cfg.Workflow.Task(inv.GetTask())
+	task, ok := r.k.cfg.Workflow.Task(inv.GetTask())
 	if !ok {
 		return nil, fmt.Errorf("the state %s names the task %q, which the workflow does not have", state, inv.GetTask())
 	}
-	doc := proto.CloneOf(r.cfg.Base)
+	doc := proto.CloneOf(r.k.cfg.Base)
 	if doc == nil {
 		doc = &runnerv1.Invocation{}
 	}
-	id := fmt.Sprintf("%s/%d", r.cfg.Plan, r.requests+1)
+	id := fmt.Sprintf("%s/%d", r.plan, r.requests+1)
 	doc.Invocation, doc.IdempotencyKey = id, id
 	doc.Role = roleOf[inv.GetRole()]
 	if doc.Component == nil {
@@ -531,7 +758,7 @@ func (r *planRun) request(state string, inv *workflowv1.Invoke, cause string) (*
 	}
 	doc.Input.Task = task
 	doc.OutputMessage = inv.GetOutputMessage()
-	data, err := events.InvocationRequested(r.cfg.Plan, doc)
+	data, err := events.InvocationRequested(r.plan, doc)
 	if err != nil {
 		return nil, fmt.Errorf("the invocation of the state %s: %w", state, err)
 	}
@@ -557,7 +784,7 @@ var kindOf = map[workflowv1.Invoke_Kind]harnessv1.Component_Kind{
 // with a new id and the cause cause.
 func (r *planRun) event(data proto.Message, cause string) (*cloudeventsv1.CloudEvent, error) {
 	e, err := events.New(data, events.Attributes{
-		ID: "kernel-" + rand.Text(), Source: Source, Subject: r.cfg.Plan, Tenant: "kernel", Cause: cause,
+		ID: "kernel-" + rand.Text(), Source: Source, Subject: r.plan, Tenant: "kernel", Cause: cause,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("cannot build the kernel's event: %w", err)
@@ -567,50 +794,33 @@ func (r *planRun) event(data proto.Message, cause string) (*cloudeventsv1.CloudE
 
 // append appends evs.
 func (r *planRun) append(ctx context.Context, evs []*cloudeventsv1.CloudEvent) error {
-	res, err := r.cfg.Client.Append(ctx, &controlplanev1.AppendRequest{Events: evs})
+	res, err := r.k.cfg.Client.Append(ctx, &controlplanev1.AppendRequest{Events: evs})
 	if err != nil {
-		return fmt.Errorf("cannot append the kernel's events for the plan %s: %w", r.cfg.Plan, err)
+		return fmt.Errorf("cannot append the kernel's events for the plan %s: %w", r.plan, err)
 	}
 	if n := len(res.GetPositions()); n > 0 {
-		r.wrote(res.GetPositions()[n-1])
+		r.k.wrote(res.GetPositions()[n-1])
 	}
 	return nil
 }
 
-// add appends the plan's plan.added and, when the initial state invokes,
-// the invocation.requested of its invocation, caused by the plan.added.
-// The plan is in the initial state once the kernel reads the plan.added.
-func (r *planRun) add(ctx context.Context) error {
-	added, err := r.event(&eventsv1.PlanAdded{Plan: r.cfg.Plan, Track: r.cfg.Track}, "")
-	if err != nil {
-		return err
-	}
-	evs := []*cloudeventsv1.CloudEvent{added}
-	initial := r.cfg.Workflow.Definition().GetInitial()
-	if inv, ok := r.states[initial].GetEntry().(*workflowv1.State_Invoke); ok {
-		req, err := r.request(initial, inv.Invoke, added.GetId())
-		if err != nil {
-			return err
-		}
-		evs = append(evs, req)
-	}
-	return r.append(ctx, evs)
-}
-
 // escalateInDoubt escalates the plan when the state invokes and its
-// invocation was requested and has no result: the invocation may have
-// run, and an agent run is not idempotent, so it is not run again
-// (decisions 0019 and 0182). The transition is the state's first on result
+// invocation was requested, its last lease ended and it has no result: the
+// invocation may have run, and an agent run is not idempotent, so it is
+// not run again (decisions 0019 and 0182). An invocation that no runner
+// claimed has not run, and one whose lease is current may still report,
+// so neither is in doubt; a lease that is current when pumi starts again
+// gets its full timeout and expires if no runner renews it. The transition is the state's first on result
 // that escalate guards, with the invocation.requested as its cause, and
 // InDoubt as its trigger.
 func (r *planRun) escalateInDoubt(ctx context.Context) error {
-	if !r.added || r.invocation == "" || r.finished[r.invocation] {
+	if !r.started || r.invocation == "" || r.k.finished[r.invocation] || !r.k.ended[r.invocation] {
 		return nil
 	}
-	if _, ok := r.states[r.state].GetEntry().(*workflowv1.State_Invoke); !ok {
+	if _, ok := r.k.states[r.state].GetEntry().(*workflowv1.State_Invoke); !ok {
 		return nil
 	}
-	if _, ok := r.firedBy[r.requested]; ok {
+	if _, ok := r.k.firedBy[r.requested]; ok {
 		return nil
 	}
 	ts, err := r.m.Transitions(ctx, workflow.Result)

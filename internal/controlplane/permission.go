@@ -94,7 +94,8 @@ func keysOf(data proto.Message, plan *string) projections.Keys {
 // in one append, only while the head is still where it decided, and
 // decides again when it has moved. When one is denied, it writes the
 // decisions that denied, refuses the append with permission denied and
-// writes none of evs. It returns the positions of evs.
+// writes none of evs. A plan.added is checked against the log as of the
+// same head (decision 0196). It returns the positions of evs.
 func (s *Service) appendAs(ctx context.Context, p principal, evs []*cloudeventsv1.CloudEvent,
 	conditions []*controlplanev1.Condition,
 ) ([]uint64, error) {
@@ -102,8 +103,12 @@ func (s *Service) appendAs(ctx context.Context, p principal, evs []*cloudeventsv
 	if err != nil {
 		return nil, err
 	}
+	added, err := addedPlans(evs)
+	if err != nil {
+		return nil, err
+	}
 	check := func(version func(string) uint64) error { return conflicts(conditions, version) }
-	if len(perms) == 0 {
+	if len(perms) == 0 && len(added) == 0 {
 		positions, err := s.log.Append(evs, check)
 		return positions, appendError(err)
 	}
@@ -111,26 +116,42 @@ func (s *Service) appendAs(ctx context.Context, p principal, evs []*cloudeventsv
 		if err := ctx.Err(); err != nil {
 			return nil, connect.NewError(connect.CodeCanceled, "the append was cancelled").WithCause(err)
 		}
-		at, hash := s.log.Snapshot()
-		decisions, denied, err := s.decidePermissions(at, hash, p, perms)
-		if err != nil {
-			return nil, err
-		}
-		if len(denied) > 0 {
-			return nil, s.refuse(decisions, perms, denied)
-		}
-		if s.trace != nil {
-			s.trace("decided")
-		}
-		positions, err := s.log.AppendAt(at, append(decisions, evs...), check)
+		positions, err := s.appendAtHead(p, evs, perms, added, check)
 		if errors.Is(err, embeddedlog.ErrHeadMoved) {
 			continue
 		}
-		if err != nil {
-			return nil, appendError(err)
-		}
-		return positions[len(decisions):], nil
+		return positions, err
 	}
+}
+
+// appendAtHead checks added and decides perms with the log as of its head,
+// and appends the decisions and evs while the head is still there. It
+// returns embeddedlog.ErrHeadMoved when the head moved.
+func (s *Service) appendAtHead(p principal, evs []*cloudeventsv1.CloudEvent, perms []permission,
+	added map[int]*eventsv1.PlanAdded, check func(version func(string) uint64) error,
+) ([]uint64, error) {
+	at, hash := s.log.Snapshot()
+	if err := s.checkAdded(at, added, len(evs)); err != nil {
+		return nil, err
+	}
+	decisions, denied, err := s.decidePermissions(at, hash, p, perms)
+	if err != nil {
+		return nil, err
+	}
+	if len(denied) > 0 {
+		return nil, s.refuse(decisions, perms, denied)
+	}
+	if s.trace != nil {
+		s.trace("decided")
+	}
+	positions, err := s.log.AppendAt(at, append(decisions, evs...), check)
+	if errors.Is(err, embeddedlog.ErrHeadMoved) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, appendError(err)
+	}
+	return positions[len(decisions):], nil
 }
 
 // decidePermissions decides perms for p with the log as of at, whose line

@@ -52,7 +52,8 @@ type Project struct {
 }
 
 // Settings are the profile settings that the actions of the Cedar schema
-// read, one field for each setting of policy.Settings.
+// read, one field for each setting of policy.Settings, and the
+// parallelism setting, which the kernel reads.
 type Settings struct {
 	// MaxAttempts is maxAttempts for each gate, by the gate's Cedar action,
 	// such as planReview (decision 0044). A gate with no entry has no
@@ -68,6 +69,11 @@ type Settings struct {
 	UsageBudget policy.Caps
 	// WarningsCap is warningsCap.
 	WarningsCap int64
+	// Parallelism is the parallelism setting: how many plans run at once
+	// across all tracks (decisions 0172 and 0189). No action of the Cedar
+	// schema reads it; the wiring gives it to the kernel. 0 counts as 1.
+	// Profiles set it from epic E10.
+	Parallelism int
 }
 
 // hardCaps is the name of the context attribute that holds the hard caps.

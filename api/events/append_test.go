@@ -29,7 +29,7 @@ var everyReport = []Appender{
 // decision0156 is the table of decision 0156, written out apart from
 // append.go.
 var decision0156 = map[string][]Appender{
-	TypePlanAdded:           {AppenderKernel},
+	TypePlanAdded:           {AppenderPerson},
 	TypeTransitionFired:     {AppenderKernel},
 	TypeInvocationRequested: {AppenderKernel},
 	TypeEscalationRaised:    {AppenderKernel},

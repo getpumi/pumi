@@ -84,8 +84,9 @@ func checkRecorded(t *testing.T, d *eventsv1.DecisionMade, e *cloudeventsv1.Clou
 // attempts, which the plan's transitions into the gate give, and facts
 // that nothing in this log gives, so it is denied.
 func decisionIsRecordedWithItsBasis(t *testing.T, c Clients) {
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{
-		planAdded(t, "plan-a"), fired(t, "plan-a", "dco"), fired(t, "plan-a", "spec"), fired(t, "plan-a", "dco"),
+		fired(t, "plan-a", "dco"), fired(t, "plan-a", "spec"), fired(t, "plan-a", "dco"),
 	})
 	res, err := c(Kernel).Decide(t.Context(), &controlplanev1.DecideRequest{
 		Action: "dco", Plan: "plan-a", Keys: &controlplanev1.FactKeys{HeadTree: "tree-1", HeadCommit: "commit-1"},
@@ -129,7 +130,7 @@ func decisionIsRecordedWithItsBasis(t *testing.T, c Clients) {
 // so the basis holds only the facts that start at zero or empty once the
 // plan exists (decisions 0174 and 0175).
 func aMissingFactDenies(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
 	res, err := c(Kernel).Decide(t.Context(), &controlplanev1.DecideRequest{
 		Action: "merge", Plan: "plan-a", Keys: &controlplanev1.FactKeys{BaseTree: "tree-0", HeadTree: "tree-1", HeadCommit: "commit-1"},
 	})
@@ -158,7 +159,7 @@ func aMissingFactDenies(t *testing.T, c Clients) {
 // none (decisions 0133 and 0187).
 func aDecisionNamesItsCause(t *testing.T, c Clients) {
 	added := planAdded(t, "plan-a")
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{added})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{added})
 	for _, cause := range []string{added.GetId(), ""} {
 		res, err := c(Kernel).Decide(t.Context(), &controlplanev1.DecideRequest{Action: "escalate", Plan: "plan-a", Cause: cause})
 		if err != nil {
@@ -218,7 +219,7 @@ func aVerdictFromOutsideTheGateRoleIsRefused(t *testing.T, c Clients) {
 // matching permission and appends the decision with the event, just
 // before it, with the event's id as its cause (decision 0156).
 func aPermissionIsDecidedAndRecordedBeforeItsEvent(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
 	cases := []struct {
 		caller Caller
 		event  *cloudeventsv1.CloudEvent
@@ -255,8 +256,9 @@ func aPermissionIsDecidedAndRecordedBeforeItsEvent(t *testing.T, c Clients) {
 // attempts of the gate of the state the plan is in, which its last
 // transition entered.
 func theWorkflowActionsAreDecided(t *testing.T, c Clients) {
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-b")})
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{
-		planAdded(t, "plan-b"), fired(t, "plan-b", "planReview"), fired(t, "plan-b", "planReview"),
+		fired(t, "plan-b", "planReview"), fired(t, "plan-b", "planReview"),
 	})
 	decide := func(action string) (*controlplanev1.DecideResponse, *eventsv1.DecisionMade) {
 		t.Helper()
@@ -319,7 +321,7 @@ func decideFor(t *testing.T, c Clients, action, plan string, keys *controlplanev
 // 0169). ask reads questions.open, 0, so it is denied. A gate's decision
 // shows its empty facts in the basis.
 func aFreshlyAddedPlanMayMove(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-f")})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-f")})
 	keys := &controlplanev1.FactKeys{HeadTree: "tree-1", HeadCommit: "commit-1"}
 	for _, action := range []string{"escalate", "advance"} {
 		if res, d := decideFor(t, c, action, "plan-f", keys); res.GetOutcome() != eventsv1.DecisionMade_OUTCOME_ALLOW {
@@ -345,7 +347,8 @@ func aFreshlyAddedPlanMayMove(t *testing.T, c Clients) {
 // escalate, advance and retry are denied and recorded, even with a
 // transition of the plan into a gate in the log (decisions 0143 and 0174).
 func aPlanNeverAddedIsDenied(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), fired(t, "plan-z", "planReview")})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{fired(t, "plan-z", "planReview")})
 	for _, action := range []string{"escalate", "advance", "retry"} {
 		res, d := decideFor(t, c, action, "plan-z", &controlplanev1.FactKeys{HeadTree: "tree-1"})
 		if res.GetOutcome() != eventsv1.DecisionMade_OUTCOME_DENY {

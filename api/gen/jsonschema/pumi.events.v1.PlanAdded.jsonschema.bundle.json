@@ -5,6 +5,13 @@
       "additionalProperties": false,
       "description": "PlanAdded is the data of dev.getpumi.plan.added: a plan joins a track,\n including a plan split from another.",
       "patternProperties": {
+        "^(depends_on)$": {
+          "description": "The plans this one depends on: plans added earlier in the same track.\n The plan starts only when each of them has merged (decisions 0196 and\n 0197).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "^(split_from)$": {
           "default": "",
           "description": "The plan this one was split from, or empty.",
@@ -12,6 +19,13 @@
         }
       },
       "properties": {
+        "dependsOn": {
+          "description": "The plans this one depends on: plans added earlier in the same track.\n The plan starts only when each of them has merged (decisions 0196 and\n 0197).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "plan": {
           "default": "",
           "description": "The plan.",

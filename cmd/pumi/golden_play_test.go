@@ -296,6 +296,8 @@ func (p *pumi) play(want []*cloudeventsv1.CloudEvent, running bool) {
 		switch {
 		case next.GetType() == events.TypeLeaseGranted:
 			p.claim()
+		case next.GetType() == events.TypeLeaseExpired:
+			p.expire()
 		case next.GetType() == events.TypeInvocationResult:
 			result := dataOf(p.t, next, &eventsv1.InvocationResult{})
 			p.report(result, outcomeAfter(p.t, want, m, result.GetInvocation()), leaseNumber(p.t, want, m, result.GetInvocation()))
@@ -387,28 +389,56 @@ var (
 // claimStep claims the next invocation.
 func claimStep(p *pumi) { p.claim() }
 
-// restartStep stops pumi and starts it again.
-func restartStep(p *pumi) { p.restart() }
+// expireStep lets every current lease expire.
+func expireStep(p *pumi) { p.expire() }
 
 // reportStep reports the last claimed invocation as succeeded, with usage.
 func reportStep(usage *eventsv1.InvocationResult_Usage) step {
 	return func(p *pumi) {
-		var last *eventsv1.InvocationResult
-		var number int64
-		for inv, c := range p.claims {
-			if last == nil || inv > last.GetInvocation() {
-				last, number = &eventsv1.InvocationResult{Invocation: inv}, c.GetLeaseNumber()
-			}
+		last := ""
+		for inv := range p.claims {
+			last = max(last, inv)
 		}
-		if last == nil {
+		if last == "" {
 			p.t.Fatal("the seed reports before any claim")
 		}
-		last.Usage = usage
-		last.Tree = "tree-1"
-		last.Output = `{"summary":"Implemented the plan."}`
-		p.report(last, eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, number)
+		reportOf(last, usage)(p)
 	}
 }
+
+// reportOf reports the claimed invocation as succeeded, with usage.
+func reportOf(invocation string, usage *eventsv1.InvocationResult_Usage) step {
+	return func(p *pumi) {
+		c, ok := p.claims[invocation]
+		if !ok {
+			p.t.Fatalf("the seed reports %s, which the runner did not claim", invocation)
+		}
+		result := &eventsv1.InvocationResult{
+			Invocation: invocation, Usage: usage, Tree: "tree-1", Output: `{"summary":"Implemented the plan."}`,
+		}
+		p.report(result, eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, c.GetLeaseNumber())
+	}
+}
+
+// addStep adds plan to track as the person, depending on dependsOn
+// (decisions 0196 and 0198).
+func addStep(plan, track string, dependsOn ...string) step {
+	return func(p *pumi) {
+		e, err := events.New(&eventsv1.PlanAdded{Plan: plan, Track: track, DependsOn: dependsOn},
+			events.Attributes{ID: "add-" + plan, Source: personSource, Subject: plan, Tenant: embeddedlog.Tenant})
+		if err != nil {
+			p.t.Fatal(err)
+		}
+		p.appendAsPerson(e)
+	}
+}
+
+// addPlanA adds the plan of the cases that run one plan.
+var addPlanA = addStep(casePlan, caseTrack)
+
+// addTwoTracks adds the plans of two tracks: a1 and a2 in the track a,
+// where a2 depends on a1, and b1 in the track b.
+var addTwoTracks = []step{addStep("a1", "a"), addStep("a2", "a", "a1"), addStep("b1", "b")}
 
 // answerStep answers the last escalation of the plan as the person.
 func answerStep(answer string) step {
@@ -434,17 +464,33 @@ func answerStep(answer string) step {
 // seeds are the steps that write each case's log.jsonl with -update, by
 // the case's directory under goldenDir.
 var seeds = map[string][]step{
-	"spike/advance-to-final":           {claimStep, reportStep(underCaps)},
-	"spike/over-caps-escalates":        {claimStep, reportStep(overCaps)},
-	"spike/in-doubt-escalates":         {restartStep},
-	"spike/answer-over-caps-escalates": {claimStep, reportStep(overCaps), answerStep("Go on.")},
-	"entered/decide-on-entry":          {claimStep, reportStep(underCaps)},
+	"spike/advance-to-final":           {addPlanA, claimStep, reportStep(underCaps)},
+	"spike/over-caps-escalates":        {addPlanA, claimStep, reportStep(overCaps)},
+	"spike/in-doubt-escalates":         {addPlanA, claimStep, expireStep},
+	"spike/answer-over-caps-escalates": {addPlanA, claimStep, reportStep(overCaps), answerStep("Go on.")},
+	"entered/decide-on-entry":          {addPlanA, claimStep, reportStep(underCaps)},
+	// With parallelism 2, a1 and b1 start at once, and a2 starts when a1
+	// has merged.
+	"tracks/parallelism-2": slices.Concat(addTwoTracks, []step{
+		claimStep, claimStep, reportOf("a1/1", underCaps), claimStep, reportOf("b1/1", underCaps), reportOf("a2/1", underCaps),
+	}),
+	// With parallelism 1, a1 runs first; when it has merged, a2 and b1 are
+	// ready, and a2 starts first because it was added first.
+	"tracks/parallelism-1": slices.Concat(addTwoTracks, []step{
+		claimStep, reportOf("a1/1", underCaps), claimStep, reportOf("a2/1", underCaps), claimStep, reportOf("b1/1", underCaps),
+	}),
+	// a1 escalates while b1 goes on and merges; a2 does not start, because
+	// a1 has not merged, although a slot is free.
+	"tracks/escalation-while-another-goes-on": slices.Concat(addTwoTracks, []step{
+		claimStep, claimStep, reportOf("a1/1", overCaps), reportOf("b1/1", underCaps),
+	}),
 }
 
-// seed runs the steps of a case on a new log and writes its log.jsonl.
-func seed(t *testing.T, wf *workflow.Workflow, dir string, steps []step) {
+// seed runs the steps of a case with the settings s on a new log and
+// writes its log.jsonl.
+func seed(t *testing.T, wf *workflow.Workflow, s caseSettings, dir string, steps []step) {
 	t.Helper()
-	p := newPumi(t, wf, nil, 0)
+	p := newPumi(t, wf, s, nil, 0)
 	p.startPlane()
 	p.startKernel()
 	for _, s := range steps {
@@ -483,24 +529,25 @@ func runCase(t *testing.T, dir, name string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	settings := readSettings(t, dir)
 	if *update {
 		steps, ok := seeds[name]
 		if !ok {
 			t.Fatalf("the case %s has no seed", name)
 		}
-		seed(t, wf, dir, steps)
+		seed(t, wf, settings, dir, steps)
 	}
 	if len(bytes.TrimSpace(readFile(t, dir, "sources.md"))) == 0 {
 		t.Errorf("the case %s has an empty sources.md; it names the case's regime sources (decision 0183)", name)
 	}
-	playCase(t, wf, readCase(t, dir))
+	playCase(t, wf, settings, readCase(t, dir))
 }
 
-// playCase plays want, then plays it again with a restart at each position
-// where a write of the first run ended.
-func playCase(t *testing.T, wf *workflow.Workflow, want []*cloudeventsv1.CloudEvent) {
+// playCase plays want with the settings s, then plays it again with a
+// restart at each position where a write of the first run ended.
+func playCase(t *testing.T, wf *workflow.Workflow, s caseSettings, want []*cloudeventsv1.CloudEvent) {
 	t.Helper()
-	first := newPumi(t, wf, nil, 0)
+	first := newPumi(t, wf, s, nil, 0)
 	first.startPlane()
 	first.startKernel()
 	first.play(want, true)
@@ -518,7 +565,7 @@ func playCase(t *testing.T, wf *workflow.Workflow, want []*cloudeventsv1.CloudEv
 	for _, k := range positions {
 		t.Run(fmt.Sprintf("restart at %d", k), func(t *testing.T) {
 			t.Parallel()
-			p := newPumi(t, wf, lines, k)
+			p := newPumi(t, wf, s, lines, k)
 			p.startPlane()
 			p.play(want, false)
 			if p.stopKernel == nil {

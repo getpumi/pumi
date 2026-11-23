@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -674,18 +675,67 @@ func (f *fixture) checkGone(t *testing.T) {
 	}
 }
 
-// running reports whether the process pid exists and is not a zombie,
-// which a container's first process may never reap.
+// running reports whether the process pid still runs and has not been
+// killed: it exists, is not a zombie, which a container's first process
+// may never reap, is not exiting and has no SIGKILL pending. kill(2)
+// returns before the process it kills acts on SIGKILL, so a process that
+// the runner killed can still be in the state R for a while, with the
+// signal pending; under load that took more than 100 ms.
 func running(t *testing.T, pid string) bool {
 	t.Helper()
-	stat, err := openRoot(t, "/proc").ReadFile(pid + "/stat")
+	proc := openRoot(t, "/proc")
+	stat, err := proc.ReadFile(pid + "/stat")
 	if os.IsNotExist(err) {
 		return false
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The state follows the command name, which is in parentheses.
+	// The state follows the command name, which is in parentheses, and the
+	// flags are the seventh field from the state.
 	_, rest, ok := strings.Cut(string(stat), ") ")
-	return !ok || !strings.HasPrefix(rest, "Z")
+	fields := strings.Fields(rest)
+	if !ok || len(fields) < 7 {
+		t.Fatalf("/proc/%s/stat is %q", pid, stat)
+	}
+	flags, err := strconv.ParseUint(fields[6], 10, 64)
+	if err != nil {
+		t.Fatalf("the flags of /proc/%s/stat: %v", pid, err)
+	}
+	if fields[0] == "Z" || flags&pfExiting != 0 {
+		return false
+	}
+	status, err := proc.ReadFile(pid + "/status")
+	if os.IsNotExist(err) {
+		return false
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return !killPending(t, pid, string(status))
+}
+
+// pfExiting is the flag PF_EXITING of /proc/<pid>/stat: the process is
+// exiting.
+const pfExiting = 0x4
+
+// killPending reports whether status, the content of /proc/<pid>/status,
+// shows SIGKILL pending for the thread (SigPnd) or the process (ShdPnd).
+// Each is a hexadecimal mask in which signal n is bit n-1.
+func killPending(t *testing.T, pid, status string) bool {
+	t.Helper()
+	for line := range strings.Lines(status) {
+		name, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if !ok || (name != "SigPnd" && name != "ShdPnd") {
+			continue
+		}
+		mask, err := strconv.ParseUint(strings.TrimSpace(value), 16, 64)
+		if err != nil {
+			t.Fatalf("the %s of /proc/%s/status: %v", name, pid, err)
+		}
+		if mask&(1<<(uint(syscall.SIGKILL)-1)) != 0 {
+			return true
+		}
+	}
+	return false
 }

@@ -20,11 +20,11 @@ import (
 // of writing, with no gaps, across appends (decision 0154).
 func appendAssignsDensePositionsInOrder(t *testing.T, c Clients) {
 	equal(t, "the positions of the first append",
-		mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), transitionFired(t, "plan-a")}),
+		mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a"), transitionFired(t, "plan-a")}),
 		[]uint64{1, 2})
 	equal(t, "the positions of the second append",
-		mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-b")}), []uint64{3})
-	sent := []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-b"), transitionFired(t, "plan-a"), planAdded(t, "plan-c")}
+		mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-b")}), []uint64{3})
+	sent := []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-b"), transitionFired(t, "plan-a"), escalationRaised(t, "plan-c")}
 	equal(t, "the positions of the third append", mustAppend(t, c, Kernel, sent), []uint64{4, 5, 6})
 
 	res, err := c(Kernel).Query(t.Context(), &controlplanev1.QueryRequest{After: 3})
@@ -49,10 +49,10 @@ func appendAssignsDensePositionsInOrder(t *testing.T, c Clients) {
 // the caller's identity and the prevhash that chains the log, whatever the
 // request carries (decisions 0153 and 0156).
 func appendWritesTenantAndPrevhash(t *testing.T, c Clients) {
-	noTenant := planAdded(t, "plan-b")
+	noTenant := escalationRaised(t, "plan-b")
 	delete(noTenant.Attributes, events.ExtensionTenant)
 	delete(noTenant.Attributes, events.ExtensionPrevHash)
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), noTenant})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a"), noTenant})
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-a")})
 
 	res, err := c(Person).Query(t.Context(), &controlplanev1.QueryRequest{})
@@ -84,8 +84,8 @@ func appendWritesTenantAndPrevhash(t *testing.T, c Clients) {
 // events or is at the version given, and otherwise the append fails with
 // the subject's current version (decision 0153).
 func appendChecksSubjectVersions(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")}, noEvents("plan-a"))
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-b")}, noEvents("plan-b"), atVersion("plan-a", 1))
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a")}, noEvents("plan-a"))
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-b")}, noEvents("plan-b"), atVersion("plan-a", 1))
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-a")}, atVersion("plan-a", 1))
 
 	for name, cond := range map[string]*controlplanev1.Condition{
@@ -101,7 +101,7 @@ func appendChecksSubjectVersions(t *testing.T, c Clients) {
 		}
 	}
 	_, err := c(Kernel).Append(t.Context(), &controlplanev1.AppendRequest{
-		Events: []*cloudeventsv1.CloudEvent{planAdded(t, "plan-c")}, Conditions: []*controlplanev1.Condition{atVersion("plan-c", 1)},
+		Events: []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-c")}, Conditions: []*controlplanev1.Condition{atVersion("plan-c", 1)},
 	})
 	if got := conflict(t, err); len(got) != 1 || got["plan-c"] != 0 {
 		t.Fatalf("the conflict of a version of a subject with no events is %v, want plan-c at version 0", got)
@@ -114,7 +114,7 @@ func appendChecksSubjectVersions(t *testing.T, c Clients) {
 // appendConflictNamesEveryFailedSubject: the error names each subject
 // whose condition failed, and only those.
 func appendConflictNamesEveryFailedSubject(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), planAdded(t, "plan-b"), planAdded(t, "plan-c")})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a"), escalationRaised(t, "plan-b"), escalationRaised(t, "plan-c")})
 	_, err := c(Kernel).Append(t.Context(), &controlplanev1.AppendRequest{
 		Events: []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-a")},
 		Conditions: []*controlplanev1.Condition{
@@ -130,9 +130,9 @@ func appendConflictNamesEveryFailedSubject(t *testing.T, c Clients) {
 // batchWhoseSecondConditionFailsWritesNothing: an append writes all its
 // events or none (decision 0153).
 func batchWhoseSecondConditionFailsWritesNothing(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a")})
 	_, err := c(Kernel).Append(t.Context(), &controlplanev1.AppendRequest{
-		Events:     []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-a"), planAdded(t, "plan-b")},
+		Events:     []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-a"), escalationRaised(t, "plan-b")},
 		Conditions: []*controlplanev1.Condition{atVersion("plan-a", 1), atVersion("plan-b", 4)},
 	})
 	if got := conflict(t, err); len(got) != 1 || got["plan-b"] != 0 {
@@ -144,7 +144,7 @@ func batchWhoseSecondConditionFailsWritesNothing(t *testing.T, c Clients) {
 		t.Fatalf("the head is %d, want 1", h)
 	}
 	equal(t, "the next positions",
-		mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-b")}, noEvents("plan-b")), []uint64{2})
+		mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-b")}, noEvents("plan-b")), []uint64{2})
 }
 
 // racers is the number of appends that race on one subject version.
@@ -154,7 +154,7 @@ const racers = 8
 // version of a subject, exactly one succeeds, and the others fail with the
 // version it made (decision 0153).
 func twoAppendsRacingOnOneVersion(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a")})
 	batches := make([][]*cloudeventsv1.CloudEvent, racers)
 	for i := range batches {
 		batches[i] = []*cloudeventsv1.CloudEvent{transitionFired(t, "plan-a"), transitionFired(t, "plan-a")}
@@ -193,24 +193,24 @@ func twoAppendsRacingOnOneVersion(t *testing.T, c Clients) {
 // is not a valid Pumi event, or a condition that names no subject or no
 // valid version fails with invalid argument and writes nothing.
 func appendRefusesAnInvalidRequest(t *testing.T, c Clients) {
-	unknownType := planAdded(t, "plan-a")
+	unknownType := escalationRaised(t, "plan-a")
 	unknownType.Type = events.TypePrefix + "plan.unknown"
-	noID := planAdded(t, "plan-a")
+	noID := escalationRaised(t, "plan-a")
 	noID.Id = ""
 	cases := map[string]*controlplanev1.AppendRequest{
 		"no events":           {},
-		"an unknown type":     {Events: []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), unknownType}},
+		"an unknown type":     {Events: []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a"), unknownType}},
 		"an event with no id": {Events: []*cloudeventsv1.CloudEvent{noID}},
-		"a nil event":         {Events: []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), nil}},
+		"a nil event":         {Events: []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a"), nil}},
 		"a condition with no subject": {
-			Events: []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")}, Conditions: []*controlplanev1.Condition{noEvents("")},
+			Events: []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a")}, Conditions: []*controlplanev1.Condition{noEvents("")},
 		},
 		"a condition with no expected version": {
-			Events:     []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")},
+			Events:     []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a")},
 			Conditions: []*controlplanev1.Condition{{Subject: "plan-a"}},
 		},
 		"a condition at version 0": {
-			Events: []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")}, Conditions: []*controlplanev1.Condition{atVersion("plan-a", 0)},
+			Events: []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a")}, Conditions: []*controlplanev1.Condition{atVersion("plan-a", 0)},
 		},
 	}
 	for name, req := range cases {
@@ -299,6 +299,9 @@ func ofType(t *testing.T, typ string) *cloudeventsv1.CloudEvent {
 		t.Fatal(err)
 	}
 	data = proto.Clone(data)
+	if a, ok := data.(*eventsv1.PlanAdded); ok {
+		a.Plan, a.Track = "subject-of-"+typ, "main"
+	}
 	if o, ok := data.(*eventsv1.OverrideRecorded); ok {
 		o.Reason = "the conformance suite"
 		o.Plan = "plan-of-" + typ
@@ -316,7 +319,7 @@ func ofType(t *testing.T, typ string) *cloudeventsv1.CloudEvent {
 // type the caller may not append writes none of them.
 func batchWithARefusedTypeWritesNothing(t *testing.T, c Clients) {
 	_, err := c(Kernel).Append(t.Context(), &controlplanev1.AppendRequest{
-		Events: []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a"), ofType(t, events.TypeApprovalRecorded)},
+		Events: []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a"), ofType(t, events.TypeApprovalRecorded)},
 	})
 	wantCode(t, err, connect.CodePermissionDenied)
 	_, err = c(Person).Append(t.Context(), &controlplanev1.AppendRequest{
@@ -331,7 +334,7 @@ func batchWithARefusedTypeWritesNothing(t *testing.T, c Clients) {
 // runnerMayNotCallControlPlaneService: a runner uses RunnerService only
 // (decision 0152), so each verb of ControlPlaneService refuses it.
 func runnerMayNotCallControlPlaneService(t *testing.T, c Clients) {
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "plan-a")})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{escalationRaised(t, "plan-a")})
 	_, err := c(Runner).Append(t.Context(), &controlplanev1.AppendRequest{
 		Events: []*cloudeventsv1.CloudEvent{ofType(t, events.TypeInvocationStarted)},
 	})
@@ -344,4 +347,63 @@ func runnerMayNotCallControlPlaneService(t *testing.T, c Clients) {
 		_ = stream.Close()
 	}
 	wantCode(t, err, connect.CodePermissionDenied)
+}
+
+// addedTo returns a dev.getpumi.plan.added event that adds plan to track,
+// depending on dependsOn.
+func addedTo(t *testing.T, plan, track string, dependsOn ...string) *cloudeventsv1.CloudEvent {
+	t.Helper()
+	return build(t, &eventsv1.PlanAdded{Plan: plan, Track: track, DependsOn: dependsOn}, plan)
+}
+
+// appendChecksAddedPlans: a plan.added names a plan and a track and has
+// the plan as its subject, or the append is refused with invalid
+// argument. A plan.added of a plan that the log or the same append already
+// adds, or that depends on a plan not added earlier in the same track, in
+// the log or earlier in the same append, is refused with failed
+// precondition, and nothing of the append is written (decision 0196).
+func appendChecksAddedPlans(t *testing.T, c Clients) {
+	equal(t, "the positions of the plans of two tracks",
+		mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{
+			addedTo(t, "a1", "a"), addedTo(t, "a2", "a", "a1"), addedTo(t, "b1", "b"),
+		}), []uint64{1, 2, 3})
+	equal(t, "the position of a plan that depends on two",
+		mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{addedTo(t, "a3", "a", "a1", "a2")}), []uint64{4})
+
+	other := addedTo(t, "a4", "a")
+	other.Attributes["subject"] = stringValue("a5")
+	invalid := map[string][]*cloudeventsv1.CloudEvent{
+		"no plan":                        {build(t, &eventsv1.PlanAdded{Track: "a"}, "")},
+		"no track":                       {addedTo(t, "a4", "")},
+		"a subject that is not the plan": {other},
+	}
+	for name, evs := range invalid {
+		_, err := c(Person).Append(t.Context(), &controlplanev1.AppendRequest{Events: evs})
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("a plan.added with %s: %v, want the code invalid_argument", name, err)
+		}
+	}
+	refused := map[string][]*cloudeventsv1.CloudEvent{
+		"a plan the log adds":             {addedTo(t, "a1", "a")},
+		"a plan the same append adds":     {addedTo(t, "c1", "c"), addedTo(t, "c1", "c")},
+		"a dependency never added":        {addedTo(t, "a4", "a", "z")},
+		"a dependency in another track":   {addedTo(t, "b2", "b", "a1")},
+		"a dependency on itself":          {addedTo(t, "a4", "a", "a4")},
+		"a dependency added after it":     {addedTo(t, "a4", "a", "a5"), addedTo(t, "a5", "a")},
+		"a refused plan after a good one": {addedTo(t, "c2", "c"), addedTo(t, "a4", "a", "z")},
+	}
+	for name, evs := range refused {
+		_, err := c(Person).Append(t.Context(), &controlplanev1.AppendRequest{Events: evs})
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			t.Errorf("a plan.added with %s: %v, want the code failed_precondition", name, err)
+		}
+	}
+	if h := head(t, c); h != 4 {
+		t.Fatalf("the head is %d after the refused appends, want 4", h)
+	}
+}
+
+// stringValue returns s as a string attribute.
+func stringValue(s string) *cloudeventsv1.CloudEvent_CloudEventAttributeValue {
+	return &cloudeventsv1.CloudEvent_CloudEventAttributeValue{Attr: &cloudeventsv1.CloudEvent_CloudEventAttributeValue_CeString{CeString: s}}
 }

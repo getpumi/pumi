@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: The Pumi Authors
 -->
 # in-doubt-escalates
 
-The log ends with `invocation.requested` and no result, and pumi is started again. On start the kernel escalates the plan instead of running the stage again, because the invocation may have run (decisions 0019 and 0182). The row of this case in the triage table of getpumi/design `regime/README.md` at `4a29c9b`.
+A runner claims the invocation, and its lease expires with no result. The kernel escalates the plan instead of running the stage again, because the invocation may have run (decisions 0019, 0182 and 0199). With the restart after the expiry, the kernel finds the invocation in doubt when it starts. An invocation that no runner claimed, or whose lease is current, is not in doubt, so a restart before the expiry changes nothing. The row of this case in the triage table of getpumi/design `regime/README.md` at `4a29c9b`.
 
 Regime sources, in `WalkingDisaster/scale-wholesale` at `9842f55`:
 

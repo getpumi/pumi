@@ -27,9 +27,10 @@ func warningReviewed(t *testing.T, plan string) *cloudeventsv1.CloudEvent {
 //	7 warning.reviewed a
 func mixedLog(t *testing.T, c Clients) {
 	t.Helper()
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, "a"), planAdded(t, "b")})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "a"), planAdded(t, "b")})
 	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{transitionFired(t, "a"), transitionFired(t, "b")})
-	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{transitionFired(t, "a"), planAdded(t, "c")})
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{transitionFired(t, "a")})
+	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{planAdded(t, "c")})
 	mustAppend(t, c, Person, []*cloudeventsv1.CloudEvent{warningReviewed(t, "a")})
 }
 

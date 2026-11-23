@@ -123,7 +123,7 @@ func log(t *testing.T, c Clients, caller Caller, written map[uint64]string, evs 
 // the log, then new ones as they are appended (decision 0154).
 func subscribeCatchesUpThenFollows(t *testing.T, c Clients) {
 	written := map[uint64]string{}
-	log(t, c, Kernel, written, planAdded(t, "a"), transitionFired(t, "a"), planAdded(t, "b"))
+	log(t, c, Kernel, written, escalationRaised(t, "a"), transitionFired(t, "a"), escalationRaised(t, "b"))
 	s := subscribe(t, c, Kernel, &controlplanev1.SubscribeRequest{})
 	equal(t, "the events the stream caught up with", s.receive(t, 3, written), []uint64{1, 2, 3})
 	s.quiet(t)
@@ -145,7 +145,7 @@ func subscribeCatchesUpThenFollows(t *testing.T, c Clients) {
 // after it (decision 0154).
 func subscribeResumesAfterAPosition(t *testing.T, c Clients) {
 	written := map[uint64]string{}
-	log(t, c, Kernel, written, planAdded(t, "a"), planAdded(t, "b"), planAdded(t, "c"), planAdded(t, "d"), planAdded(t, "e"))
+	log(t, c, Kernel, written, escalationRaised(t, "a"), escalationRaised(t, "b"), escalationRaised(t, "c"), escalationRaised(t, "d"), escalationRaised(t, "e"))
 	first := subscribe(t, c, Kernel, &controlplanev1.SubscribeRequest{})
 	equal(t, "the events before the stream ended", first.receive(t, 2, written), []uint64{1, 2})
 	first.stop()
@@ -219,7 +219,7 @@ func subscribeCatchesUpWithALongLog(t *testing.T, c Clients) {
 	equal(t, "the events of the long log", s.receive(t, longLog, written), span(1, longLog))
 	odd := subscribe(t, c, Person, &controlplanev1.SubscribeRequest{Filter: &controlplanev1.Filter{Subject: "a"}, After: 1})
 	equal(t, "the events of the long log after 1", odd.receive(t, longLog-1, written), span(2, longLog))
-	log(t, c, Kernel, written, planAdded(t, "b"))
+	log(t, c, Kernel, written, escalationRaised(t, "b"))
 	equal(t, "the next event", s.receive(t, 1, written), []uint64{longLog + 1})
 	odd.quiet(t)
 }

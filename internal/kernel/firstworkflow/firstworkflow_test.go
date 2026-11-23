@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"io/fs"
+	"maps"
 	"os"
 	"regexp"
 	"slices"
@@ -462,6 +463,21 @@ func TestACancelGoesToCancelledFromEveryActiveState(t *testing.T) {
 		if err != nil || len(ts) != 0 {
 			t.Errorf("a cancel in %q: %v, %v, want no transition", final, ts, err)
 		}
+	}
+}
+
+// TestOnlyMergedHasMerged: a plan that depends on another starts only when
+// that plan is in a final state that has merged (decision 0197), which in
+// the first workflow is merged and not cancelled.
+func TestOnlyMergedHasMerged(t *testing.T) {
+	merged := map[string]bool{}
+	for _, s := range load(t).Definition().GetStates() {
+		if f := s.GetFinal(); f != nil {
+			merged[s.GetName()] = f.GetMerged()
+		}
+	}
+	if want := map[string]bool{"merged": true, "cancelled": false}; !maps.Equal(merged, want) {
+		t.Errorf("the final states and their merged flags are %v, want %v", merged, want)
 	}
 }
 

@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+// The configuration file of pumi in embedded mode until the profiles and
+// policy sets of epic E10 replace it (decision 0207). The file is in
+// protobuf text format (.txtpb), with # comments, given to pumi with
+// --config.
+package pumi.config.v1;
+
+import "pumi/harness/v1/harness.proto";
+import "pumi/runner/v1/runner.proto";
+
+// Config is the configuration file.
+message Config {
+  // The workflow file that the plans run on, relative to the directory of
+  // the configuration file or absolute (decision 0167).
+  string workflow = 1;
+  // The executable of the harness adapter that the in-process runner
+  // starts, relative to the directory of the configuration file or
+  // absolute (decision 0158).
+  string adapter = 2;
+  // The trunk branch, such as main. Each plan starts from its tree at the
+  // time the plan starts (decision 0209).
+  string trunk = 3;
+  // The base of each invocation document: the component's name and version,
+  // the repository, the capabilities and the budget. The kernel sets the
+  // rest, and the input tree from the trunk (decision 0165).
+  pumi.runner.v1.Invocation base = 4;
+  // The project that the plans are in.
+  Project project = 5;
+  // The project's hard caps (decision 0147). When it is not set, pumi uses
+  // the default hard caps of its release.
+  pumi.harness.v1.Usage hard_caps = 6;
+  // The profile settings.
+  Settings settings = 7;
+}
+
+// Project is the project of the Cedar resource Plan (decision 0141).
+message Project {
+  // The project's name.
+  string name = 1;
+  // The project's protected path patterns.
+  repeated string protected_paths = 2;
+}
+
+// Settings are the profile settings that pumi reads from the file
+// (decisions 0189 and 0201).
+message Settings {
+  // How many plans run at once across all tracks; 0 counts as 1.
+  int32 parallelism = 1;
+  // maxAttempts by gate, by the gate's Cedar action such as planReview, and
+  // by "in-doubt" for the retry of an invocation in doubt from a state with
+  // no gate (decision 0044).
+  map<string, int64> max_attempts = 2;
+}

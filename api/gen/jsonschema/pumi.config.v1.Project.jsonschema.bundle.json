@@ -1,0 +1,37 @@
+{
+  "$defs": {
+    "pumi.config.v1.Project.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Project is the project of the Cedar resource Plan (decision 0141).",
+      "patternProperties": {
+        "^(protected_paths)$": {
+          "description": "The project's protected path patterns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "name": {
+          "default": "",
+          "description": "The project's name.",
+          "type": "string"
+        },
+        "protectedPaths": {
+          "description": "The project's protected path patterns.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Project",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.config.v1.Project.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.config.v1.Project.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

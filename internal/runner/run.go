@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -59,6 +60,10 @@ type Config struct {
 	// LogInterval is how often the runner sends a batch of the adapter's
 	// standard error; DefaultLogInterval when zero.
 	LogInterval time.Duration
+	// Output, when set, also receives each invocation's log as it is
+	// written, each line after the invocation's id and ": ", so that pumi
+	// run prints it (getpumi/pumi#88).
+	Output io.Writer
 }
 
 // check refuses a configuration that lacks a value the runner needs, and
@@ -140,7 +145,12 @@ func RunOne(ctx context.Context, cfg Config) (bool, error) {
 	if claim.GetInvocation() == nil {
 		return false, nil
 	}
-	r := &run{cfg: cfg, repo: repo, claim: claim, claimed: claimed, doc: claim.GetInvocation(), log: &logBuffer{}}
+	log := &logBuffer{}
+	if cfg.Output != nil {
+		log.out = &lineWriter{out: cfg.Output, prefix: claim.GetInvocation().GetInvocation() + ": "}
+		defer log.flush()
+	}
+	r := &run{cfg: cfg, repo: repo, claim: claim, claimed: claimed, doc: claim.GetInvocation(), log: log}
 	return true, r.do(ctx)
 }
 

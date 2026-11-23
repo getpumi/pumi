@@ -5,6 +5,7 @@ package runner
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -453,6 +454,45 @@ func TestTheLogComesFromStandardError(t *testing.T) {
 	f.runOne(t)
 	if log := f.service.log(); !strings.Contains(log, fakeAdapterPrefix+"pid ") {
 		t.Errorf("the log does not hold the adapter's standard error; it is\n%s", log)
+	}
+}
+
+// syncBuffer is a bytes.Buffer that is safe for concurrent use.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// TestTheLogIsWrittenToTheOutput: the runner also writes the log, the
+// adapter's standard error and its own lines, to Config.Output, each line
+// after the invocation's id, so that pumi run prints it (getpumi/pumi#88).
+func TestTheLogIsWrittenToTheOutput(t *testing.T) {
+	f := newFixture(t, "exit 3")
+	var out syncBuffer
+	f.cfg.Output = &out
+	f.runOne(t)
+	got := out.String()
+	for _, want := range []string{"plan-1/1: " + fakeAdapterPrefix + "pid ", "plan-1/1: " + runnerPrefix} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the output does not hold a line starting with %q; it is\n%s", want, got)
+		}
+	}
+	for line := range strings.SplitSeq(strings.TrimSuffix(got, "\n"), "\n") {
+		if !strings.HasPrefix(line, "plan-1/1: ") {
+			t.Errorf("the output line %q does not start with the invocation", line)
+		}
 	}
 }
 

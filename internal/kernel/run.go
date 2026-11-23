@@ -62,6 +62,11 @@ type Config struct {
 	// event up to head, the head of the log, and waits for more. The golden
 	// cases use it to know when the kernel waits (decision 0183).
 	Idle func(head uint64)
+	// Trunk, when set, returns the tree of the trunk branch. The kernel
+	// calls it when it starts a plan, and that tree is the input tree of
+	// the plan's invocations, in place of Base's (decision 0209). After a
+	// restart a plan keeps the tree of its first invocation.requested.
+	Trunk func(ctx context.Context) (string, error)
 	// Wrote, when set, is called after each write of the kernel to the log,
 	// an Append or a Decide, with the position of its last event. The
 	// golden cases restart at each of them (decision 0182).
@@ -139,6 +144,10 @@ type planRun struct {
 	invocation string
 	requested  string
 	requests   int
+	// tree is the input tree of the plan's invocations: the trunk's tree
+	// when the plan started (decision 0209), or empty when the wiring
+	// gives no trunk.
+	tree string
 }
 
 // Run runs every plan that a plan.added of the log adds on the workflow
@@ -487,6 +496,9 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 			r.invocation, r.requested = req.GetInvocation(), e.GetId()
 			r.requests++
 			k.invocations[req.GetInvocation()] = r
+			if r.tree == "" && k.cfg.Trunk != nil {
+				r.tree = doc.GetInput().GetTree()
+			}
 		}
 		return nil
 	},
@@ -636,6 +648,9 @@ func (k *kernel) mergedAll(plans []string) bool {
 // as for any trigger.
 func (r *planRun) begin(ctx context.Context) error {
 	r.started = true
+	if err := r.readTrunk(ctx); err != nil {
+		return err
+	}
 	initial := r.k.states[r.state]
 	if inv, ok := initial.GetEntry().(*workflowv1.State_Invoke); ok && !r.k.requestedBy[r.added] {
 		req, err := r.request(r.state, inv.Invoke, r.added)
@@ -656,6 +671,23 @@ func (r *planRun) begin(ctx context.Context) error {
 		return err
 	}
 	return r.fire(ctx, &cloudeventsv1.CloudEvent{Id: r.added}, string(workflow.Entered), ts, nil)
+}
+
+// readTrunk reads the trunk's tree for the plan, unless the wiring gives
+// no trunk or the plan has its tree (decision 0209).
+func (r *planRun) readTrunk(ctx context.Context) error {
+	if r.tree != "" || r.k.cfg.Trunk == nil {
+		return nil
+	}
+	tree, err := r.k.cfg.Trunk(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot read the trunk's tree for the plan %s: %w", r.plan, err)
+	}
+	if tree == "" {
+		return fmt.Errorf("the trunk has no tree for the plan %s", r.plan)
+	}
+	r.tree = tree
+	return nil
 }
 
 // fire decides the transitions ts for the trigger e in order and fires the
@@ -835,6 +867,9 @@ func (r *planRun) request(state string, inv *workflowv1.Invoke, cause string) (*
 		doc.Input = &harnessv1.Input{}
 	}
 	doc.Input.Task = task
+	if r.tree != "" {
+		doc.Input.Tree = r.tree
+	}
 	doc.OutputMessage = inv.GetOutputMessage()
 	data, err := events.InvocationRequested(r.plan, doc)
 	if err != nil {

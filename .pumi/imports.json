@@ -24,6 +24,6 @@
   "shared": {"path": "internal/shared"},
   "checks": {"path": "internal/checks", "modules": []},
   "commands": {"path": "cmd", "modules": [
-    {"module": "google.golang.org/protobuf", "reason": "The golden case runner in the tests of cmd/pumi reads each case's events as protojson, normalizes the values that differ on every run and compares the events with proto.Equal (decision 0183)."}
+    {"module": "google.golang.org/protobuf", "reason": "cmd/pumi reads its configuration file in protobuf text format with prototext (decision 0207). The golden case runner in the tests of cmd/pumi reads each case's events as protojson, normalizes the values that differ on every run and compares the events with proto.Equal (decision 0183)."}
   ]}
 }

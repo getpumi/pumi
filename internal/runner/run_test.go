@@ -12,9 +12,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"syscall"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 

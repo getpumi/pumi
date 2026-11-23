@@ -320,7 +320,7 @@ func (Result_Status) EnumDescriptor() ([]byte, []int) {
 // 0024): it leaves out what only the runner needs, which is the credential
 // handles, the image digest and the isolation level, and adds what it has
 // resolved, which is the workspace, the model gateway and the output schema
-// (decision 0158). An adapter never receives a credential handle or a
+// (decision 0158). The model gateway is optional until E7 (decision 0185). An adapter never receives a credential handle or a
 // provider key.
 type Invocation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -340,12 +340,15 @@ type Invocation struct {
 	// 0159).
 	Capabilities *Capabilities `protobuf:"bytes,6,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
 	// The budget. The model gateway's caps enforce it; the adapter can also
-	// pass it to its harness.
+	// pass it to its harness. Until E7, when there is no gateway, only the
+	// adapter and its harness enforce it during the run (decision 0185).
 	Budget *Usage `protobuf:"bytes,7,opt,name=budget,proto3" json:"budget,omitempty"`
 	// The absolute path of the workspace, a checkout of the input tree, in
 	// which the runner started the adapter.
 	Workspace string `protobuf:"bytes,8,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	// The model gateway, through which every model call goes (decision 0036).
+	// The gateway is optional until E7: when it is not set, the harness uses
+	// its own sign-in on the machine that runs it (decision 0185).
 	Gateway *Gateway `protobuf:"bytes,9,opt,name=gateway,proto3" json:"gateway,omitempty"`
 	// The schema of the structured output.
 	OutputSchema  *OutputSchema `protobuf:"bytes,10,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
@@ -852,8 +855,11 @@ type Result struct {
 	// uploads them to the blob store and records them by hash (decision
 	// 0033).
 	OutputFiles []string `protobuf:"bytes,3,rep,name=output_files,json=outputFiles,proto3" json:"output_files,omitempty"`
-	// The adapter's own usage figures, for information only: the model
-	// gateway's count is the one that counts (decision 0036).
+	// The adapter's own usage figures. When the model gateway counted the
+	// invocation, its count is the one that counts (decision 0036). The
+	// gateway is optional until E7, and when no gateway counted the
+	// invocation, these figures are the usage of its invocation.result, which
+	// the usage fact and the hard caps read (decision 0185).
 	Usage         *Usage `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

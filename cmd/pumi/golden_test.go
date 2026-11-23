@@ -164,6 +164,8 @@ type pumi struct {
 	writes []uint64
 	// claims are the Claim responses by invocation.
 	claims map[string]*runnerv1.ClaimResponse
+	// trunk, when set, is the kernel's Trunk (decision 0209).
+	trunk func(context.Context) (string, error)
 }
 
 // newClone creates a git repository with one commit and returns its
@@ -290,6 +292,7 @@ func (p *pumi) startKernel() {
 			}
 		},
 		Wrote: func(position uint64) { p.wrote(position) },
+		Trunk: p.trunk,
 	}
 	go func() { p.done <- kernel.Run(ctx, cfg) }()
 }

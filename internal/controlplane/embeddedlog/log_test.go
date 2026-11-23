@@ -275,3 +275,21 @@ func TestIndexesAreRebuiltOnOpen(t *testing.T) {
 		})
 	}
 }
+
+// TestDirOfNamesTheDirectoryOfTheLog: DirOf gives the pumi directory that
+// Open uses, from a worktree too, without opening the log, so that a pumi
+// command finds the socket of a run that holds the log (decision 0206).
+func TestDirOfNamesTheDirectoryOfTheLog(t *testing.T) {
+	main := newClone(t)
+	worktree := addWorktree(t, main)
+	got, err := DirOf(t.Context(), worktree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := open(t, main)
+	defer closeLog(t, l)
+	want, _ := filepath.EvalSymlinks(l.Dir())
+	if got, _ = filepath.EvalSymlinks(got); got != want {
+		t.Errorf("DirOf(the worktree) = %s, want %s", got, want)
+	}
+}

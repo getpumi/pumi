@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	factsv1 "getpumi.dev/pumi/api/gen/pumi/facts/v1"
@@ -31,6 +32,7 @@ const jsonSchemaDir = "gen/jsonschema"
 // package, from which the generator writes JSON Schemas.
 var schemaFiles = []protoreflect.FileDescriptor{
 	cloudeventsv1.File_io_cloudevents_v1_cloudevents_proto,
+	configv1.File_pumi_config_v1_config_proto,
 	controlplanev1.File_pumi_controlplane_v1_controlplane_proto,
 	eventsv1.File_pumi_events_v1_invocations_proto,
 	factsv1.File_pumi_facts_v1_code_proto,

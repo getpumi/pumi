@@ -127,6 +127,17 @@ func Open(ctx context.Context, dir string) (*Log, error) {
 	return l, nil
 }
 
+// DirOf returns the pumi directory of the clone that dir is in, which
+// holds its log, without opening the log: the directory pumi in the
+// clone's common git directory (decision 0157).
+func DirOf(ctx context.Context, dir string) (string, error) {
+	common, err := commonDir(ctx, dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(common, "pumi"), nil
+}
+
 // commonDir returns the absolute path of the common git directory of the
 // clone that dir is in. The arguments of git are constant, because gosec
 // reports a command built from variables (G204).

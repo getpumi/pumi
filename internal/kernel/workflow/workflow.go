@@ -25,6 +25,7 @@ import (
 
 	"getpumi.dev/pumi/api/events"
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	factsv1 "getpumi.dev/pumi/api/gen/pumi/facts/v1"
@@ -94,6 +95,7 @@ type Workflow struct {
 // file of api/proto.
 var apiFiles = []protoreflect.FileDescriptor{
 	cloudeventsv1.File_io_cloudevents_v1_cloudevents_proto,
+	configv1.File_pumi_config_v1_config_proto,
 	controlplanev1.File_pumi_controlplane_v1_controlplane_proto,
 	eventsv1.File_pumi_events_v1_basis_proto,
 	eventsv1.File_pumi_events_v1_forge_proto,

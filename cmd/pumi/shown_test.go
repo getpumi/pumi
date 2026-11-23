@@ -23,6 +23,7 @@ import (
 
 	"getpumi.dev/pumi/api/events"
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
+	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
@@ -261,7 +262,8 @@ func shownBase(run shownRun) *runnerv1.Invocation {
 
 // embedded runs pumi in embedded mode on the run until the plan is final
 // or ctx is done, and returns the kernel's error: nil when the plan is
-// final. idle, when set, is the kernel's Idle.
+// final. It adds the plan as a person when the log does not have it
+// (decision 0198). idle, when set, is also called when the kernel waits.
 func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 	wf, err := workflow.Load(os.DirFS(filepath.Join(workflowsDir, "spike")), "workflow.txtpb")
 	if err != nil {
@@ -283,6 +285,16 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 	if err != nil {
 		return err
 	}
+	personConn, err := svc.Client(controlplane.Identity{
+		Caller: controlplane.CallerPerson, Principal: personName, Roles: []string{"maintainer"}, Tenant: embeddedlog.Tenant,
+	})
+	if err != nil {
+		return err
+	}
+	person := controlplanev1connect.NewControlPlaneServiceClient(personConn)
+	if err := addShownPlan(ctx, person, run.Plan); err != nil {
+		return err
+	}
 	runnerConn, err := svc.Client(controlplane.Identity{
 		Caller: controlplane.CallerRunner, Principal: runnerName, Roles: []string{controlplane.RoleAgent}, Tenant: embeddedlog.Tenant,
 	})
@@ -300,15 +312,65 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 			WorkDir:    run.WorkDir,
 		})
 	}()
+	final := false
 	err = kernel.Run(ctx, kernel.Config{
 		Client:   controlplanev1connect.NewControlPlaneServiceClient(kernelConn),
-		Workflow: wf, Plan: run.Plan, Track: caseTrack, Base: shownBase(run), Idle: idle,
+		Workflow: wf, Base: shownBase(run),
+		Idle: func(head uint64) {
+			if idle != nil {
+				idle(head)
+			}
+			if isFinal(ctx, person, wf, run.Plan) {
+				final = true
+				cancel()
+			}
+		},
 	})
+	if final {
+		err = nil
+	}
 	cancel()
 	if rerr := <-ran; rerr != nil && !errors.Is(rerr, context.Canceled) && err == nil {
 		err = fmt.Errorf("the runner stopped with %w", rerr)
 	}
 	return err
+}
+
+// addShownPlan appends the plan.added of plan as the person, unless the log
+// has it.
+func addShownPlan(ctx context.Context, person controlplanev1connect.ControlPlaneServiceClient, plan string) error {
+	res, err := person.Query(ctx, &controlplanev1.QueryRequest{Filter: &controlplanev1.Filter{Subject: plan, Types: []string{events.TypePlanAdded}}})
+	if err != nil || len(res.GetEvents()) > 0 {
+		return err
+	}
+	e, err := events.New(&eventsv1.PlanAdded{Plan: plan, Track: caseTrack},
+		events.Attributes{ID: "add-" + plan, Source: personSource, Subject: plan, Tenant: embeddedlog.Tenant})
+	if err != nil {
+		return err
+	}
+	_, err = person.Append(ctx, &controlplanev1.AppendRequest{Events: []*cloudeventsv1.CloudEvent{e}})
+	return err
+}
+
+// isFinal reports whether the last transition.fired of plan in the log
+// enters a final state of wf.
+func isFinal(ctx context.Context, reader controlplanev1connect.ControlPlaneServiceClient, wf *workflow.Workflow, plan string) bool {
+	res, err := reader.Query(ctx, &controlplanev1.QueryRequest{
+		Filter: &controlplanev1.Filter{Subject: plan, Types: []string{events.TypeTransitionFired}},
+	})
+	if err != nil || len(res.GetEvents()) == 0 {
+		return false
+	}
+	var tf eventsv1.TransitionFired
+	if err := res.GetEvents()[len(res.GetEvents())-1].GetEvent().GetProtoData().UnmarshalTo(&tf); err != nil {
+		return false
+	}
+	for _, s := range wf.Definition().GetStates() {
+		if s.GetName() == tf.GetToState() {
+			return s.GetFinal() != nil
+		}
+	}
+	return false
 }
 
 // readLog returns the events of the run's log, read from its file, which

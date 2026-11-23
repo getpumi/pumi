@@ -16,6 +16,10 @@ message PlanAdded {
   string track = 2;
   // The plan this one was split from, or empty.
   string split_from = 3;
+  // The plans this one depends on: plans added earlier in the same track.
+  // The plan starts only when each of them has merged (decisions 0196 and
+  // 0197).
+  repeated string depends_on = 4;
 }
 
 // TransitionFired is the data of dev.getpumi.transition.fired: the workflow

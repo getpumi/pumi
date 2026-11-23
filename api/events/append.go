@@ -40,7 +40,8 @@ const (
 // cancel with Cedar before it appends a verdict, an approval, an override or
 // a cancel, so the invariants on them hold even if this table were wrong.
 var appendTable = map[string][]Appender{
-	TypePlanAdded:           {AppenderKernel},
+	// A person adds a plan to a track (decision 0198).
+	TypePlanAdded:           {AppenderPerson},
 	TypeTransitionFired:     {AppenderKernel},
 	TypeInvocationRequested: {AppenderKernel},
 	TypeEscalationRaised:    {AppenderKernel},

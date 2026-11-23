@@ -472,7 +472,11 @@ func (*Wait) Descriptor() ([]byte, []int) {
 
 // Final is an entry that finishes the plan.
 type Final struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the plan has merged when it is in this state. A plan that
+	// depends on another starts only when that plan is in a final state that
+	// has merged (decision 0197).
+	Merged        bool `protobuf:"varint,1,opt,name=merged,proto3" json:"merged,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -505,6 +509,13 @@ func (x *Final) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Final.ProtoReflect.Descriptor instead.
 func (*Final) Descriptor() ([]byte, []int) {
 	return file_pumi_workflow_v1_workflow_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Final) GetMerged() bool {
+	if x != nil {
+		return x.Merged
+	}
+	return false
 }
 
 // Transition is one transition of a state (decision 0168).
@@ -790,8 +801,9 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"KIND_CHECK\x10\x02\x12\x18\n" +
 	"\x14KIND_EXTERNAL_ACTION\x10\x03\"\x06\n" +
-	"\x04Wait\"\a\n" +
-	"\x05Final\"q\n" +
+	"\x04Wait\"\x1f\n" +
+	"\x05Final\x12\x16\n" +
+	"\x06merged\x18\x01 \x01(\bR\x06merged\"q\n" +
 	"\n" +
 	"Transition\x123\n" +
 	"\atrigger\x18\x01 \x01(\v2\x19.pumi.workflow.v1.TriggerR\atrigger\x12\x16\n" +

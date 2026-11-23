@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The workflow of the golden cases of many plans (decisions 0189, 0196 and
+# 0197): the spike workflow, with its final state done replaced by merged,
+# a final state in which the plan has merged, so that a plan that depends on
+# another starts when that plan reaches it. It is test data, not a workflow
+# of the release (decision 0166).
+name: "tracks"
+version: "1"
+initial: "implementing"
+
+# The superstate of the states of a plan that is not finished. A
+# cancel.requested for the plan goes to cancelled, guarded by cancel (decisions
+# 0170 and 0177).
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+# Implementing (initial): an agent implements the plan. To merged on advance;
+# otherwise escalate.
+states {
+  name: "implementing"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    task: "implement"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "merged"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# Implementing, escalated: wait for a person. An answer goes back to
+# implementing, decided by resume, which reads the usage and the hard caps. A
+# denied resume keeps the plan here.
+states {
+  name: "implementing-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# The plan is implemented and has merged.
+states {
+  name: "merged"
+  final { merged: true }
+}
+
+# The plan was cancelled.
+states {
+  name: "cancelled"
+  final {}
+}

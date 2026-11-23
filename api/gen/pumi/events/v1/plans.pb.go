@@ -133,7 +133,11 @@ type PlanAdded struct {
 	// The track the plan joins.
 	Track string `protobuf:"bytes,2,opt,name=track,proto3" json:"track,omitempty"`
 	// The plan this one was split from, or empty.
-	SplitFrom     string `protobuf:"bytes,3,opt,name=split_from,json=splitFrom,proto3" json:"split_from,omitempty"`
+	SplitFrom string `protobuf:"bytes,3,opt,name=split_from,json=splitFrom,proto3" json:"split_from,omitempty"`
+	// The plans this one depends on: plans added earlier in the same track.
+	// The plan starts only when each of them has merged (decisions 0196 and
+	// 0197).
+	DependsOn     []string `protobuf:"bytes,4,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -187,6 +191,13 @@ func (x *PlanAdded) GetSplitFrom() string {
 		return x.SplitFrom
 	}
 	return ""
+}
+
+func (x *PlanAdded) GetDependsOn() []string {
+	if x != nil {
+		return x.DependsOn
+	}
+	return nil
 }
 
 // TransitionFired is the data of dev.getpumi.transition.fired: the workflow
@@ -378,12 +389,14 @@ var File_pumi_events_v1_plans_proto protoreflect.FileDescriptor
 
 const file_pumi_events_v1_plans_proto_rawDesc = "" +
 	"\n" +
-	"\x1apumi/events/v1/plans.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\"T\n" +
+	"\x1apumi/events/v1/plans.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\"s\n" +
 	"\tPlanAdded\x12\x12\n" +
 	"\x04plan\x18\x01 \x01(\tR\x04plan\x12\x14\n" +
 	"\x05track\x18\x02 \x01(\tR\x05track\x12\x1d\n" +
 	"\n" +
-	"split_from\x18\x03 \x01(\tR\tsplitFrom\"\xa9\x01\n" +
+	"split_from\x18\x03 \x01(\tR\tsplitFrom\x12\x1d\n" +
+	"\n" +
+	"depends_on\x18\x04 \x03(\tR\tdependsOn\"\xa9\x01\n" +
 	"\x0fTransitionFired\x12\x12\n" +
 	"\x04plan\x18\x01 \x01(\tR\x04plan\x12\x1d\n" +
 	"\n" +

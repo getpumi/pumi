@@ -284,7 +284,7 @@ func heartbeatRenewsTheLease(t *testing.T, p Plane) {
 // heartbeatReturnsACancel: once cancel.requested names the invocation, the
 // heartbeat carries it (decision 0035).
 func heartbeatReturnsACancel(t *testing.T, p Plane) {
-	mustAppend(t, p.Clients, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, plan)})
+	mustAppend(t, p.Clients, Person, []*cloudeventsv1.CloudEvent{planAdded(t, plan)})
 	request(t, p, document("invocation-1", Gate))
 	r := p.Runner("runner-a", Gate)
 	res := claim(t, r)
@@ -311,7 +311,7 @@ func heartbeatReturnsACancel(t *testing.T, p Plane) {
 // invocation cancels the plan's invocations, which name their plan in
 // invocation.requested (decisions 0170 and 0175), and no other plan's.
 func aPlanCancelReachesThePlansInvocations(t *testing.T, p Plane) {
-	mustAppend(t, p.Clients, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, plan), planAdded(t, "plan-b")})
+	mustAppend(t, p.Clients, Person, []*cloudeventsv1.CloudEvent{planAdded(t, plan), planAdded(t, "plan-b")})
 	request(t, p, document("invocation-1", Gate))
 	other, err := events.InvocationRequested("plan-b", document("invocation-2", Gate))
 	if err != nil {
@@ -421,7 +421,7 @@ func verdict(t *testing.T, invocation string) *cloudeventsv1.CloudEvent {
 // invocation.result, the verdict, invocation.finished and lease.released,
 // and ends the lease (decisions 0035 and 0156).
 func reportWritesTheResultTheEventsAndTheEnd(t *testing.T, p Plane) {
-	mustAppend(t, p.Clients, Kernel, []*cloudeventsv1.CloudEvent{planAdded(t, plan)})
+	mustAppend(t, p.Clients, Person, []*cloudeventsv1.CloudEvent{planAdded(t, plan)})
 	request(t, p, document("invocation-1", Gate))
 	r := p.Runner("runner-a", Gate)
 	res := claim(t, r)

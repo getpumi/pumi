@@ -804,10 +804,11 @@ states {
   }
 }
 
-# 12. Merged: final. The plan's change is on trunk.
+# 12. Merged: final. The plan's change is on trunk, so a plan that depends
+# on it may start (decision 0197).
 states {
   name: "merged"
-  final {}
+  final { merged: true }
 }
 
 # Cancelled: final. A person cancelled the plan.

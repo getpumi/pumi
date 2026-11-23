@@ -4,7 +4,13 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "description": "Final is an entry that finishes the plan.",
-      "properties": {},
+      "properties": {
+        "merged": {
+          "default": false,
+          "description": "Whether the plan has merged when it is in this state. A plan that\n depends on another starts only when that plan is in a final state that\n has merged (decision 0197).",
+          "type": "boolean"
+        }
+      },
       "title": "Final",
       "type": "object"
     },

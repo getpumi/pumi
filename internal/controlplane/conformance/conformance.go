@@ -99,6 +99,7 @@ func Run(t *testing.T, start Start) {
 		{"AppendRefusesAnInvalidRequest", appendRefusesAnInvalidRequest},
 		{"AppendFollowsTheTable", appendFollowsTheTable},
 		{"BatchWithARefusedTypeWritesNothing", batchWithARefusedTypeWritesNothing},
+		{"AppendChecksAddedPlans", appendChecksAddedPlans},
 		{"RunnerMayNotCallControlPlaneService", runnerMayNotCallControlPlaneService},
 		{"QueryFilters", queryFilters},
 		{"QueryReadsPages", queryReadsPages},
@@ -142,6 +143,13 @@ func nextID() string {
 func planAdded(t *testing.T, plan string) *cloudeventsv1.CloudEvent {
 	t.Helper()
 	return build(t, &eventsv1.PlanAdded{Plan: plan, Track: "main"}, plan)
+}
+
+// escalationRaised returns a dev.getpumi.escalation.raised event about
+// plan, an event that only the kernel appends.
+func escalationRaised(t *testing.T, plan string) *cloudeventsv1.CloudEvent {
+	t.Helper()
+	return build(t, &eventsv1.EscalationRaised{Plan: plan, Question: "Go on?"}, plan)
 }
 
 // transitionFired returns a dev.getpumi.transition.fired event about plan.

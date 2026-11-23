@@ -91,14 +91,21 @@ func TestAnInvokeEntryNamesTheRoleTheKindTheTaskAndTheOutputMessage(t *testing.T
 	}
 }
 
-func TestWaitAndFinalCarryNothing(t *testing.T) {
-	for _, md := range []protoreflect.MessageDescriptor{
-		(&workflowv1.Wait{}).ProtoReflect().Descriptor(),
-		(&workflowv1.Final{}).ProtoReflect().Descriptor(),
-	} {
-		if n := md.Fields().Len(); n != 0 {
-			t.Errorf("%s has %d fields, want none", md.FullName(), n)
-		}
+func TestWaitCarriesNothing(t *testing.T) {
+	if md := (&workflowv1.Wait{}).ProtoReflect().Descriptor(); md.Fields().Len() != 0 {
+		t.Errorf("%s has %d fields, want none", md.FullName(), md.Fields().Len())
+	}
+}
+
+// TestFinalCarriesMerged: a final state says only whether the plan has
+// merged in it (decision 0197).
+func TestFinalCarriesMerged(t *testing.T) {
+	md := (&workflowv1.Final{}).ProtoReflect().Descriptor()
+	if got, want := fieldNames(md), []string{"merged"}; !slices.Equal(got, want) {
+		t.Fatalf("Final has %q, want %q", got, want)
+	}
+	if f := fieldOf(t, md, "merged"); f.Kind() != protoreflect.BoolKind || f.IsList() {
+		t.Errorf("Final.merged is not a bool")
 	}
 }
 

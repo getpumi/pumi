@@ -33,16 +33,20 @@ import (
 
 // The golden event-sequence cases (decision 0183). Each case is a directory
 // testdata/golden/<workflow>/<case> that holds log.jsonl, the log the case
-// gives, and sources.md, the regime requirements and tests it comes from.
-// <workflow> names the directory of internal/kernel/testdata that holds the
-// workflow the case runs on.
+// gives, and sources.md, the regime requirements and tests it comes from,
+// and may hold settings.json, the settings of the control plane that the
+// case runs with. <workflow> names the directory of internal/kernel/testdata
+// that holds the workflow the case runs on.
 //
 // The test plays a case: it starts the embedded control plane and the
 // kernel on a new log and, each time the kernel waits, does what the next
 // line of the case asks of someone other than the kernel. A lease.granted
 // line is a scripted runner's Claim, an invocation.result line its Report,
-// with the outcome of the invocation.finished line after it, and a line
-// whose source starts with /person a person's Append. When the kernel
+// with the outcome of the invocation.finished line after it, a
+// lease.expired line a move of the control plane's time past the lease
+// timeout, and a line
+// whose source starts with /person a person's Append, such as the
+// plan.added of each plan (decision 0198). When the kernel
 // waits and the next line is the kernel's own, or a decision that the
 // kernel asks for, only a restart lets the kernel go on, so the test stops
 // pumi and starts it again (decision 0182). At the end the log must be the
@@ -64,7 +68,8 @@ const (
 	workflowsDir = "../../internal/kernel/testdata"
 )
 
-// The identities of the case's callers, and the plan and track it runs.
+// The identities of the case's callers, and the plan and track of the
+// cases that run one plan.
 const (
 	casePlan      = "plan-a"
 	caseTrack     = "main"
@@ -84,11 +89,36 @@ func base() *runnerv1.Invocation {
 	}
 }
 
+// caseSettings are the settings of the control plane that a case runs
+// with, read from its settings.json.
+type caseSettings struct {
+	// Parallelism is the parallelism setting (decision 0189); 0 counts as
+	// 1.
+	Parallelism int `json:"parallelism"`
+}
+
+// readSettings returns the settings of the case in dir, from its
+// settings.json, or none when it has no such file.
+func readSettings(t *testing.T, dir string) caseSettings {
+	t.Helper()
+	var s caseSettings
+	if _, err := os.Stat(filepath.Join(dir, "settings.json")); errors.Is(err, os.ErrNotExist) {
+		return s
+	}
+	dec := json.NewDecoder(bytes.NewReader(readFile(t, dir, "settings.json")))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&s); err != nil {
+		t.Fatalf("%s/settings.json: %v", dir, err)
+	}
+	return s
+}
+
 // planeConfig is the wiring of the control plane: the core invariants and
-// policies only, the default hard caps and long leases, so that a lease
-// does not expire while a case runs.
-func planeConfig() controlplane.Config {
+// policies only, the case's settings, the default hard caps and long
+// leases, so that a lease does not expire while a case runs.
+func planeConfig(s caseSettings) controlplane.Config {
 	return controlplane.Config{
+		Settings:     controlplane.Settings{Parallelism: s.Parallelism},
 		HardCaps:     policy.DefaultHardCaps(),
 		Project:      controlplane.Project{Name: "case"},
 		LeaseTimeout: time.Hour,
@@ -98,9 +128,13 @@ func planeConfig() controlplane.Config {
 
 // pumi is one run of the embedded control plane and the kernel on a clone.
 type pumi struct {
-	t     *testing.T
-	clone string
-	wf    *workflow.Workflow
+	t        *testing.T
+	clone    string
+	wf       *workflow.Workflow
+	settings caseSettings
+	// clock is the control plane's time, which moves only when a case
+	// lets a lease expire.
+	clock *fakeClock
 
 	log          *embeddedlog.Log
 	reader       controlplanev1connect.ControlPlaneServiceClient
@@ -155,11 +189,12 @@ func logFiles(clone string) (string, string) {
 	return filepath.Join(dir, "log.jsonl"), filepath.Join(dir, "head")
 }
 
-// newPumi returns a run on a new clone whose log holds the first n lines of
-// lines, the lines of a log.jsonl, committed by its head file.
-func newPumi(t *testing.T, wf *workflow.Workflow, lines [][]byte, n uint64) *pumi {
+// newPumi returns a run with the settings s on a new clone whose log holds
+// the first n lines of lines, the lines of a log.jsonl, committed by its
+// head file.
+func newPumi(t *testing.T, wf *workflow.Workflow, s caseSettings, lines [][]byte, n uint64) *pumi {
 	t.Helper()
-	p := &pumi{t: t, clone: newClone(t), wf: wf, claims: map[string]*runnerv1.ClaimResponse{}}
+	p := &pumi{t: t, clone: newClone(t), wf: wf, settings: s, clock: newFakeClock(), claims: map[string]*runnerv1.ClaimResponse{}}
 	if n > 0 {
 		logPath, headPath := logFiles(p.clone)
 		if err := os.MkdirAll(filepath.Dir(logPath), 0o750); err != nil {
@@ -194,7 +229,9 @@ func (p *pumi) startPlane() {
 		p.t.Fatal(err)
 	}
 	p.log = log
-	svc, err := controlplane.New(log, planeConfig())
+	cfg := planeConfig(p.settings)
+	cfg.Clock = p.clock
+	svc, err := controlplane.New(log, cfg)
 	if err != nil {
 		p.t.Fatal(err)
 	}
@@ -219,14 +256,16 @@ func (p *pumi) startPlane() {
 	p.kernelClient = dial(controlplane.Identity{Caller: controlplane.CallerKernel, Principal: "kernel", Tenant: embeddedlog.Tenant})
 }
 
-// startKernel starts the kernel on the plan.
+// startKernel starts the kernel, with the parallelism setting of the
+// control plane, as the wiring of pumi gives it.
 func (p *pumi) startKernel() {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.stopKernel = cancel
 	p.done = make(chan error, 1)
 	p.idle = make(chan uint64, 64)
 	cfg := kernel.Config{
-		Client: p.kernelClient, Workflow: p.wf, Plan: casePlan, Track: caseTrack, Base: base(),
+		Client: p.kernelClient, Workflow: p.wf, Base: base(),
+		Parallelism: planeConfig(p.settings).Settings.Parallelism,
 		Idle: func(head uint64) {
 			select {
 			case p.idle <- head:
@@ -339,6 +378,14 @@ func (p *pumi) report(result *eventsv1.InvocationResult, outcome eventsv1.Invoca
 		p.t.Fatalf("the scripted runner's Report of %s: %v", result.GetInvocation(), err)
 	}
 	p.wrote(res.GetPositions()[len(res.GetPositions())-1])
+}
+
+// expire moves the control plane's time past the lease timeout, so that
+// every current lease expires.
+func (p *pumi) expire() {
+	p.t.Helper()
+	p.clock.Advance(planeConfig(p.settings).LeaseTimeout + time.Second)
+	p.wrote(p.head())
 }
 
 // appendAsPerson appends e as the person.

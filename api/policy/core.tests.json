@@ -30,6 +30,21 @@
     "num_errors": 0
   },
   {
+    "name": "cancel is allowed for a person",
+    "request": {
+      "principal": "Pumi::Person::\"michael\"",
+      "action": "Pumi::Action::\"cancel\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {}
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "core.person-cancel"
+    ],
+    "num_errors": 0
+  },
+  {
     "name": "retry is allowed with attempts left",
     "request": {
       "principal": "Pumi::Kernel::\"kernel\"",

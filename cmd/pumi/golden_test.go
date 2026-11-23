@@ -46,7 +46,10 @@ import (
 // lease.expired line a move of the control plane's time past the lease
 // timeout, and a line
 // whose source starts with /person a person's Append, such as the
-// plan.added of each plan (decision 0198). When the kernel
+// plan.added of each plan (decision 0198); a decision.made line whose cause
+// is the person's line after it is the control plane's decision of that
+// line's permission, which the person's Append writes with it (decision
+// 0156). When the kernel
 // waits and the next line is the kernel's own, or a decision that the
 // kernel asks for, only a restart lets the kernel go on, so the test stops
 // pumi and starts it again (decision 0182). At the end the log must be the

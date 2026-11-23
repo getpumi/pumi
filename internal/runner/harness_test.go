@@ -119,7 +119,6 @@ func TestHarnessInvocationRefuses(t *testing.T) {
 		{"no document", nil},
 		{"no workspace", func(_ *runnerv1.Invocation, r *Resolved) { r.Workspace = "" }},
 		{"a relative workspace", func(_ *runnerv1.Invocation, r *Resolved) { r.Workspace = "work/inv-1" }},
-		{"no gateway", func(_ *runnerv1.Invocation, r *Resolved) { r.Gateway = nil }},
 		{"an output message without a JSON Schema", func(_ *runnerv1.Invocation, r *Resolved) { r.JSONSchema = "" }},
 		{"a JSON Schema without an output message", func(d *runnerv1.Invocation, _ *Resolved) { d.OutputMessage = "" }},
 	} {
@@ -146,5 +145,32 @@ func TestHarnessInvocationWithoutAnOutput(t *testing.T) {
 	}
 	if inv.GetOutputSchema() != nil {
 		t.Errorf("the output schema is %v, want none for an invocation without structured output", inv.GetOutputSchema())
+	}
+}
+
+func TestAHarnessInvocationMayHaveNoGatewayUntilE7(t *testing.T) {
+	// Until E7, the runner may resolve no gateway, and the harness then uses
+	// its own sign-in (decision 0185).
+	for _, c := range []struct {
+		name    string
+		gateway *harnessv1.Gateway
+	}{
+		{"a gateway", &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived"}},
+		{"no gateway", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := resolved()
+			r.Gateway = c.gateway
+			inv, err := HarnessInvocation(document(), r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(inv.GetGateway(), c.gateway) {
+				t.Errorf("the gateway is %v, want %v", inv.GetGateway(), c.gateway)
+			}
+			if c.gateway == nil && inv.Gateway != nil {
+				t.Errorf("the gateway is %v, want it left out", inv.GetGateway())
+			}
+		})
 	}
 }

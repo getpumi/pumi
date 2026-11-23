@@ -19,7 +19,8 @@ type Resolved struct {
 	// checkout of the input tree.
 	Workspace string
 	// Gateway is the model gateway's base URL and the invocation's
-	// short-lived token (decision 0036).
+	// short-lived token (decision 0036). It is nil when the runner resolved
+	// no gateway, which is allowed until E7 (decision 0185).
 	Gateway *harnessv1.Gateway
 	// JSONSchema is the JSON Schema generated from the document's output
 	// message (decision 0160); empty when the document names none.
@@ -30,15 +31,15 @@ type Resolved struct {
 // document doc and what the runner resolved for it (decision 0158). It
 // leaves out the credential handles, the image digest and the isolation
 // level, which only the runner needs, and it copies what it keeps, so that
-// the result shares nothing with doc.
+// the result shares nothing with doc. When the runner resolved no gateway,
+// the harness invocation has none, and the harness uses its own sign-in
+// (decision 0185).
 func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocation, error) {
 	switch {
 	case doc == nil:
 		return nil, errors.New("runner: no invocation document")
 	case !filepath.IsAbs(r.Workspace):
 		return nil, errors.New("runner: the workspace is not an absolute path")
-	case r.Gateway == nil:
-		return nil, errors.New("runner: no model gateway")
 	case (doc.GetOutputMessage() == "") != (r.JSONSchema == ""):
 		return nil, errors.New("runner: the output message and its JSON Schema do not come together")
 	}

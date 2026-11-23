@@ -21,6 +21,8 @@ import (
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	factsv1 "getpumi.dev/pumi/api/gen/pumi/facts/v1"
+	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
+	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
 	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
 	"getpumi.dev/pumi/internal/controlplane/projections"
@@ -325,6 +327,74 @@ func TestTheWorkflowActionsAreDecided(t *testing.T) {
 	d, _ := decideAsKernel(t, s, question{action: "ask", plan: "plan-a", keys: projections.Keys{Invocation: "i"}})
 	if !slices.Contains(d.Reasons, "the context lacks the attribute questionsOpen") {
 		t.Errorf("ask: the reasons are %q, want the missing questionsOpen named", d.Reasons)
+	}
+}
+
+// writeAdapterUsage writes plan-a, its invocation i and the
+// invocation.result of i with the usage that the adapter reported, and no
+// gateway event.
+func writeAdapterUsage(t *testing.T, s *Service, usage *eventsv1.InvocationResult_Usage) {
+	t.Helper()
+	requested, err := events.InvocationRequested("plan-a", &runnerv1.Invocation{
+		Invocation: "i", IdempotencyKey: "key-i", Role: harnessv1.Role_ROLE_AGENT,
+		Component: &harnessv1.Component{Kind: harnessv1.Component_KIND_AGENT_RUN, Name: "agent", Version: "1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, s, "plan-a", &eventsv1.PlanAdded{Plan: "plan-a", Track: "main"}, requested,
+		&eventsv1.InvocationResult{Invocation: "i", Usage: usage})
+}
+
+// usageIn returns the usage fact in the basis of d, or nil.
+func usageIn(t *testing.T, d *eventsv1.DecisionMade) *factsv1.Usage {
+	t.Helper()
+	for _, f := range d.GetBasis().GetFacts() {
+		var u factsv1.Usage
+		if f.MessageIs(&u) {
+			if err := f.UnmarshalTo(&u); err != nil {
+				t.Fatal(err)
+			}
+			return &u
+		}
+	}
+	return nil
+}
+
+func TestAdvanceReadsTheAdaptersUsageWhenNoGatewayCounted(t *testing.T) {
+	// Until E7 no gateway counts an invocation, so the usage fact is the
+	// usage that the adapter reported in the invocation's invocation.result,
+	// and the hard caps apply to it (decision 0185). The usage projection is
+	// the real one, and no gateway event is in the log.
+	caps := policy.DefaultHardCaps()
+	permitted, forbidden := []string{"core.workflow-actions", "permit-all"}, []string{"invariant.caps"}
+	for _, c := range []struct {
+		name     string
+		usage    *eventsv1.InvocationResult_Usage
+		allow    bool
+		policies []string
+	}{
+		{"under the caps", &eventsv1.InvocationResult_Usage{Tokens: 10, CostMicrodollars: 20, Seconds: 30}, true, permitted},
+		{"at the caps", &eventsv1.InvocationResult_Usage{Tokens: caps.Tokens, CostMicrodollars: caps.CostMicrodollars, Seconds: caps.Seconds}, true, permitted},
+		{"over the token cap", &eventsv1.InvocationResult_Usage{Tokens: caps.Tokens + 1}, false, forbidden},
+		{"over the cost cap", &eventsv1.InvocationResult_Usage{CostMicrodollars: caps.CostMicrodollars + 1}, false, forbidden},
+		{"over the time cap", &eventsv1.InvocationResult_Usage{Seconds: caps.Seconds + 1}, false, forbidden},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s := testService(t)
+			writeAdapterUsage(t, s, c.usage)
+			d, data := decideAsKernel(t, s, question{action: "advance", plan: "plan-a", keys: projections.Keys{Invocation: "i"}})
+			if d.Allow != c.allow || !slices.Equal(data.GetDeterminingPolicies(), c.policies) {
+				t.Errorf("advance: allow %v by %q (reasons %q), want %v by %q",
+					d.Allow, data.GetDeterminingPolicies(), d.Reasons, c.allow, c.policies)
+			}
+			want := &factsv1.Usage{Invocation: "i", Plan: "plan-a", Value: &factsv1.Usage_Totals{
+				Tokens: c.usage.GetTokens(), CostMicrodollars: c.usage.GetCostMicrodollars(), Seconds: c.usage.GetSeconds(),
+			}}
+			if got := usageIn(t, data); !proto.Equal(got, want) {
+				t.Errorf("the usage in the basis is %v, want the adapter's %v", got, want)
+			}
+		})
 	}
 }
 

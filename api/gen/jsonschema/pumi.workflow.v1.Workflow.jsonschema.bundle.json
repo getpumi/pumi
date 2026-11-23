@@ -161,6 +161,14 @@
       "title": "Invocation Cap Reached",
       "type": "object"
     },
+    "pumi.workflow.v1.Trigger.InvocationFailed.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "InvocationFailed fires on the invocation.finished event of the\n invocation that the state started when its outcome is failed, instead\n of InvocationResult (decision 0235). Every state that starts an\n invocation declares it.",
+      "properties": {},
+      "title": "Invocation Failed",
+      "type": "object"
+    },
     "pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -172,7 +180,7 @@
     "pumi.workflow.v1.Trigger.InvocationResult.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "description": "InvocationResult fires on the invocation.finished event of the\n invocation that the state started.",
+      "description": "InvocationResult fires on the invocation.finished event of the\n invocation that the state started when its outcome is succeeded, or\n resolved on recovery for an external action that happened (decisions\n 0202 and 0235).",
       "properties": {},
       "title": "Invocation Result",
       "type": "object"
@@ -211,6 +219,10 @@
         "event": {
           "description": "An event whose subject is the plan, by its CloudEvents type, such as\n \"dev.getpumi.approval.recorded\" (decision 0135).",
           "type": "string"
+        },
+        "failed": {
+          "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationFailed.jsonschema.json",
+          "description": "The state's invocation failed."
         },
         "inDoubt": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json",

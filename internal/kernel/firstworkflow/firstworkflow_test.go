@@ -466,6 +466,35 @@ func TestACancelGoesToCancelledFromEveryActiveState(t *testing.T) {
 	}
 }
 
+// TestAFailedInvocationRunsAgainThenEscalates: every state that starts an
+// invocation goes back to itself on failed, guarded by retry, and to its
+// escalated state when retry is denied (decision 0235).
+func TestAFailedInvocationRunsAgainThenEscalates(t *testing.T) {
+	w := load(t)
+	n := 0
+	for _, s := range w.Definition().GetStates() {
+		if s.GetInvoke() == nil {
+			continue
+		}
+		n++
+		name := s.GetName()
+		ts, err := w.NewMachine((&storage{state: name}).load, (&storage{}).store).Transitions(context.Background(), workflow.Failed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := []string{}
+		for _, tr := range ts {
+			got = append(got, tr.Action+">"+tr.Target)
+		}
+		if want := []string{"retry>" + name, "escalate>" + name + "-escalated"}; !slices.Equal(got, want) {
+			t.Errorf("the transitions of %q on failed are %q, want %q", name, got, want)
+		}
+	}
+	if n != 8 {
+		t.Errorf("%d states start an invocation, want 8", n)
+	}
+}
+
 // TestOnlyMergedHasMerged: a plan that depends on another starts only when
 // that plan is in a final state that has merged (decision 0197), which in
 // the first workflow is merged and not cancelled.

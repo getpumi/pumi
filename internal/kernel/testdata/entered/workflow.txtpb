@@ -60,6 +60,16 @@ states {
     target: "escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { failed {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "escalated"
+    action: "escalate"
+  }
 }
 
 # Reviewing: starts nothing and decides as it is entered. To done on

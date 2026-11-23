@@ -57,6 +57,16 @@ states {
     target: "implementing-escalated"
     action: "escalate"
   }
+  transitions {
+    trigger { failed {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
 }
 
 states {
@@ -96,6 +106,16 @@ states {
   }
   transitions {
     trigger { cap_reached {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "checking"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
     target: "checking-escalated"
     action: "escalate"
   }
@@ -148,6 +168,16 @@ states {
   }
   transitions {
     trigger { cap_reached {} }
+    target: "merging-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "merging"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
     target: "merging-escalated"
     action: "escalate"
   }

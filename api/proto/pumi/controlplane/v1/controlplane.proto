@@ -154,6 +154,11 @@ message DecideRequest {
   string plan = 2;
   // The keys that the facts are looked up by.
   FactKeys keys = 3;
+  // The id of the event that led to the decision, such as the trigger of a
+  // transition, which the decision.made event names as its cause (decision
+  // 0133), or empty. The kernel finds the decisions it made for a trigger by
+  // it when it starts again (decision 0187).
+  string cause = 4;
 }
 
 // FactKeys are the keys that the facts of a decision are looked up by

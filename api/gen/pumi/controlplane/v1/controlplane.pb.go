@@ -625,7 +625,12 @@ type DecideRequest struct {
 	// The plan, which is the Cedar resource.
 	Plan string `protobuf:"bytes,2,opt,name=plan,proto3" json:"plan,omitempty"`
 	// The keys that the facts are looked up by.
-	Keys          *FactKeys `protobuf:"bytes,3,opt,name=keys,proto3" json:"keys,omitempty"`
+	Keys *FactKeys `protobuf:"bytes,3,opt,name=keys,proto3" json:"keys,omitempty"`
+	// The id of the event that led to the decision, such as the trigger of a
+	// transition, which the decision.made event names as its cause (decision
+	// 0133), or empty. The kernel finds the decisions it made for a trigger by
+	// it when it starts again (decision 0187).
+	Cause         string `protobuf:"bytes,4,opt,name=cause,proto3" json:"cause,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -679,6 +684,13 @@ func (x *DecideRequest) GetKeys() *FactKeys {
 		return x.Keys
 	}
 	return nil
+}
+
+func (x *DecideRequest) GetCause() string {
+	if x != nil {
+		return x.Cause
+	}
+	return ""
 }
 
 // FactKeys are the keys that the facts of a decision are looked up by
@@ -954,11 +966,12 @@ const file_pumi_controlplane_v1_controlplane_proto_rawDesc = "" +
 	"\x06filter\x18\x01 \x01(\v2\x1c.pumi.controlplane.v1.FilterR\x06filter\x12\x14\n" +
 	"\x05after\x18\x02 \x01(\x04R\x05after\"F\n" +
 	"\x11SubscribeResponse\x121\n" +
-	"\x05entry\x18\x01 \x01(\v2\x1b.pumi.controlplane.v1.EntryR\x05entry\"o\n" +
+	"\x05entry\x18\x01 \x01(\v2\x1b.pumi.controlplane.v1.EntryR\x05entry\"\x85\x01\n" +
 	"\rDecideRequest\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x12\n" +
 	"\x04plan\x18\x02 \x01(\tR\x04plan\x122\n" +
-	"\x04keys\x18\x03 \x01(\v2\x1e.pumi.controlplane.v1.FactKeysR\x04keys\"\x85\x01\n" +
+	"\x04keys\x18\x03 \x01(\v2\x1e.pumi.controlplane.v1.FactKeysR\x04keys\x12\x14\n" +
+	"\x05cause\x18\x04 \x01(\tR\x05cause\"\x85\x01\n" +
 	"\bFactKeys\x12\x1b\n" +
 	"\tbase_tree\x18\x01 \x01(\tR\bbaseTree\x12\x1b\n" +
 	"\thead_tree\x18\x02 \x01(\tR\bheadTree\x12\x1f\n" +

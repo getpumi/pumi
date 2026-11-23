@@ -91,6 +91,7 @@ func TestDecideTakesNoFactValues(t *testing.T) {
 	slices.Sort(keys)
 	want := []string{
 		"DecideRequest.action",
+		"DecideRequest.cause",
 		"DecideRequest.keys.base_tree",
 		"DecideRequest.keys.head_commit",
 		"DecideRequest.keys.head_tree",
@@ -98,7 +99,7 @@ func TestDecideTakesNoFactValues(t *testing.T) {
 		"DecideRequest.plan",
 	}
 	if !slices.Equal(keys, want) {
-		t.Errorf("DecideRequest holds %q, want the action, the plan and the fact keys %q (decision 0155)", keys, want)
+		t.Errorf("DecideRequest holds %q, want the action, the plan, the fact keys and the cause %q (decisions 0155 and 0187)", keys, want)
 	}
 }
 

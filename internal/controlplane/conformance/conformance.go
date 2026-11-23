@@ -108,6 +108,7 @@ func Run(t *testing.T, start Start) {
 		{"SubscribeCatchesUpWithALongLog", subscribeCatchesUpWithALongLog},
 		{"DecisionIsRecordedWithItsBasis", decisionIsRecordedWithItsBasis},
 		{"AMissingFactDenies", aMissingFactDenies},
+		{"ADecisionNamesItsCause", aDecisionNamesItsCause},
 		{"DecideRefusesARequestItCannotDecide", decideRefusesARequestItCannotDecide},
 		{"AVerdictFromOutsideTheGateRoleIsRefused", aVerdictFromOutsideTheGateRoleIsRefused},
 		{"APermissionIsDecidedAndRecordedBeforeItsEvent", aPermissionIsDecidedAndRecordedBeforeItsEvent},

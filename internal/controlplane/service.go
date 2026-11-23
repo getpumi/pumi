@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectinprocess"
 	"connectrpc.com/connect/v2/connectproto"
 	"google.golang.org/protobuf/proto"
 
@@ -141,6 +142,18 @@ func (s *Service) Server(id Identity) (*connect.Server, error) {
 	controlplanev1connect.RegisterControlPlaneServiceHandler(server, &handler{svc: s, log: s.log, id: id})
 	runnerv1connect.RegisterRunnerServiceHandler(server, &runnerHandler{svc: s, id: id})
 	return server, nil
+}
+
+// Client returns a client of ControlPlaneService and RunnerService that
+// calls the server of the identity id in-process, the transport of
+// embedded mode (decisions 0152 and 0161). The wiring wraps it in the
+// generated clients. It refuses an identity that Server refuses.
+func (s *Service) Client(id Identity) (*connect.Client, error) {
+	server, err := s.Server(id)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewClient(connectinprocess.New(server)), nil
 }
 
 // handler serves ControlPlaneService to the callers with one identity.
@@ -402,10 +415,11 @@ func (h *handler) send(f *controlplanev1.Filter, after uint64,
 
 // Decide decides the action for the plan with the facts that the control
 // plane projects from its own log as of the head, the settings and the
-// hard caps of the wiring, appends decision.made with the basis and the
-// log head, and returns the outcome, the determining policies and the
-// event's position (decision 0155). It refuses a request with no plan or
-// with an action that the schema does not have, with invalid argument.
+// hard caps of the wiring, appends decision.made with the basis, the log
+// head and the request's cause, and returns the outcome, the determining
+// policies and the event's position (decisions 0155 and 0187). It refuses
+// a request with no plan or with an action that the schema does not have,
+// with invalid argument.
 func (h *handler) Decide(_ context.Context, req *controlplanev1.DecideRequest) (*controlplanev1.DecideResponse, error) {
 	if err := h.refuseRunner(); err != nil {
 		return nil, err
@@ -421,6 +435,7 @@ func (h *handler) Decide(_ context.Context, req *controlplanev1.DecideRequest) (
 	d, err := h.svc.decide(at, hash, h.principal(), question{
 		action: req.GetAction(),
 		plan:   req.GetPlan(),
+		cause:  req.GetCause(),
 		keys: projections.Keys{
 			BaseTree: k.GetBaseTree(), HeadTree: k.GetHeadTree(), HeadCommit: k.GetHeadCommit(), Invocation: k.GetInvocation(),
 		},

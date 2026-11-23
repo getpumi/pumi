@@ -58,6 +58,7 @@ func TestClassify(t *testing.T) {
 		{"internal/checks/bufconfig/testdata/io/cloudevents/v1/cloudevents.proto", Slash},
 		{".pumi/agent-identities.json", Exempt},
 		{"api/schemas/event.json", Exempt},
+		{"cmd/pumi/testdata/golden/spike/advance-to-final/log.jsonl", Exempt},
 		{"internal/CLAUDE.md", HTML},
 		{"docs/LICENSE", Unknown},
 		{"logo.png", Unknown},

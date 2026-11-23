@@ -10,6 +10,11 @@
           "description": "The Cedar action, as named in pumi.cedarschema, such as merge.",
           "type": "string"
         },
+        "cause": {
+          "default": "",
+          "description": "The id of the event that led to the decision, such as the trigger of a\n transition, which the decision.made event names as its cause (decision\n 0133), or empty. The kernel finds the decisions it made for a trigger by\n it when it starts again (decision 0187).",
+          "type": "string"
+        },
         "keys": {
           "$ref": "#/$defs/pumi.controlplane.v1.FactKeys.jsonschema.json",
           "description": "The keys that the facts are looked up by."

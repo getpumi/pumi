@@ -152,6 +152,25 @@ func aMissingFactDenies(t *testing.T, c Clients) {
 	}
 }
 
+// aDecisionNamesItsCause: the decision.made event of a Decide request
+// with a cause names that cause, so that the kernel finds the decisions it
+// made for a trigger when it starts again, and one without a cause names
+// none (decisions 0133 and 0187).
+func aDecisionNamesItsCause(t *testing.T, c Clients) {
+	added := planAdded(t, "plan-a")
+	mustAppend(t, c, Kernel, []*cloudeventsv1.CloudEvent{added})
+	for _, cause := range []string{added.GetId(), ""} {
+		res, err := c(Kernel).Decide(t.Context(), &controlplanev1.DecideRequest{Action: "escalate", Plan: "plan-a", Cause: cause})
+		if err != nil {
+			t.Fatalf("Decide: %v", err)
+		}
+		_, e := decisionAt(t, c, res.GetPosition())
+		if got := e.GetAttributes()[events.ExtensionCause].GetCeString(); got != cause {
+			t.Errorf("Decide with the cause %q: the decision names the cause %q", cause, got)
+		}
+	}
+}
+
 // decideRefusesARequestItCannotDecide: a request with no plan or an action
 // that the schema does not have is refused with invalid argument, and
 // nothing is recorded.

@@ -134,6 +134,10 @@ var extensionStyles = map[string]Style{
 	// JSON has no comments, and the files in .pumi/ are plain JSON
 	// (decision 0112).
 	".json": Exempt,
+	// The golden event-sequence cases are JSON Lines, which has no
+	// comments; the regime sources of each case are in a file beside it
+	// (decision 0183).
+	".jsonl": Exempt,
 }
 
 // Classify returns the style of the file at name, a slash-separated path from

@@ -74,6 +74,9 @@ const (
 	// its workspace after the kill: the adapter stops claude when its
 	// standard input closes (decision 0158).
 	stopWait = 2 * time.Minute
+	// afterExpiry is how long the restarted pumi runs after the killed
+	// run's lease expired, in which a runner would claim it again.
+	afterExpiry = 10 * time.Second
 )
 
 // shownPlan is an archived plan of ScaleWholesale: its id, the commit it
@@ -398,7 +401,8 @@ func TestShownRunReachesTheFinalState(t *testing.T) {
 
 // TestShownRunKilledAndStartedAgain starts pumi as a child process, kills
 // it while the adapter runs, and starts pumi again: the invocation is in
-// doubt, so the plan escalates (decision 0182). It shows the log.
+// doubt, so the plan escalates and the invocation is not run again after
+// its lease expires (decision 0182). It shows the log.
 func TestShownRunKilledAndStartedAgain(t *testing.T) {
 	clone, plan, adapter := shownSetup(t)
 	run := prepare(t, clone, plan, adapter)
@@ -436,6 +440,9 @@ func TestShownRunKilledAndStartedAgain(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- embedded(ctx, run, nil) }()
 	waitFor(t, run, time.Minute, events.TypeEscalationRaised)
+	// The killed run's lease expires after the restart. The runner must
+	// not claim the invocation again (decision 0182).
+	time.Sleep(controlplane.DefaultLeaseTimeout + afterExpiry)
 	cancel()
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
 		t.Fatalf("pumi stopped with %v", err)
@@ -450,6 +457,18 @@ func TestShownRunKilledAndStartedAgain(t *testing.T) {
 	}
 	if has(evs, events.TypeInvocationResult) {
 		t.Errorf("the log has an invocation.result, but the invocation was killed")
+	}
+	if !has(evs, events.TypeLeaseExpired) {
+		t.Errorf("the killed run's lease did not expire after the restart")
+	}
+	granted := 0
+	for _, e := range evs {
+		if e.GetType() == events.TypeLeaseGranted {
+			granted++
+		}
+	}
+	if granted != 1 {
+		t.Errorf("the log has %d lease.granted events, want 1: the invocation in doubt is not run again", granted)
 	}
 }
 

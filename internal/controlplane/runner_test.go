@@ -59,9 +59,22 @@ func newPlane(t *testing.T, log *embeddedlog.Log) plane {
 // invocation.
 func (p plane) requestCheck(t *testing.T, invocation string) {
 	t.Helper()
+	p.request(t, invocation, &harnessv1.Component{Kind: harnessv1.Component_KIND_CHECK, Name: "tests", Version: "1"})
+}
+
+// requestAgentRun has the kernel request an agent run in the gate role
+// named invocation.
+func (p plane) requestAgentRun(t *testing.T, invocation string) {
+	t.Helper()
+	p.request(t, invocation, &harnessv1.Component{Kind: harnessv1.Component_KIND_AGENT_RUN, Name: "harness", Version: "1"})
+}
+
+// request has the kernel request an invocation of component in the gate
+// role named invocation.
+func (p plane) request(t *testing.T, invocation string, component *harnessv1.Component) {
+	t.Helper()
 	data, err := events.InvocationRequested("plan-a", &runnerv1.Invocation{
-		Invocation: invocation, IdempotencyKey: "key-" + invocation, Role: harnessv1.Role_ROLE_GATE,
-		Component: &harnessv1.Component{Kind: harnessv1.Component_KIND_CHECK, Name: "tests", Version: "1"},
+		Invocation: invocation, IdempotencyKey: "key-" + invocation, Role: harnessv1.Role_ROLE_GATE, Component: component,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -216,5 +229,40 @@ func TestServerRefusesARunnerWithoutItsRoles(t *testing.T) {
 		if _, err := svc.Server(id); err == nil {
 			t.Errorf("Server for a runner with %s succeeded, want an error", name)
 		}
+	}
+}
+
+// TestAnAgentRunIsNotClaimedAgainAfterItsLeaseExpires: an agent run whose
+// lease expired without a result may have run, and an agent run is not
+// idempotent, so no runner claims it again; the kernel escalates it when
+// pumi starts again (decisions 0019 and 0182). A check is claimed again,
+// as TestALeaseInTheLogExpiresAfterARestart shows.
+func TestAnAgentRunIsNotClaimedAgainAfterItsLeaseExpires(t *testing.T) {
+	p := newPlane(t, openLog(t))
+	p.requestAgentRun(t, "invocation-1")
+	res := p.claim(t)
+	p.clock.Advance(res.GetLeaseTimeout().AsDuration())
+	if n := p.count(t, events.TypeLeaseExpired); n != 1 {
+		t.Fatalf("the log holds %d lease.expired events after the timeout, want 1", n)
+	}
+	for len(p.clock.added) > 0 {
+		<-p.clock.added
+	}
+	type claimed struct {
+		res *runnerv1.ClaimResponse
+		err error
+	}
+	done := make(chan claimed, 1)
+	go func() {
+		res, err := p.runner.Claim(t.Context(), &runnerv1.ClaimRequest{ProtocolVersions: []*runnerv1.ProtocolVersion{{Major: 1}}})
+		done <- claimed{res, err}
+	}()
+	<-p.clock.added
+	p.clock.Advance(controlplane.DefaultClaimWait)
+	if got := <-done; got.err != nil || got.res.GetInvocation() != nil {
+		t.Fatalf("Claim = %v, %v; want no invocation: the agent run's lease expired", got.res, got.err)
+	}
+	if n := p.count(t, events.TypeLeaseGranted); n != 1 {
+		t.Errorf("the log holds %d lease.granted events, want 1", n)
 	}
 }

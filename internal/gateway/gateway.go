@@ -1,0 +1,409 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+package gateway
+
+import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+	"sync"
+
+	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
+)
+
+// InvocationHeader is the header in which a harness sends the invocation
+// token on every call. A harness that keeps its own sign-in must send it
+// there; when the gateway holds the API key, the harness may instead send
+// the token as its API key, in X-Api-Key or as a bearer token (decision
+// 0225).
+const InvocationHeader = "X-Pumi-Token"
+
+// ErrUnknownToken is returned for a token that the gateway did not open or
+// has closed.
+var ErrUnknownToken = errors.New("unknown or closed invocation token")
+
+// maxRequest is the largest request body of a model call that the gateway
+// reads; Anthropic's API takes at most 32 MB.
+const maxRequest = 64 << 20
+
+// Config configures a Gateway.
+type Config struct {
+	// Upstream is the provider's base URL, such as
+	// https://api.anthropic.com.
+	Upstream *url.URL
+	// APIKey, when set, is the adopter's provider API key. The gateway sends
+	// it on every call in place of any credential the harness sends. When
+	// it is empty, the harness keeps its own sign-in and the gateway
+	// forwards the credential the harness sends (decision 0225).
+	APIKey string
+	// Transport sends the calls to the provider; nil is
+	// http.DefaultTransport.
+	Transport http.RoundTripper
+	// Log receives the gateway's refusals and failed calls; nil discards
+	// them. The gateway never logs the API key or a token.
+	Log *slog.Logger
+}
+
+// Totals are an invocation's usage as the gateway counted it (decision
+// 0230).
+type Totals struct {
+	// Tokens are all the tokens of every call: input, output, cache writes
+	// and cache reads (decision 0227).
+	Tokens int64
+	// CostMicrodollars is the reference cost at the list prices of the
+	// price table, rounded up to a whole microdollar (decision 0229).
+	CostMicrodollars int64
+	// CapReached is set when the gateway refused a call of the invocation
+	// because its tokens or cost had reached the budget (decision 0228).
+	CapReached bool
+}
+
+// session is an open invocation.
+type session struct {
+	invocation string
+	// budgetTokens and budgetPicodollars are the caps; zero sets none.
+	budgetTokens      int64
+	budgetPicodollars int64
+	tokens            int64
+	picodollars       int64
+	capReached        bool
+}
+
+// reached reports whether the session's usage has reached a cap.
+func (s *session) reached() bool {
+	return (s.budgetTokens > 0 && s.tokens >= s.budgetTokens) ||
+		(s.budgetPicodollars > 0 && s.picodollars >= s.budgetPicodollars)
+}
+
+// Gateway is the model gateway of embedded mode (decisions 0225 to 0231): a
+// pass-through proxy of Anthropic's Messages API that counts the tokens and
+// the reference cost of each open invocation and refuses its calls once a
+// cap is reached. It is an http.Handler.
+type Gateway struct {
+	cfg   Config
+	log   *slog.Logger
+	proxy *httputil.ReverseProxy
+
+	mu       sync.Mutex
+	sessions map[string]*session
+	open     map[string]bool
+}
+
+// New returns a gateway that sends calls to cfg.Upstream.
+func New(cfg Config) (*Gateway, error) {
+	if cfg.Upstream == nil || cfg.Upstream.Scheme == "" || cfg.Upstream.Host == "" {
+		return nil, errors.New("gateway: the provider's URL is not set")
+	}
+	g := &Gateway{
+		cfg:      cfg,
+		log:      cfg.Log,
+		sessions: map[string]*session{},
+		open:     map[string]bool{},
+	}
+	if g.log == nil {
+		g.log = slog.New(slog.DiscardHandler)
+	}
+	g.proxy = &httputil.ReverseProxy{
+		Rewrite:        g.rewrite,
+		Transport:      cfg.Transport,
+		FlushInterval:  -1,
+		ModifyResponse: g.modifyResponse,
+		ErrorHandler:   g.proxyError,
+		ErrorLog:       slog.NewLogLogger(g.log.Handler(), slog.LevelWarn),
+	}
+	return g, nil
+}
+
+// KeepsSignIn reports whether the harness keeps its own sign-in, which is
+// when no API key is configured. The harness then sends the token in
+// InvocationHeader (decision 0225).
+func (g *Gateway) KeepsSignIn() bool { return g.cfg.APIKey == "" }
+
+// Open opens an invocation with its budget and returns a random token
+// that is valid for it until Close (decision 0231). A budget's zero tokens
+// or zero cost sets no cap of that kind; its seconds are the runner's.
+func (g *Gateway) Open(invocation string, budget *harnessv1.Usage) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("gateway: making a token: %w", err)
+	}
+	token := hex.EncodeToString(b)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.open[invocation] {
+		return "", fmt.Errorf("gateway: the invocation %s is already open", invocation)
+	}
+	g.open[invocation] = true
+	g.sessions[token] = &session{
+		invocation:        invocation,
+		budgetTokens:      budget.GetTokens(),
+		budgetPicodollars: budget.GetCostMicrodollars() * 1_000_000,
+	}
+	return token, nil
+}
+
+// Totals returns the totals of the invocation the token was opened for.
+func (g *Gateway) Totals(token string) (Totals, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	s, ok := g.sessions[token]
+	if !ok {
+		return Totals{}, ErrUnknownToken
+	}
+	return Totals{
+		Tokens:           s.tokens,
+		CostMicrodollars: (s.picodollars + 999_999) / 1_000_000,
+		CapReached:       s.capReached,
+	}, nil
+}
+
+// Close ends the token. A call still in progress finishes, but its usage
+// is no longer reported.
+func (g *Gateway) Close(token string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	s, ok := g.sessions[token]
+	if !ok {
+		return ErrUnknownToken
+	}
+	delete(g.sessions, token)
+	delete(g.open, s.invocation)
+	return nil
+}
+
+// call is what ServeHTTP passes to the proxy about a counted call.
+type call struct {
+	session *session
+	model   string
+}
+
+type callKey struct{}
+
+// ServeHTTP passes a call of a valid token through to the provider. A
+// call of the Messages API is counted: its model must be in the price
+// table, and its invocation must not have reached a cap.
+func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s := g.session(g.token(r))
+	if s == nil {
+		g.log.Info("gateway refused a call with no valid invocation token", "path", r.URL.Path)
+		refuse(w, http.StatusUnauthorized, "authentication_error", "the call has no valid Pumi invocation token")
+		return
+	}
+	if r.URL.Path == "/v1/messages/batches" || strings.HasPrefix(r.URL.Path, "/v1/messages/batches/") {
+		g.log.Info("gateway refused a batch, which it cannot count", "invocation", s.invocation, "path", r.URL.Path)
+		refuse(w, http.StatusNotFound, "not_found_error", "the Pumi model gateway does not pass batches through, because it cannot count them")
+		return
+	}
+	if r.Method != http.MethodPost || r.URL.Path != "/v1/messages" {
+		g.proxy.ServeHTTP(w, r)
+		return
+	}
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequest))
+	if err != nil {
+		g.log.Info("gateway could not read a call", "invocation", s.invocation, "error", err.Error())
+		refuse(w, http.StatusRequestEntityTooLarge, "request_too_large", "the Pumi model gateway could not read the call")
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	r.ContentLength = int64(len(body))
+	model := requestModel(body, r.Header.Get("Content-Encoding"))
+	if _, ok := Price(model); !ok {
+		g.log.Info("gateway refused a call to a model the price table does not list", "invocation", s.invocation, "model", model, "prices", PricesVersion)
+		refuse(w, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("the Pumi model gateway's price table (version %s) does not list the model %q", PricesVersion, model))
+		return
+	}
+	if g.refuseAtCap(s) {
+		g.log.Info("gateway refused a call at the invocation's cap", "invocation", s.invocation)
+		refuse(w, http.StatusForbidden, "permission_error", "the invocation has reached its token or cost cap")
+		return
+	}
+	g.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callKey{}, &call{session: s, model: model})))
+}
+
+// token finds the invocation token of a call.
+func (g *Gateway) token(r *http.Request) string {
+	if t := r.Header.Get(InvocationHeader); t != "" {
+		return t
+	}
+	if g.KeepsSignIn() {
+		// The credential is the harness's own sign-in, not a token.
+		return ""
+	}
+	if t := r.Header.Get("X-Api-Key"); t != "" {
+		return t
+	}
+	if t, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
+		return t
+	}
+	return ""
+}
+
+func (g *Gateway) session(token string) *session {
+	if token == "" {
+		return nil
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.sessions[token]
+}
+
+// refuseAtCap reports whether the session has reached a cap, and records
+// that a call was refused for it.
+func (g *Gateway) refuseAtCap(s *session) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !s.reached() {
+		return false
+	}
+	s.capReached = true
+	return true
+}
+
+// record adds a call's usage to its session.
+func (g *Gateway) record(c *call, u usage) {
+	m, ok := Price(u.model)
+	if !ok {
+		m, _ = Price(c.model)
+	}
+	cost := m.picodollars(u)
+	g.log.Debug("gateway counted a call", "invocation", c.session.invocation, "model", c.model, "tokens", u.tokens(), "picodollars", cost)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	c.session.tokens += u.tokens()
+	c.session.picodollars += cost
+}
+
+// requestModel reads the model a call of the Messages API names. It
+// returns "" when the body cannot be read.
+func requestModel(body []byte, encoding string) string {
+	var r io.Reader = bytes.NewReader(body)
+	switch strings.ToLower(strings.TrimSpace(encoding)) {
+	case "", "identity":
+	case "gzip":
+		zr, err := gzip.NewReader(r)
+		if err != nil {
+			return ""
+		}
+		r = io.LimitReader(zr, maxRequest)
+	default:
+		return ""
+	}
+	var m struct {
+		Model string `json:"model"`
+	}
+	if json.NewDecoder(r).Decode(&m) != nil {
+		return ""
+	}
+	return m.Model
+}
+
+// rewrite sends a call to the provider with the credential: the API key in
+// place of any the harness sent, or the harness's own. The invocation
+// token never reaches the provider. The gateway asks for an uncompressed
+// response, so that it can read the usage, and Go's transport then
+// compresses the transfer itself.
+func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
+	pr.SetURL(g.cfg.Upstream)
+	pr.Out.Host = g.cfg.Upstream.Host
+	h := pr.Out.Header
+	h.Del(InvocationHeader)
+	h.Del("Accept-Encoding")
+	if !g.KeepsSignIn() {
+		h.Del("Authorization")
+		h.Set("X-Api-Key", g.cfg.APIKey)
+	}
+}
+
+// modifyResponse counts the usage of a successful counted call as its body
+// passes to the harness.
+func (g *Gateway) modifyResponse(resp *http.Response) error {
+	c, ok := resp.Request.Context().Value(callKey{}).(*call)
+	if !ok || resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil
+	}
+	streaming := strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")
+	resp.Body = &countedBody{
+		body:   resp.Body,
+		reader: newUsageReader(streaming),
+		done: func(u usage, found, tooLong bool) {
+			switch {
+			case found:
+				g.record(c, u)
+			case tooLong:
+				g.log.Warn("gateway passed a response through that was too long to count", "invocation", c.session.invocation, "model", c.model)
+			default:
+				g.log.Warn("gateway found no usage in a response", "invocation", c.session.invocation, "model", c.model)
+			}
+		},
+	}
+	return nil
+}
+
+// proxyError answers a call that could not reach the provider.
+func (g *Gateway) proxyError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, context.Canceled) {
+		return
+	}
+	g.log.Warn("gateway could not reach the provider", "path", r.URL.Path, "error", err.Error())
+	refuse(w, http.StatusBadGateway, "api_error", "the Pumi model gateway could not reach the provider")
+}
+
+// refuse writes an error in the form of Anthropic's API, with
+// x-should-retry false, so that the harness's client does not send the
+// call again.
+func refuse(w http.ResponseWriter, status int, kind, message string) {
+	b, err := json.Marshal(map[string]any{
+		"type":  "error",
+		"error": map[string]string{"type": kind, "message": message},
+	})
+	if err != nil {
+		http.Error(w, message, status)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Should-Retry", "false")
+	w.WriteHeader(status)
+	_, _ = w.Write(b)
+}
+
+// countedBody passes a response body through and gives its usage to done
+// once, at the end of the body or when it is closed.
+type countedBody struct {
+	body   io.ReadCloser
+	reader *usageReader
+	once   sync.Once
+	done   func(u usage, found, tooLong bool)
+}
+
+func (b *countedBody) Read(p []byte) (int, error) {
+	n, err := b.body.Read(p)
+	_, _ = b.reader.Write(p[:n])
+	if err != nil {
+		b.finish()
+	}
+	return n, err
+}
+
+func (b *countedBody) Close() error {
+	b.finish()
+	return b.body.Close()
+}
+
+func (b *countedBody) finish() {
+	b.once.Do(func() {
+		u, found := b.reader.usage()
+		b.done(u, found, b.reader.tooLong)
+	})
+}

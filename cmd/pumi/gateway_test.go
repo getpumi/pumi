@@ -29,7 +29,9 @@ import (
 const (
 	// testModel is the model of each call, which the price table lists:
 	// $2 for a million input tokens and $10 for a million output tokens.
-	testModel                = "claude-sonnet-5-5"
+	testModel = "claude-sonnet-5-5"
+	// testFallback is the fallback model of the test clones' model role.
+	testFallback             = "claude-haiku-5-5"
 	sonnetInputMicrodollars  = 2
 	sonnetOutputMicrodollars = 10
 	// testInputTokens are the input tokens of each answer.
@@ -61,7 +63,12 @@ func callGateway(inv *harnessv1.Invocation, outputTokens int) (int, error) {
 	if g == nil {
 		return 0, fmt.Errorf("the invocation %s has no gateway", inv.GetInvocation())
 	}
-	body := fmt.Sprintf(`{"model":%q,"max_tokens":%d,"messages":[{"role":"user","content":"Implement the plan."}]}`, testModel, outputTokens)
+	// The harness asks for the invocation's model role, which the gateway
+	// maps to testModel (decision 0233).
+	if inv.GetModelRole() == "" {
+		return 0, fmt.Errorf("the invocation %s has no model role", inv.GetInvocation())
+	}
+	body := fmt.Sprintf(`{"model":%q,"max_tokens":%d,"messages":[{"role":"user","content":"Implement the plan."}]}`, inv.GetModelRole(), outputTokens)
 	ctx, cancel := context.WithTimeout(context.Background(), commandWait)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.GetBaseUrl()+"/v1/messages", strings.NewReader(body))
@@ -133,6 +140,8 @@ type providerCall struct {
 type provider struct {
 	mu    sync.Mutex
 	calls []providerCall
+	// limited are the models whose calls it answers with a rate limit.
+	limited map[string]bool
 }
 
 // fakeProvider serves a new fake provider, makes pumi run's gateway send
@@ -166,8 +175,14 @@ func (p *provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	p.mu.Lock()
 	p.calls = append(p.calls, providerCall{header: r.Header.Clone(), body: body})
+	limited := p.limited[req.Model]
 	p.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
+	if limited {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w, `{"type":"error","error":{"type":"rate_limit_error","message":"This request would exceed your account's rate limit."}}`)
+		return
+	}
 	_, _ = fmt.Fprintf(w, `{"id":"msg_1","type":"message","role":"assistant","model":%q,"content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn","usage":{"input_tokens":%d,"output_tokens":%d}}`,
 		req.Model, testInputTokens, req.MaxTokens)
 }
@@ -228,7 +243,7 @@ const testKeyEnv = "PUMI_TEST_PROVIDER_KEY"
 // its API key, and the token never reaches the provider (decision 0225).
 func TestRunSendsTheAPIKeyOfTheNamedVariable(t *testing.T) {
 	t.Setenv(testKeyEnv, "sk-ant-the-adopters-key")
-	c := newCommandCloneWith(t, "tracks", adapterSucceeds, fmt.Sprintf("gateway { api_key_env: %q }\n", testKeyEnv))
+	c := newCommandCloneWith(t, "tracks", adapterSucceeds, testGateway+fmt.Sprintf(" api_key_env: %q", testKeyEnv))
 	r := c.start()
 	c.must("add", "--track", "a", "a1")
 	c.waitState(r, "a1", "merged")
@@ -251,7 +266,7 @@ func TestRunSendsTheAPIKeyOfTheNamedVariable(t *testing.T) {
 // the variable that the configuration file names is not set.
 func TestRunRefusesAnAPIKeyVariableThatIsNotSet(t *testing.T) {
 	t.Setenv(testKeyEnv, "")
-	c := newCommandCloneWith(t, "tracks", adapterSucceeds, fmt.Sprintf("gateway { api_key_env: %q }\n", testKeyEnv))
+	c := newCommandCloneWith(t, "tracks", adapterSucceeds, testGateway+fmt.Sprintf(" api_key_env: %q", testKeyEnv))
 	ctx, cancel := context.WithTimeout(t.Context(), commandWait)
 	defer cancel()
 	var out bytes.Buffer

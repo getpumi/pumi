@@ -351,7 +351,12 @@ type Invocation struct {
 	// 0226). A check or an external action has none.
 	Gateway *Gateway `protobuf:"bytes,9,opt,name=gateway,proto3" json:"gateway,omitempty"`
 	// The schema of the structured output.
-	OutputSchema  *OutputSchema `protobuf:"bytes,10,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
+	OutputSchema *OutputSchema `protobuf:"bytes,10,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
+	// The model role of an agent run, such as "frontier". The adapter asks
+	// its harness for the role by name, as the model of its calls, and the
+	// model gateway sends each call to the model that the configuration maps
+	// the role to (decision 0233).
+	ModelRole     string `protobuf:"bytes,11,opt,name=model_role,json=modelRole,proto3" json:"model_role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -454,6 +459,13 @@ func (x *Invocation) GetOutputSchema() *OutputSchema {
 		return x.OutputSchema
 	}
 	return nil
+}
+
+func (x *Invocation) GetModelRole() string {
+	if x != nil {
+		return x.ModelRole
+	}
+	return ""
 }
 
 // Component is the component that an invocation runs, with its name and
@@ -994,7 +1006,7 @@ var File_pumi_harness_v1_harness_proto protoreflect.FileDescriptor
 
 const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpumi/harness/v1/harness.proto\x12\x0fpumi.harness.v1\"\xf1\x03\n" +
+	"\x1dpumi/harness/v1/harness.proto\x12\x0fpumi.harness.v1\"\x90\x04\n" +
 	"\n" +
 	"Invocation\x12\x1e\n" +
 	"\n" +
@@ -1009,7 +1021,9 @@ const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\tworkspace\x18\b \x01(\tR\tworkspace\x122\n" +
 	"\agateway\x18\t \x01(\v2\x18.pumi.harness.v1.GatewayR\agateway\x12B\n" +
 	"\routput_schema\x18\n" +
-	" \x01(\v2\x1d.pumi.harness.v1.OutputSchemaR\foutputSchema\"\xca\x01\n" +
+	" \x01(\v2\x1d.pumi.harness.v1.OutputSchemaR\foutputSchema\x12\x1d\n" +
+	"\n" +
+	"model_role\x18\v \x01(\tR\tmodelRole\"\xca\x01\n" +
 	"\tComponent\x123\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1f.pumi.harness.v1.Component.KindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +

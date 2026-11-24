@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "pumi.config.v1.ModelRole.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ModelRole is the model and the fallback model of a model role (decision\n 0233). Both must be in the gateway's price table, which lists only\n models of Anthropic's Messages API, and they must differ.",
+      "properties": {
+        "fallback": {
+          "default": "",
+          "description": "The fallback model, such as claude-sonnet-5-5.",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "description": "The model, such as claude-opus-5-5.",
+          "type": "string"
+        }
+      },
+      "title": "Model Role",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.config.v1.ModelRole.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.config.v1.ModelRole.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

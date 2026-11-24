@@ -10,9 +10,12 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"getpumi.dev/pumi/internal/gateway"
+	"getpumi.dev/pumi/internal/kernel/workflow"
 	"getpumi.dev/pumi/internal/runner"
 )
 
@@ -67,7 +70,7 @@ func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGatewa
 		return nil, fmt.Errorf("the provider's URL %q: %w", providerURL, err)
 	}
 	g, err := gateway.New(gateway.Config{
-		Upstream: upstream, APIKey: key,
+		Upstream: upstream, APIKey: key, Roles: modelRoles(cfg),
 		Log: slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelInfo})),
 	})
 	if err != nil {
@@ -78,6 +81,32 @@ func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGatewa
 		return nil, err
 	}
 	return &modelGateway{Gateway: g, server: server}, nil
+}
+
+// modelRoles returns the model roles of the configuration file (decision
+// 0233).
+func modelRoles(cfg *config) map[string]gateway.Role {
+	roles := map[string]gateway.Role{}
+	for name, r := range cfg.file.GetGateway().GetModelRoles() {
+		roles[name] = gateway.Role{Model: r.GetModel(), Fallback: r.GetFallback()}
+	}
+	return roles
+}
+
+// checkModelRoles refuses a workflow that names a model role which the
+// configuration file does not map (decision 0233).
+func checkModelRoles(cfg *config, wf *workflow.Workflow) error {
+	roles := cfg.file.GetGateway().GetModelRoles()
+	var missing []string
+	for _, r := range wf.ModelRoles() {
+		if _, ok := roles[r]; !ok {
+			missing = append(missing, strconv.Quote(r))
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("the workflow names the model roles %s, which gateway.model_roles of the configuration file does not map", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // describe says where the gateway serves and which credential reaches the

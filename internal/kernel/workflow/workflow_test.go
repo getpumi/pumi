@@ -35,6 +35,16 @@ func TestAValidWorkflowLoads(t *testing.T) {
 	}
 }
 
+func TestModelRolesListsTheRolesOfTheAgentRuns(t *testing.T) {
+	w, err := load(t, "valid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.ModelRoles(); !slices.Equal(got, []string{"frontier"}) {
+		t.Errorf("ModelRoles() = %q, want [frontier]", got)
+	}
+}
+
 func TestTheTaskTextsAreReadWithoutTheirSPDXHeader(t *testing.T) {
 	w, err := load(t, "valid")
 	if err != nil {
@@ -85,6 +95,8 @@ func TestTheLoaderRefuses(t *testing.T) {
 		{"cap-reached-without-invoke", []string{`state "planning-escalated", transition 3`, `"cap-reached"`, "starts no invocation"}},
 		{"failed-missing", []string{`state "planning"`, "starts an invocation", `no transition on "failed"`}},
 		{"failed-without-invoke", []string{`state "planning-escalated", transition 3`, `"failed"`, "starts no invocation"}},
+		{"model-role-missing", []string{`state "planning"`, "harness", "no model role"}},
+		{"model-role-on-check", []string{`state "review"`, "check", `model role "frontier"`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -106,8 +118,8 @@ func TestEveryFixtureIsTested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 28 {
-		t.Errorf("testdata has %d workflow fixtures, want the valid one and 27 refusals: %q", len(names), names)
+	if len(names) != 30 {
+		t.Errorf("testdata has %d workflow fixtures, want the valid one and 29 refusals: %q", len(names), names)
 	}
 }
 

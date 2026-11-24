@@ -213,6 +213,11 @@
           "description": "The idempotency key.",
           "type": "string"
         },
+        "^(model_role)$": {
+          "default": "",
+          "description": "The model role of an agent run, such as \"frontier\". The adapter asks\n its harness for the role by name, as the model of its calls, and the\n model gateway sends each call to the model that the configuration maps\n the role to (decision 0233).",
+          "type": "string"
+        },
         "^(output_schema)$": {
           "$ref": "#/$defs/pumi.harness.v1.OutputSchema.jsonschema.json",
           "description": "The schema of the structured output."
@@ -247,6 +252,11 @@
         "invocation": {
           "default": "",
           "description": "The invocation.",
+          "type": "string"
+        },
+        "modelRole": {
+          "default": "",
+          "description": "The model role of an agent run, such as \"frontier\". The adapter asks\n its harness for the role by name, as the model of its calls, and the\n model gateway sends each call to the model that the configuration maps\n the role to (decision 0233).",
           "type": "string"
         },
         "outputSchema": {

@@ -59,6 +59,16 @@
           "default": "",
           "description": "The name of the environment variable that holds the provider's API\n key, such as ANTHROPIC_API_KEY. When it is set, pumi run reads the key\n from that variable, which must not be empty, and the gateway sends the\n key on every call. When it is not set, the harness keeps its own\n sign-in, and the gateway forwards the credential that the harness\n sends (decision 0225).",
           "type": "string"
+        },
+        "^(model_roles)$": {
+          "additionalProperties": {
+            "$ref": "#/$defs/pumi.config.v1.ModelRole.jsonschema.json"
+          },
+          "description": "The model roles, by name, such as \"frontier\". Each model role that the\n workflow names must be here. A call that names a role goes to the\n role's model, and once to its fallback model when the provider answers\n with a usage or rate limit (decision 0233).",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
         }
       },
       "properties": {
@@ -66,9 +76,38 @@
           "default": "",
           "description": "The name of the environment variable that holds the provider's API\n key, such as ANTHROPIC_API_KEY. When it is set, pumi run reads the key\n from that variable, which must not be empty, and the gateway sends the\n key on every call. When it is not set, the harness keeps its own\n sign-in, and the gateway forwards the credential that the harness\n sends (decision 0225).",
           "type": "string"
+        },
+        "modelRoles": {
+          "additionalProperties": {
+            "$ref": "#/$defs/pumi.config.v1.ModelRole.jsonschema.json"
+          },
+          "description": "The model roles, by name, such as \"frontier\". Each model role that the\n workflow names must be here. A call that names a role goes to the\n role's model, and once to its fallback model when the provider answers\n with a usage or rate limit (decision 0233).",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
         }
       },
       "title": "Gateway",
+      "type": "object"
+    },
+    "pumi.config.v1.ModelRole.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ModelRole is the model and the fallback model of a model role (decision\n 0233). Both must be in the gateway's price table, which lists only\n models of Anthropic's Messages API, and they must differ.",
+      "properties": {
+        "fallback": {
+          "default": "",
+          "description": "The fallback model, such as claude-sonnet-5-5.",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "description": "The model, such as claude-opus-5-5.",
+          "type": "string"
+        }
+      },
+      "title": "Model Role",
       "type": "object"
     },
     "pumi.config.v1.Project.jsonschema.json": {
@@ -415,6 +454,11 @@
           "description": "The environment, as the digest of a devcontainer image. The invocation\n runs in a fresh container from it.",
           "type": "string"
         },
+        "^(model_role)$": {
+          "default": "",
+          "description": "The model role of an agent run, from the workflow state that started\n it (decision 0233).",
+          "type": "string"
+        },
         "^(output_message)$": {
           "default": "",
           "description": "The output schema: the full name of a protobuf message in the api\n module (decision 0160).",
@@ -482,6 +526,11 @@
           "default": 0,
           "description": "The isolation level.",
           "title": "Isolation"
+        },
+        "modelRole": {
+          "default": "",
+          "description": "The model role of an agent run, from the workflow state that started\n it (decision 0233).",
+          "type": "string"
         },
         "outputMessage": {
           "default": "",

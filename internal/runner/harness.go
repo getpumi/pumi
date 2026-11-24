@@ -57,6 +57,7 @@ func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocat
 		Budget:         proto.CloneOf(doc.GetBudget()),
 		Workspace:      r.Workspace,
 		Gateway:        proto.CloneOf(r.Gateway),
+		ModelRole:      doc.GetModelRole(),
 	}
 	if doc.GetOutputMessage() != "" {
 		inv.OutputSchema = &harnessv1.OutputSchema{Message: doc.GetOutputMessage(), JsonSchema: r.JSONSchema}

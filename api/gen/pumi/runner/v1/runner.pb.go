@@ -299,8 +299,11 @@ type Invocation struct {
 	// The credential handles, which the runner exchanges with the credentials
 	// broker for tokens valid for this invocation only.
 	CredentialHandles []string `protobuf:"bytes,11,rep,name=credential_handles,json=credentialHandles,proto3" json:"credential_handles,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The model role of an agent run, from the workflow state that started
+	// it (decision 0233).
+	ModelRole     string `protobuf:"bytes,12,opt,name=model_role,json=modelRole,proto3" json:"model_role,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Invocation) Reset() {
@@ -408,6 +411,13 @@ func (x *Invocation) GetCredentialHandles() []string {
 		return x.CredentialHandles
 	}
 	return nil
+}
+
+func (x *Invocation) GetModelRole() string {
+	if x != nil {
+		return x.ModelRole
+	}
+	return ""
 }
 
 // HeartbeatRequest is the request of Heartbeat.
@@ -818,7 +828,7 @@ const file_pumi_runner_v1_runner_proto_rawDesc = "" +
 	"invocation\x18\x02 \x01(\v2\x1a.pumi.runner.v1.InvocationR\n" +
 	"invocation\x12!\n" +
 	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\x12>\n" +
-	"\rlease_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fleaseTimeout\"\xf1\x04\n" +
+	"\rlease_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fleaseTimeout\"\x90\x05\n" +
 	"\n" +
 	"Invocation\x12\x1e\n" +
 	"\n" +
@@ -834,7 +844,9 @@ const file_pumi_runner_v1_runner_proto_rawDesc = "" +
 	"\x0eoutput_message\x18\t \x01(\tR\routputMessage\x12B\n" +
 	"\tisolation\x18\n" +
 	" \x01(\x0e2$.pumi.runner.v1.Invocation.IsolationR\tisolation\x12-\n" +
-	"\x12credential_handles\x18\v \x03(\tR\x11credentialHandles\"W\n" +
+	"\x12credential_handles\x18\v \x03(\tR\x11credentialHandles\x12\x1d\n" +
+	"\n" +
+	"model_role\x18\f \x01(\tR\tmodelRole\"W\n" +
 	"\tIsolation\x12\x19\n" +
 	"\x15ISOLATION_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ISOLATION_CONTAINER\x10\x01\x12\x16\n" +

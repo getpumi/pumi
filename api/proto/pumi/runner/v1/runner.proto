@@ -122,6 +122,9 @@ message Invocation {
   // The credential handles, which the runner exchanges with the credentials
   // broker for tokens valid for this invocation only.
   repeated string credential_handles = 11;
+  // The model role of an agent run, from the workflow state that started
+  // it (decision 0233).
+  string model_role = 12;
 }
 
 // HeartbeatRequest is the request of Heartbeat.

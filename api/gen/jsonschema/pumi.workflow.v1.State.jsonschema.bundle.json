@@ -19,6 +19,11 @@
       "additionalProperties": false,
       "description": "Invoke is an entry that starts an invocation (decision 0168).",
       "patternProperties": {
+        "^(model_role)$": {
+          "default": "",
+          "description": "The model role of an agent run, such as \"frontier\", which the\n configuration maps to a model and a fallback model at the model\n gateway. A state that starts a harness names one; a state that starts\n a check or an external action names none (decision 0233).",
+          "type": "string"
+        },
         "^(output_message)$": {
           "default": "",
           "description": "The full name of the protobuf message in the api module that the\n invocation's structured output must be, such as\n pumi.workflow.v1.PlanningOutput (decision 0160).",
@@ -49,6 +54,11 @@
           "default": 0,
           "description": "The kind of component.",
           "title": "Kind"
+        },
+        "modelRole": {
+          "default": "",
+          "description": "The model role of an agent run, such as \"frontier\", which the\n configuration maps to a model and a fallback model at the model\n gateway. A state that starts a harness names one; a state that starts\n a check or an external action names none (decision 0233).",
+          "type": "string"
         },
         "outputMessage": {
           "default": "",

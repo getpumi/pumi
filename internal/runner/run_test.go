@@ -257,11 +257,16 @@ type fakeService struct {
 	// batches are the log batches sent, one entry for each.
 	batches []string
 	reports []*runnerv1.ReportRequest
+	// onClaim, when set, runs when the runner claims the invocation.
+	onClaim func()
 }
 
 func (f *fakeService) Claim(_ context.Context, req *runnerv1.ClaimRequest) (*runnerv1.ClaimResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.onClaim != nil && f.claim != nil {
+		f.onClaim()
+	}
 	if len(req.GetProtocolVersions()) == 0 {
 		return nil, errors.New("the claim names no protocol version")
 	}
@@ -804,6 +809,28 @@ func TestProcessesTheAdapterStartedAreKilled(t *testing.T) {
 			f.checkGone(t)
 		})
 	}
+}
+
+// TestStoppingTheRunnerBeforeTheAdapterStartsReportsNothing: when the
+// runner stops after the claim, while it checks the input tree out, the
+// invocation is not reported as failed; like a stop while the adapter runs,
+// it ends without a report (decision 0182).
+func TestStoppingTheRunnerBeforeTheAdapterStartsReportsNothing(t *testing.T) {
+	f := newFixture(t, "success")
+	ctx, cancel := context.WithCancel(t.Context())
+	f.service.onClaim = cancel
+	ran, err := RunOne(ctx, f.cfg)
+	if !ran || !errors.Is(err, context.Canceled) {
+		t.Errorf("RunOne = %v, %v; want true and the context's error", ran, err)
+	}
+	if len(f.service.reports) != 0 {
+		t.Errorf("the runner reported %v; a runner that stops reports nothing (decision 0182)", f.service.reports)
+	}
+	f.checkNotStarted(t)
+	if _, stillOpen := f.gateway.state(); stillOpen {
+		t.Error("the gateway token is still open")
+	}
+	checkEmpty(t, f.cfg.WorkDir)
 }
 
 func TestStoppingTheRunnerStopsTheAdapterWithoutAReport(t *testing.T) {

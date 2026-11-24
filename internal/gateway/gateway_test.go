@@ -119,9 +119,18 @@ type fixture struct {
 	url      string
 	provider *provider
 	log      *bytes.Buffer
+	// invocationLog is the log of the invocation that open opens.
+	invocationLog *syncBuffer
 }
 
 func newFixture(t *testing.T, apiKey string) *fixture {
+	t.Helper()
+	return newFixtureWith(t, gateway.Config{APIKey: apiKey})
+}
+
+// newFixtureWith returns a fixture whose gateway has cfg, with the fake
+// provider as its upstream and the fixture's log.
+func newFixtureWith(t *testing.T, cfg gateway.Config) *fixture {
 	t.Helper()
 	p := &provider{respond: answer}
 	upstream := httptest.NewServer(p)
@@ -131,11 +140,9 @@ func newFixture(t *testing.T, apiKey string) *fixture {
 		t.Fatal(err)
 	}
 	var logged bytes.Buffer
-	gw, err := gateway.New(gateway.Config{
-		Upstream: u,
-		APIKey:   apiKey,
-		Log:      slog.New(slog.NewTextHandler(&syncWriter{w: &logged}, nil)),
-	})
+	cfg.Upstream = u
+	cfg.Log = slog.New(slog.NewTextHandler(&syncWriter{w: &logged}, nil))
+	gw, err := gateway.New(cfg)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -150,7 +157,7 @@ func newFixture(t *testing.T, apiKey string) *fixture {
 			t.Errorf("Shutdown() error = %v", err)
 		}
 	})
-	return &fixture{gw: gw, url: srv.URL(), provider: p, log: &logged}
+	return &fixture{gw: gw, url: srv.URL(), provider: p, log: &logged, invocationLog: &syncBuffer{}}
 }
 
 // syncWriter serializes writes to a buffer that several goroutines log to.
@@ -165,9 +172,28 @@ func (s *syncWriter) Write(p []byte) (int, error) {
 	return s.w.Write(p)
 }
 
+// syncBuffer is a buffer that several goroutines write to and the test
+// reads.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
 func (f *fixture) open(t *testing.T, budget *harnessv1.Usage) string {
 	t.Helper()
-	token, err := f.gw.Open("inv-1", budget)
+	token, err := f.gw.Open("inv-1", budget, f.invocationLog)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -456,18 +482,18 @@ func TestACallWithNoValidTokenIsRefused(t *testing.T) {
 
 func TestOpenGivesEachInvocationItsOwnToken(t *testing.T) {
 	f := newFixture(t, "")
-	a, err := f.gw.Open("inv-a", nil)
+	a, err := f.gw.Open("inv-a", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := f.gw.Open("inv-b", nil)
+	b, err := f.gw.Open("inv-b", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a == b || len(a) < 32 {
 		t.Errorf("Open() = %q and %q, want two different random tokens", a, b)
 	}
-	if _, err := f.gw.Open("inv-a", nil); err == nil {
+	if _, err := f.gw.Open("inv-a", nil, nil); err == nil {
 		t.Error("Open() of an invocation that is open succeeded, want an error")
 	}
 
@@ -533,18 +559,18 @@ func TestOtherPathsArePassedThroughUncounted(t *testing.T) {
 
 func TestAnErrorResponseIsPassedBackAndNotCounted(t *testing.T) {
 	f := newFixture(t, "")
-	const overloaded = `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`
+	const invalid = `{"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: too large"}}`
 	f.provider.respond = func(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(529)
-		_, _ = io.WriteString(w, overloaded)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, invalid)
 	}
 	token := f.open(t, nil)
 
 	status, _, body := f.call(t, "/v1/messages", signInHeader(token), messages("claude-sonnet-5-5", false))
 
-	if status != 529 || body != overloaded {
-		t.Errorf("response = %d %q, want the provider's error unchanged", status, body)
+	if n := len(f.provider.received()); status != http.StatusBadRequest || body != invalid || n != 1 {
+		t.Errorf("response = %d %q after %d requests, want the provider's error unchanged after one", status, body, n)
 	}
 	if got := f.totals(t, token); got != (gateway.Totals{}) {
 		t.Errorf("Totals() = %+v, want zero", got)

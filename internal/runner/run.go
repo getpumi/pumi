@@ -253,6 +253,12 @@ func (r *run) do(ctx context.Context) error {
 	// The adapter has exited, or never started: the runner reads the
 	// gateway's totals and ends the token (decisions 0230 and 0231).
 	totals, gerr := r.closeGateway()
+	if err != nil && ctx.Err() != nil {
+		// The runner stopped before the adapter started, as while it
+		// checked the input tree out: like a stop while the adapter runs,
+		// that ends the invocation without a report (decision 0182).
+		return ctx.Err()
+	}
 	if err != nil {
 		return r.report(ctx, result, eventsv1.InvocationFinished_OUTCOME_FAILED, err)
 	}

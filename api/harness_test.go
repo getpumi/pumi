@@ -36,8 +36,12 @@ func TestTheHarnessInvocationHasTheFieldsOf0158(t *testing.T) {
 	if got := fieldNames(inv); !slices.Equal(got, want) {
 		t.Errorf("Invocation has %q, want %q (decision 0158)", got, want)
 	}
-	if got := fieldNames(fieldOf(t, inv, "gateway").Message()); !slices.Equal(got, []string{"base_url", "token"}) {
-		t.Errorf("Gateway has %q, want base_url and token (decision 0036)", got)
+	gateway := fieldOf(t, inv, "gateway").Message()
+	if got := fieldNames(gateway); !slices.Equal(got, []string{"base_url", "keeps_sign_in", "token"}) {
+		t.Errorf("Gateway has %q, want base_url, keeps_sign_in and token (decisions 0036 and 0225)", got)
+	}
+	if f := gateway.Fields().ByName("keeps_sign_in"); f != nil && f.Kind() != protoreflect.BoolKind {
+		t.Error("Gateway.keeps_sign_in is not a bool")
 	}
 	if got := fieldNames(fieldOf(t, inv, "output_schema").Message()); !slices.Equal(got, []string{"json_schema", "message"}) {
 		t.Errorf("OutputSchema has %q, want the message's full name and its JSON Schema (decision 0160)", got)

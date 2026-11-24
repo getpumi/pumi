@@ -149,7 +149,8 @@ message Trigger {
     string event = 3;
     // The state's invocation is in doubt.
     InvocationInDoubt in_doubt = 4;
-    // The state's invocation reached its wall-time limit.
+    // The state's invocation reached a cap of its budget: its wall-time
+    // limit, or its token or cost cap at the model gateway.
     InvocationCapReached cap_reached = 5;
     // The state's invocation failed.
     InvocationFailed failed = 6;

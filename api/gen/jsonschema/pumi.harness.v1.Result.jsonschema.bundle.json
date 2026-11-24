@@ -52,7 +52,7 @@
         },
         "usage": {
           "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
-          "description": "The adapter's own usage figures. When the model gateway counted the\n invocation, its count is the one that counts (decision 0036). The\n gateway is optional until E7, and when no gateway counted the\n invocation, these figures are the usage of its invocation.result, which\n the usage fact and the hard caps read (decision 0185)."
+          "description": "The adapter's own usage figures, for information only. The runner\n writes them to the invocation's log; the usage of invocation.result is\n the model gateway's totals with the wall time the runner measured\n (decision 0230)."
         }
       },
       "title": "Result",

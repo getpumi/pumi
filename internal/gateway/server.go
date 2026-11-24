@@ -20,10 +20,10 @@ type Server struct {
 }
 
 // Serve serves the gateway on 127.0.0.1, at a port the operating system
-// picks, until Shutdown (decision 0231).
-func Serve(g *Gateway) (*Server, error) {
+// picks, until Shutdown (decision 0231). ctx bounds only the start.
+func Serve(ctx context.Context, g *Gateway) (*Server, error) {
 	var lc net.ListenConfig
-	l, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	l, err := lc.Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("gateway: listening on 127.0.0.1: %w", err)
 	}

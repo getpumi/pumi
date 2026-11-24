@@ -144,9 +144,11 @@ func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*contro
 // with the local blob store and the file's workflow, which ViewService
 // reads, served to the person on the socket beside it (decision 0206), the
 // kernel on the file's workflow, starting each plan from the trunk's tree
-// (decision 0209), and the in-process runner with the file's adapter,
-// whose output goes to out and whose output files go to the local blob
-// store beside the log (decision 0232). It stops when any of them fails.
+// (decision 0209), the model gateway on 127.0.0.1 (decision 0231), and the
+// in-process runner with the file's adapter, whose agent runs go through
+// the gateway, whose output goes to out and whose output files go to the
+// local blob store beside the log (decision 0232). It stops when any of
+// them fails.
 func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) error {
 	cfg, err := readConfig(configPath)
 	if err != nil {
@@ -196,7 +198,13 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		return err
 	}
 	defer func() { _ = os.RemoveAll(work) }()
-	_, _ = fmt.Fprintf(out, "pumi runs the plans of %s; stop it with Ctrl-C.\n", log.Dir())
+	gw, err := serveGateway(ctx, cfg, out)
+	if err != nil {
+		_ = sock.Close()
+		return err
+	}
+	defer gw.shutdown(ctx)
+	_, _ = fmt.Fprintf(out, "pumi runs the plans of %s; stop it with Ctrl-C.\n%s\n", log.Dir(), gw.describe(cfg))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -205,7 +213,7 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		func() error {
 			return runner.Run(ctx, runner.Config{
 				Service: runnerClient, Adapter: cfg.path(cfg.file.GetAdapter()), Repository: dir, WorkDir: work, Output: out,
-				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant),
+				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: gw,
 			})
 		},
 		func() error {
@@ -216,6 +224,13 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 			})
 		},
 	}
+	return runAll(cancel, parts)
+}
+
+// runAll runs each of parts in its own goroutine, calls cancel when any of
+// them returns, and returns the first error that is not a cancel once all
+// have returned.
+func runAll(cancel context.CancelFunc, parts []func() error) error {
 	errs := make(chan error, len(parts))
 	for _, part := range parts {
 		go func() {

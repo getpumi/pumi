@@ -139,7 +139,7 @@ func newFixture(t *testing.T, apiKey string) *fixture {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	srv, err := gateway.Serve(gw)
+	srv, err := gateway.Serve(t.Context(), gw)
 	if err != nil {
 		t.Fatalf("Serve() error = %v", err)
 	}

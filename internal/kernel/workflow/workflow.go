@@ -54,7 +54,9 @@ const (
 	InDoubt Trigger = "in-doubt"
 	// CapReached fires instead of Result on the invocation.finished event
 	// of the invocation that the state started when its outcome is cap
-	// reached: the runner stopped it at its wall-time limit (decision 0203).
+	// reached: the runner stopped it at its wall-time limit, or the model
+	// gateway refused its calls at its token or cost cap (decisions 0203
+	// and 0228).
 	CapReached Trigger = "cap-reached"
 	// Failed fires instead of Result on the invocation.finished event of
 	// the invocation that the state started when its outcome is failed
@@ -436,7 +438,7 @@ func (l *loader) checkRequired(name string, check bool, last map[Trigger]int) {
 		l.problem("state %q starts an agent run or an external action and has no transition on %q; its invocation may be in doubt (decision 0200)", name, InDoubt)
 	}
 	if _, ok := last[CapReached]; !ok {
-		l.problem("state %q starts an invocation and has no transition on %q; its invocation may reach its wall-time limit (decision 0203)", name, CapReached)
+		l.problem("state %q starts an invocation and has no transition on %q; its invocation may reach a cap of its budget (decision 0203)", name, CapReached)
 	}
 	if _, ok := last[Failed]; !ok {
 		l.problem("state %q starts an invocation and has no transition on %q; its invocation may fail (decision 0235)", name, Failed)

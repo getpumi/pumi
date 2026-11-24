@@ -20,6 +20,10 @@
           "$ref": "#/$defs/pumi.runner.v1.Invocation.jsonschema.json",
           "description": "The base of each invocation document: the component's name and version,\n the repository, the capabilities and the budget. The kernel sets the\n rest, and the input tree from the trunk (decision 0165)."
         },
+        "gateway": {
+          "$ref": "#/$defs/pumi.config.v1.Gateway.jsonschema.json",
+          "description": "The model gateway that pumi run serves (decisions 0225 and 0231)."
+        },
         "hardCaps": {
           "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
           "description": "The project's hard caps (decision 0147). When it is not set, pumi uses\n the default hard caps of its release."
@@ -44,6 +48,27 @@
         }
       },
       "title": "Config",
+      "type": "object"
+    },
+    "pumi.config.v1.Gateway.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Gateway configures the model gateway that pumi run serves.",
+      "patternProperties": {
+        "^(api_key_env)$": {
+          "default": "",
+          "description": "The name of the environment variable that holds the provider's API\n key, such as ANTHROPIC_API_KEY. When it is set, pumi run reads the key\n from that variable, which must not be empty, and the gateway sends the\n key on every call. When it is not set, the harness keeps its own\n sign-in, and the gateway forwards the credential that the harness\n sends (decision 0225).",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "apiKeyEnv": {
+          "default": "",
+          "description": "The name of the environment variable that holds the provider's API\n key, such as ANTHROPIC_API_KEY. When it is set, pumi run reads the key\n from that variable, which must not be empty, and the gateway sends the\n key on every call. When it is not set, the harness keeps its own\n sign-in, and the gateway forwards the credential that the harness\n sends (decision 0225).",
+          "type": "string"
+        }
+      },
+      "title": "Gateway",
       "type": "object"
     },
     "pumi.config.v1.Project.jsonschema.json": {

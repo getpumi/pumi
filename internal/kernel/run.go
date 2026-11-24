@@ -568,7 +568,8 @@ func (k *kernel) triggerOf(e *cloudeventsv1.CloudEvent) (*planRun, workflow.Trig
 // its outcome: result when the invocation succeeded, or when it is an
 // external action that happened, resolved on recovery (decisions 0202 and
 // 0235); failed when it failed (decision 0235); and cap_reached when the
-// runner stopped it at its wall-time limit (decision 0203). A cancelled
+// runner stopped it at its wall-time limit or the model gateway refused
+// its calls at its token or cost cap (decisions 0203 and 0228). A cancelled
 // invocation is no trigger: its plan was cancelled first (decision 0192).
 func resultTrigger(e *cloudeventsv1.CloudEvent) workflow.Trigger {
 	var f eventsv1.InvocationFinished
@@ -847,7 +848,7 @@ func (r *planRun) question(trigger string, denied []string) string {
 			r.invocation, r.state, strings.Join(denied, ", then "))
 	}
 	if trigger == string(workflow.CapReached) {
-		return fmt.Sprintf("The invocation %s of the state %s reached its wall-time limit, and the runner stopped it (decisions 0193 and 0203).",
+		return fmt.Sprintf("The invocation %s of the state %s reached a cap of its budget: its wall-time limit, at which the runner stopped it, or its token or cost cap, at which the model gateway refused its calls (decisions 0193, 0203 and 0228).",
 			r.invocation, r.state)
 	}
 	if trigger == string(workflow.Failed) {

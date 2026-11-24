@@ -9,23 +9,11 @@ import (
 	"testing"
 
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
-	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
 )
 
 // errBlobStore is the error of the failing blob store.
 var errBlobStore = errors.New("the disk is full")
-
-// testToken is the gateway token that the runner of withGateway holds.
-const testToken = "pumi-gateway-token-0123456789abcdef"
-
-// withGateway makes the runner resolve a gateway with testToken for the
-// invocation, which the harness invocation carries to the adapter.
-func (f *fixture) withGateway() {
-	f.cfg.gateway = func(*runnerv1.Invocation) *harnessv1.Gateway {
-		return &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:1", Token: testToken}
-	}
-}
 
 // sentBatches returns the log batches sent so far.
 func (f *fakeService) sentBatches() []string {
@@ -39,7 +27,6 @@ func (f *fakeService) sentBatches() []string {
 // pumi run prints hold it (decision 0232).
 func TestACredentialInOneBatchIsMasked(t *testing.T) {
 	f := newFixture(t, "success")
-	f.withGateway()
 	var out syncBuffer
 	f.cfg.Output = &out
 	f.runOne(t)
@@ -60,7 +47,6 @@ func TestACredentialInOneBatchIsMasked(t *testing.T) {
 // the second half. No batch holds either half (decision 0232).
 func TestACredentialSplitAcrossTwoBatchesIsMasked(t *testing.T) {
 	f := newFixture(t, "split credential")
-	f.withGateway()
 	var out syncBuffer
 	f.cfg.Output = &out
 	report := f.runOne(t)
@@ -101,7 +87,6 @@ func TestTheFullLogIsStored(t *testing.T) {
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			f := newFixture(t, tc.mode)
-			f.withGateway()
 			if tc.limit > 0 {
 				f.withLimit(tc.limit)
 			}

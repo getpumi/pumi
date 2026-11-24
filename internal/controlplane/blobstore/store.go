@@ -61,7 +61,7 @@ type Store interface {
 // Local is the local blob store of embedded mode. It keeps each blob in
 // the file blobs/<tenant>/<sha256> of the pumi directory, the hexadecimal
 // SHA-256 of its content (decision 0232). Its methods are safe for
-// concurrent use, also by more than one process.
+// concurrent use.
 type Local struct {
 	// root confines the store's file access to the pumi directory.
 	root *os.Root
@@ -79,12 +79,78 @@ var _ Store = (*Local)(nil)
 
 // OpenLocal opens the local blob store in the pumi directory dir, such as
 // the directory of the embedded log. The directory must exist.
+//
+// OpenLocal removes the temporary files that a Put stopped by a crash left
+// in each tenant's directory, and no other file. The caller must hold the
+// lock of the embedded log in dir, as pumi run does, so that no other
+// process can be writing one of them.
 func OpenLocal(dir string) (*Local, error) {
 	root, err := os.OpenRoot(dir)
 	if err != nil {
 		return nil, fmt.Errorf("blobstore: opening %s: %w", dir, err)
 	}
+	if err := removeTemporaryFiles(root); err != nil {
+		_ = root.Close()
+		return nil, err
+	}
 	return &Local{root: root}, nil
+}
+
+// removeTemporaryFiles removes the temporary files from the directory of
+// each tenant in blobs.
+func removeTemporaryFiles(root *os.Root) error {
+	tenants, err := readDir(root, blobsName)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("blobstore: reading %s: %w", blobsName, err)
+	}
+	for _, tenant := range tenants {
+		if tenant.IsDir() && checkTenant(tenant.Name()) == nil {
+			if err := removeTemporaryFilesIn(root, path.Join(blobsName, tenant.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// removeTemporaryFilesIn removes each regular file whose name starts with
+// tempPrefix from the directory dir of root, and syncs dir when it removed
+// one.
+func removeTemporaryFilesIn(root *os.Root, dir string) error {
+	files, err := readDir(root, dir)
+	if err != nil {
+		return fmt.Errorf("blobstore: reading %s: %w", dir, err)
+	}
+	removed := false
+	for _, f := range files {
+		if !f.Type().IsRegular() || !strings.HasPrefix(f.Name(), tempPrefix) {
+			continue
+		}
+		if err := root.Remove(path.Join(dir, f.Name())); err != nil {
+			return fmt.Errorf("blobstore: removing the temporary file %s: %w", path.Join(dir, f.Name()), err)
+		}
+		removed = true
+	}
+	if !removed {
+		return nil
+	}
+	if err := syncDir(root, dir); err != nil {
+		return fmt.Errorf("blobstore: syncing %s: %w", dir, err)
+	}
+	return nil
+}
+
+// readDir returns the entries of the directory dir of root.
+func readDir(root *os.Root, dir string) ([]fs.DirEntry, error) {
+	d, err := root.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = d.Close() }()
+	return d.ReadDir(-1)
 }
 
 // Close closes the store. A closed store refuses every call.

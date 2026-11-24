@@ -300,3 +300,106 @@ func TestAClosedStoreRefusesCalls(t *testing.T) {
 		t.Error("Put on a closed store = nil; want an error")
 	}
 }
+
+// crashedPut runs a Put of content for tenant that stops before the
+// rename, as a crash would, which leaves a temporary file.
+func crashedPut(t *testing.T, l *Local, tenant, content string) {
+	t.Helper()
+	l.crash = func(step string) bool { return step == "rename" }
+	defer func() { l.crash = nil }()
+	if _, err := l.Put(t.Context(), tenant, strings.NewReader(content)); !errors.Is(err, errCrashed) {
+		t.Fatalf("Put = %v; want the crash", err)
+	}
+}
+
+// reopen closes l and opens the store in pumi again.
+func reopen(t *testing.T, l *Local, pumi string) *Local {
+	t.Helper()
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	again, err := OpenLocal(pumi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = again.Close() })
+	return again
+}
+
+func TestOpeningRemovesTheTemporaryFilesThatACrashLeft(t *testing.T) {
+	l, pumi := newLocal(t)
+	a, err := l.Put(t.Context(), "tenant-a", strings.NewReader("kept a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := l.Put(t.Context(), "tenant-b", strings.NewReader("kept b"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	crashedPut(t, l, "tenant-a", "lost a")
+	crashedPut(t, l, "tenant-b", "lost b")
+	for _, tenant := range []string{"tenant-a", "tenant-b"} {
+		if got := entries(t, filepath.Join(pumi, "blobs", tenant)); len(got) != 2 || !strings.HasPrefix(got[0], tempPrefix) {
+			t.Fatalf("blobs/%s holds %q before the store is opened again, want a temporary file and a blob", tenant, got)
+		}
+	}
+	// A file whose name is not a temporary file's is not the store's to
+	// remove.
+	root, err := os.OpenRoot(pumi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := root.WriteFile(filepath.Join("blobs", "tenant-a", "notes"), []byte("someone's notes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	l = reopen(t, l, pumi)
+	// A hash sorts before "notes": its digits and letters a to f come first.
+	wantA := []string{strings.TrimPrefix(a, "sha256:"), "notes"}
+	if got := entries(t, filepath.Join(pumi, "blobs", "tenant-a")); strings.Join(got, ",") != strings.Join(wantA, ",") {
+		t.Errorf("blobs/tenant-a holds %q after the store was opened again, want %q", got, wantA)
+	}
+	if got := entries(t, filepath.Join(pumi, "blobs", "tenant-b")); len(got) != 1 || got[0] != strings.TrimPrefix(b, "sha256:") {
+		t.Errorf("blobs/tenant-b holds %q after the store was opened again, want only its blob", got)
+	}
+	for tenant, hash := range map[string]string{"tenant-a": a, "tenant-b": b} {
+		if _, err := l.Get(t.Context(), tenant, hash); err != nil {
+			t.Errorf("Get of %s's blob after the store was opened again: %v", tenant, err)
+		}
+	}
+}
+
+func TestOpeningLeavesAStoreWithNoTemporaryFilesUnchanged(t *testing.T) {
+	l, pumi := newLocal(t)
+	hash, err := l.Put(t.Context(), "local", strings.NewReader("kept"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(pumi, "blobs", "local", strings.TrimPrefix(hash, "sha256:")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l = reopen(t, l, pumi)
+	if got := entries(t, filepath.Join(pumi, "blobs", "local")); len(got) != 1 || got[0] != strings.TrimPrefix(hash, "sha256:") {
+		t.Errorf("blobs/local holds %q, want only its blob", got)
+	}
+	again, err := os.Stat(filepath.Join(pumi, "blobs", "local", strings.TrimPrefix(hash, "sha256:")))
+	if err != nil || !again.ModTime().Equal(info.ModTime()) {
+		t.Errorf("the blob changed when the store was opened again: %v, %v", again, err)
+	}
+	if content, err := l.Get(t.Context(), "local", hash); err != nil || string(content) != "kept" {
+		t.Errorf("Get = %q, %v; want the content", content, err)
+	}
+}
+
+func TestOpeningAStoreWithNoBlobs(t *testing.T) {
+	pumi := t.TempDir()
+	l, err := OpenLocal(pumi)
+	if err != nil {
+		t.Fatalf("OpenLocal of a pumi directory with no blobs: %v", err)
+	}
+	_ = l.Close()
+	if got := entries(t, pumi); len(got) != 0 {
+		t.Errorf("the pumi directory holds %q after OpenLocal, want nothing", got)
+	}
+}

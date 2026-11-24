@@ -149,7 +149,8 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		return err
 	}
 	// The local blob store is beside the log, in the pumi directory
-	// (decision 0232).
+	// (decision 0232). It is opened while the log's lock is held, which
+	// lets it remove the temporary files that a crash left.
 	blobs, err := blobstore.OpenLocal(log.Dir())
 	if err != nil {
 		return err

@@ -233,6 +233,9 @@ type fakeService struct {
 	// cancelAt is the heartbeat whose response carries a cancel request,
 	// counted from 1; zero for none.
 	cancelAt int
+	// cancelWhen, when set, makes the response of every heartbeat for which
+	// it reports true carry a cancel request.
+	cancelWhen func() bool
 	// heartbeatErr is the error of every Heartbeat when set.
 	heartbeatErr error
 	// logFailures is how many of the first SendLog calls fail because the
@@ -275,7 +278,7 @@ func (f *fakeService) Heartbeat(_ context.Context, req *runnerv1.HeartbeatReques
 		timeout = testLeaseTimeout
 	}
 	res := &runnerv1.HeartbeatResponse{LeaseTimeout: durationpb.New(timeout)}
-	if f.heartbeats == f.cancelAt {
+	if f.heartbeats == f.cancelAt || (f.cancelWhen != nil && f.cancelWhen()) {
 		res.Cancel = &runnerv1.HeartbeatResponse_Cancel{RequestedBy: "/person/michael"}
 	}
 	return res, nil
@@ -414,6 +417,19 @@ func newFixture(t *testing.T, mode string) *fixture {
 		Grace:       10 * time.Second,
 		LogInterval: 20 * time.Millisecond,
 	}}
+}
+
+// cancelOnceWritten makes the heartbeats carry a cancel request once the
+// fake adapter wrote the file name to its process id directory. A test
+// whose grace period is short waits for the adapter so: a test binary
+// built with -race takes about a second to start, and a cancel at a fixed
+// heartbeat would let the runner kill the adapter before it wrote its
+// process id.
+func (f *fixture) cancelOnceWritten(name string) {
+	f.service.cancelWhen = func() bool {
+		_, err := os.Stat(filepath.Join(f.pidDir, name))
+		return err == nil
+	}
 }
 
 // runOne runs one invocation and fails the test unless the runner claimed
@@ -729,7 +745,7 @@ func TestACancelStopsTheAdapter(t *testing.T) {
 
 func TestAnAdapterThatDoesNotStopIsKilledAfterTheGracePeriod(t *testing.T) {
 	f := newFixture(t, "ignore stop")
-	f.service.cancelAt = 1
+	f.cancelOnceWritten("pid")
 	f.cfg.Grace = 500 * time.Millisecond
 	start := time.Now()
 	report := f.runOne(t)
@@ -752,9 +768,8 @@ func TestProcessesTheAdapterStartedAreKilled(t *testing.T) {
 	} {
 		t.Run(c.mode, func(t *testing.T) {
 			f := newFixture(t, c.mode)
-			f.service.cancelAt = 1
-			if c.outcome == eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
-				f.service.cancelAt = 0
+			if c.outcome == eventsv1.InvocationFinished_OUTCOME_CANCELLED {
+				f.cancelOnceWritten("child")
 			}
 			f.cfg.Grace = 500 * time.Millisecond
 			if report := f.runOne(t); report.GetOutcome() != c.outcome {

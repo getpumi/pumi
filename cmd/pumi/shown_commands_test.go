@@ -136,6 +136,7 @@ func shownConfig(t *testing.T, run shownRun) string {
 			Parallelism: 1,
 			MaxAttempts: map[string]int64{"in-doubt": 1},
 		},
+		Gateway: shownGateway(),
 	}
 	b, err := prototext.MarshalOptions{Multiline: true}.Marshal(cfg)
 	if err != nil {
@@ -144,9 +145,10 @@ func shownConfig(t *testing.T, run shownRun) string {
 	return string(b)
 }
 
-// pumi runs cmd, a pumi command, in the repository and shows it and its
-// output. It fails the test when the command fails.
-func (s *shownCommands) pumi(cmd *exec.Cmd) {
+// pumi runs cmd, a pumi command, in the repository, shows it and its
+// output, and returns the output. It fails the test when the command
+// fails.
+func (s *shownCommands) pumi(cmd *exec.Cmd) string {
 	s.t.Helper()
 	cmd.Dir = s.run.Repository
 	var out bytes.Buffer
@@ -156,6 +158,7 @@ func (s *shownCommands) pumi(cmd *exec.Cmd) {
 	if err != nil {
 		s.t.Fatalf("%s: %v", shownLine(cmd), err)
 	}
+	return out.String()
 }
 
 // shownLine returns the command line of cmd as a person types it.

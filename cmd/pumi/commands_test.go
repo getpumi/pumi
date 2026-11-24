@@ -163,13 +163,19 @@ type commandClone struct {
 // configuration of the user or the system, so the clone's is the only one.
 func newCommandClone(t *testing.T, workflow, mode string) *commandClone {
 	t.Helper()
-	return newCommandCloneWith(t, workflow, mode, "")
+	return newCommandCloneWith(t, workflow, mode, testGateway)
 }
 
-// newCommandCloneWith returns the clone of newCommandClone with more, text
-// format, added to its configuration file, and serves the fake provider
-// that the gateway of its pumi run sends calls to.
-func newCommandCloneWith(t *testing.T, workflow, mode, more string) *commandClone {
+// testGateway is the gateway block of the configuration file of a test
+// clone: the model role of the workflows of internal/kernel/testdata,
+// frontier, goes to testModel and falls back to testFallback (decision
+// 0233).
+const testGateway = `model_roles { key: "frontier" value { model: "` + testModel + `" fallback: "` + testFallback + `" } }`
+
+// newCommandCloneWith returns the clone of newCommandClone with gateway,
+// text format, as the gateway block of its configuration file, and serves
+// the fake provider that the gateway of its pumi run sends calls to.
+func newCommandCloneWith(t *testing.T, workflow, mode, gateway string) *commandClone {
 	t.Helper()
 	p := fakeProvider(t)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
@@ -197,7 +203,8 @@ settings {
   parallelism: 1
   max_attempts { key: "in-doubt" value: 1 }
 }
-%s`, wf, more))
+gateway { %s }
+`, wf, gateway))
 	return &commandClone{t: t, dir: dir, config: config, provider: p}
 }
 

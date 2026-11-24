@@ -48,6 +48,21 @@ message Gateway {
   // sign-in, and the gateway forwards the credential that the harness
   // sends (decision 0225).
   string api_key_env = 1;
+  // The model roles, by name, such as "frontier". Each model role that the
+  // workflow names must be here. A call that names a role goes to the
+  // role's model, and once to its fallback model when the provider answers
+  // with a usage or rate limit (decision 0233).
+  map<string, ModelRole> model_roles = 2;
+}
+
+// ModelRole is the model and the fallback model of a model role (decision
+// 0233). Both must be in the gateway's price table, which lists only
+// models of Anthropic's Messages API, and they must differ.
+message ModelRole {
+  // The model, such as claude-opus-5-5.
+  string model = 1;
+  // The fallback model, such as claude-sonnet-5-5.
+  string fallback = 2;
 }
 
 // Project is the project of the Cedar resource Plan (decision 0141).

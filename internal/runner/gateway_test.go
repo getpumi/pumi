@@ -6,6 +6,7 @@ package runner
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -42,18 +43,24 @@ type fakeGateway struct {
 	open    map[string]bool
 	// read is whether Totals was called while the token was open.
 	read bool
+	// line, when set, is written to the invocation's log that Open gets
+	// when the runner reads the totals, as the gateway writes a fallback or
+	// a retry there during the run.
+	line string
+	log  io.Writer
 }
 
 func (g *fakeGateway) URL() string { return fakeGatewayURL }
 
 func (g *fakeGateway) KeepsSignIn() bool { return g.keepsSignIn }
 
-func (g *fakeGateway) Open(invocation string, budget *harnessv1.Usage) (string, error) {
+func (g *fakeGateway) Open(invocation string, budget *harnessv1.Usage, log io.Writer) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.openErr != nil {
 		return "", g.openErr
 	}
+	g.log = log
 	g.opened = append(g.opened, invocation)
 	g.budgets = append(g.budgets, proto.CloneOf(budget))
 	if g.open == nil {
@@ -70,6 +77,9 @@ func (g *fakeGateway) Totals(token string) (GatewayTotals, error) {
 		return GatewayTotals{}, fmt.Errorf("the token %q is not open", token)
 	}
 	g.read = true
+	if g.line != "" && g.log != nil {
+		_, _ = io.WriteString(g.log, g.line)
+	}
 	return g.totals, nil
 }
 
@@ -253,4 +263,18 @@ func TestTheGatewayIsClosedWhenTheRunnerStops(t *testing.T) {
 	if _, stillOpen := f.gateway.state(); stillOpen {
 		t.Error("the runner left the gateway token open")
 	}
+}
+
+// TestTheGatewayWritesToTheInvocationsLog: what the gateway writes to the
+// log that Open gets, such as a fallback, is in the invocation's log, with
+// the token masked (decisions 0232 and 0233).
+func TestTheGatewayWritesToTheInvocationsLog(t *testing.T) {
+	f := newFixture(t, "success")
+	f.gateway.line = "pumi gateway: 2026-11-24T12:00:00Z: the call fell back with the token " + testToken + "\n"
+	report := f.runOne(t)
+	want := "pumi gateway: 2026-11-24T12:00:00Z: the call fell back with the token " + maskedCredential + "\n"
+	if log := f.service.log(); !strings.Contains(log, want) {
+		t.Errorf("the log does not hold the gateway's line %q; it is\n%s", want, log)
+	}
+	f.checkStoredLog(t, report)
 }

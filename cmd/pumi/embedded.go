@@ -147,8 +147,9 @@ func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*contro
 // (decision 0209), the model gateway on 127.0.0.1 (decision 0231), and the
 // in-process runner with the file's adapter, whose agent runs go through
 // the gateway, whose output goes to out and whose output files go to the
-// local blob store beside the log (decision 0232). It stops when any of
-// them fails.
+// local blob store beside the log (decision 0232). It refuses a workflow
+// that names a model role which the file does not map (decision 0233). It
+// stops when any of them fails.
 func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) error {
 	cfg, err := readConfig(configPath)
 	if err != nil {
@@ -156,6 +157,9 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 	}
 	wf, err := cfg.workflow()
 	if err != nil {
+		return err
+	}
+	if err := checkModelRoles(cfg, wf); err != nil {
 		return err
 	}
 	id, err := person(ctx, dir)

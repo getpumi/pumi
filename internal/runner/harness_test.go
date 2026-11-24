@@ -42,6 +42,7 @@ func document() *runnerv1.Invocation {
 		OutputMessage:     "pumi.events.v1.VerdictRecorded",
 		Isolation:         runnerv1.Invocation_ISOLATION_MICRO_VM,
 		CredentialHandles: []string{handleA, handleB},
+		ModelRole:         "frontier",
 	}
 }
 
@@ -92,6 +93,7 @@ func TestAHarnessInvocationCarriesTheRest(t *testing.T) {
 		Workspace:      r.Workspace,
 		Gateway:        r.Gateway,
 		OutputSchema:   &harnessv1.OutputSchema{Message: doc.GetOutputMessage(), JsonSchema: r.JSONSchema},
+		ModelRole:      doc.GetModelRole(),
 	}
 	if !proto.Equal(got, want) {
 		t.Errorf("HarnessInvocation =\n%v\nwant\n%v", protojson.Format(got), protojson.Format(want))

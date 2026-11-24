@@ -32,6 +32,7 @@ states {
   invoke {
     role: ROLE_AGENT
     kind: KIND_HARNESS
+    model_role: "frontier"
     task: "implement"
     output_message: "pumi.workflow.v1.ImplementationOutput"
   }

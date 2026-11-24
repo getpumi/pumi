@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 )
@@ -54,6 +55,28 @@ type Config struct {
 	// Log receives the gateway's refusals and failed calls; nil discards
 	// them. The gateway never logs the API key or a token.
 	Log *slog.Logger
+	// Roles maps each model role, such as "frontier", to its model and
+	// fallback model (decision 0233). A call that names a role goes to the
+	// role's model; a call that names anything else goes to what it names.
+	Roles map[string]Role
+	// RetryWait is how long the gateway waits before it sends a call once
+	// more after a server error; DefaultRetryWait when zero.
+	RetryWait time.Duration
+}
+
+// DefaultRetryWait is the wait before the retry of a server error when the
+// configuration sets none, the 30 seconds of the regime's MFB-004.
+const DefaultRetryWait = 30 * time.Second
+
+// Role is the model and the fallback model of a model role (decision
+// 0233). Both must be in the price table, so both use Anthropic's Messages
+// API, and they must differ.
+type Role struct {
+	// Model is the model that a call naming the role goes to.
+	Model string
+	// Fallback is the model that the call goes to once when the provider
+	// answers it with a usage or rate limit.
+	Fallback string
 }
 
 // Totals are an invocation's usage as the gateway counted it (decision
@@ -76,9 +99,12 @@ type session struct {
 	// budgetTokens and budgetPicodollars are the caps; zero sets none.
 	budgetTokens      int64
 	budgetPicodollars int64
-	tokens            int64
-	picodollars       int64
-	capReached        bool
+	// log, when set, is the invocation's log, which receives each fallback
+	// and retry.
+	log         io.Writer
+	tokens      int64
+	picodollars int64
+	capReached  bool
 }
 
 // reached reports whether the session's usage has reached a cap.
@@ -96,6 +122,9 @@ type Gateway struct {
 	log   *slog.Logger
 	proxy *httputil.ReverseProxy
 
+	// wait waits before a retry; the tests replace it.
+	wait func(ctx context.Context, d time.Duration) error
+
 	mu       sync.Mutex
 	sessions map[string]*session
 	open     map[string]bool
@@ -106,8 +135,19 @@ func New(cfg Config) (*Gateway, error) {
 	if cfg.Upstream == nil || cfg.Upstream.Scheme == "" || cfg.Upstream.Host == "" {
 		return nil, errors.New("gateway: the provider's URL is not set")
 	}
+	if err := checkRoles(cfg.Roles); err != nil {
+		return nil, err
+	}
+	if cfg.RetryWait == 0 {
+		cfg.RetryWait = DefaultRetryWait
+	}
+	transport := cfg.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
 	g := &Gateway{
 		cfg:      cfg,
+		wait:     sleep,
 		log:      cfg.Log,
 		sessions: map[string]*session{},
 		open:     map[string]bool{},
@@ -117,7 +157,7 @@ func New(cfg Config) (*Gateway, error) {
 	}
 	g.proxy = &httputil.ReverseProxy{
 		Rewrite:        g.rewrite,
-		Transport:      cfg.Transport,
+		Transport:      &attempts{g: g, base: transport},
 		FlushInterval:  -1,
 		ModifyResponse: g.modifyResponse,
 		ErrorHandler:   g.proxyError,
@@ -134,7 +174,9 @@ func (g *Gateway) KeepsSignIn() bool { return g.cfg.APIKey == "" }
 // Open opens an invocation with its budget and returns a random token
 // that is valid for it until Close (decision 0231). A budget's zero tokens
 // or zero cost sets no cap of that kind; its seconds are the runner's.
-func (g *Gateway) Open(invocation string, budget *harnessv1.Usage) (string, error) {
+// The gateway writes each fallback and retry of the invocation's calls to
+// log, the invocation's log, when it is not nil (decision 0233).
+func (g *Gateway) Open(invocation string, budget *harnessv1.Usage, log io.Writer) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("gateway: making a token: %w", err)
@@ -150,6 +192,7 @@ func (g *Gateway) Open(invocation string, budget *harnessv1.Usage) (string, erro
 		invocation:        invocation,
 		budgetTokens:      budget.GetTokens(),
 		budgetPicodollars: budget.GetCostMicrodollars() * 1_000_000,
+		log:               log,
 	}
 	return token, nil
 }
@@ -186,7 +229,14 @@ func (g *Gateway) Close(token string) error {
 // call is what ServeHTTP passes to the proxy about a counted call.
 type call struct {
 	session *session
-	model   string
+	// model is the model the call goes to now.
+	model string
+	// role is the model role the call named, or empty when it named a
+	// model; fallback is the role's fallback model.
+	role, fallback string
+	// body is the body sent to the provider, uncompressed when the call
+	// named a role.
+	body []byte
 }
 
 type callKey struct{}
@@ -216,21 +266,39 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusRequestEntityTooLarge, "request_too_large", "the Pumi model gateway could not read the call")
 		return
 	}
-	r.Body = io.NopCloser(bytes.NewReader(body))
-	r.ContentLength = int64(len(body))
-	model := requestModel(body, r.Header.Get("Content-Encoding"))
-	if _, ok := Price(model); !ok {
-		g.log.Info("gateway refused a call to a model the price table does not list", "invocation", s.invocation, "model", model, "prices", PricesVersion)
-		refuse(w, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("the Pumi model gateway's price table (version %s) does not list the model %q", PricesVersion, model))
+	c := &call{session: s, body: body}
+	plain, readable := decodeBody(body, r.Header.Get("Content-Encoding"))
+	named := requestModel(plain, readable)
+	c.model = named
+	if role, ok := g.cfg.Roles[named]; ok && readable {
+		// The call names a model role: it goes to the role's model, with the
+		// body sent uncompressed (decision 0233).
+		sent, err := withModel(plain, role.Model)
+		if err != nil {
+			g.log.Info("gateway could not set the model of a call", "invocation", s.invocation, "error", err.Error())
+			refuse(w, http.StatusBadRequest, "invalid_request_error", "the Pumi model gateway could not set the model of the call")
+			return
+		}
+		c.model, c.role, c.fallback, c.body = role.Model, named, role.Fallback, sent
+		r.Header.Del("Content-Encoding")
+	}
+	r.Body = io.NopCloser(bytes.NewReader(c.body))
+	r.ContentLength = int64(len(c.body))
+	if _, ok := Price(c.model); !ok {
+		g.log.Info("gateway refused a call to a model the price table does not list", "invocation", s.invocation, "model", c.model, "prices", PricesVersion)
+		refuse(w, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("the Pumi model gateway's price table (version %s) does not list the model %q", PricesVersion, c.model))
 		return
 	}
 	if g.refuseAtCap(s) {
 		g.log.Info("gateway refused a call at the invocation's cap", "invocation", s.invocation)
-		refuse(w, http.StatusForbidden, "permission_error", "the invocation has reached its token or cost cap")
+		refuse(w, http.StatusForbidden, "permission_error", capMessage)
 		return
 	}
-	g.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callKey{}, &call{session: s, model: model})))
+	g.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callKey{}, c)))
 }
+
+// capMessage is the message of a call refused at the invocation's cap.
+const capMessage = "the invocation has reached its token or cost cap"
 
 // token finds the invocation token of a call.
 func (g *Gateway) token(r *http.Request) string {
@@ -273,37 +341,49 @@ func (g *Gateway) refuseAtCap(s *session) bool {
 
 // record adds a call's usage to its session.
 func (g *Gateway) record(c *call, u usage) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	m, ok := Price(u.model)
 	if !ok {
 		m, _ = Price(c.model)
 	}
 	cost := m.picodollars(u)
 	g.log.Debug("gateway counted a call", "invocation", c.session.invocation, "model", c.model, "tokens", u.tokens(), "picodollars", cost)
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	c.session.tokens += u.tokens()
 	c.session.picodollars += cost
 }
 
-// requestModel reads the model a call of the Messages API names. It
-// returns "" when the body cannot be read.
-func requestModel(body []byte, encoding string) string {
-	var r io.Reader = bytes.NewReader(body)
+// decodeBody returns the uncompressed body of a call, and false when it
+// cannot be read.
+func decodeBody(body []byte, encoding string) ([]byte, bool) {
 	switch strings.ToLower(strings.TrimSpace(encoding)) {
 	case "", "identity":
+		return body, true
 	case "gzip":
-		zr, err := gzip.NewReader(r)
+		zr, err := gzip.NewReader(bytes.NewReader(body))
 		if err != nil {
-			return ""
+			return nil, false
 		}
-		r = io.LimitReader(zr, maxRequest)
+		plain, err := io.ReadAll(io.LimitReader(zr, maxRequest))
+		if err != nil {
+			return nil, false
+		}
+		return plain, true
 	default:
+		return nil, false
+	}
+}
+
+// requestModel reads the model that the uncompressed body of a call of
+// the Messages API names. It returns "" when the body cannot be read.
+func requestModel(plain []byte, readable bool) string {
+	if !readable {
 		return ""
 	}
 	var m struct {
 		Model string `json:"model"`
 	}
-	if json.NewDecoder(r).Decode(&m) != nil {
+	if json.Unmarshal(plain, &m) != nil {
 		return ""
 	}
 	return m.Model

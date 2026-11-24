@@ -893,6 +893,7 @@ func (r *planRun) request(state string, inv *workflowv1.Invoke, cause string) (*
 		doc.Input.Tree = r.tree
 	}
 	doc.OutputMessage = inv.GetOutputMessage()
+	doc.ModelRole = inv.GetModelRole()
 	data, err := events.InvocationRequested(r.plan, doc)
 	if err != nil {
 		return nil, fmt.Errorf("the invocation of the state %s: %w", state, err)

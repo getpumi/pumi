@@ -156,7 +156,12 @@ type Gateway struct {
 	// key on every call. When it is not set, the harness keeps its own
 	// sign-in, and the gateway forwards the credential that the harness
 	// sends (decision 0225).
-	ApiKeyEnv     string `protobuf:"bytes,1,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`
+	ApiKeyEnv string `protobuf:"bytes,1,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`
+	// The model roles, by name, such as "frontier". Each model role that the
+	// workflow names must be here. A call that names a role goes to the
+	// role's model, and once to its fallback model when the provider answers
+	// with a usage or rate limit (decision 0233).
+	ModelRoles    map[string]*ModelRole `protobuf:"bytes,2,rep,name=model_roles,json=modelRoles,proto3" json:"model_roles,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -198,6 +203,70 @@ func (x *Gateway) GetApiKeyEnv() string {
 	return ""
 }
 
+func (x *Gateway) GetModelRoles() map[string]*ModelRole {
+	if x != nil {
+		return x.ModelRoles
+	}
+	return nil
+}
+
+// ModelRole is the model and the fallback model of a model role (decision
+// 0233). Both must be in the gateway's price table, which lists only
+// models of Anthropic's Messages API, and they must differ.
+type ModelRole struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The model, such as claude-opus-5-5.
+	Model string `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	// The fallback model, such as claude-sonnet-5-5.
+	Fallback      string `protobuf:"bytes,2,opt,name=fallback,proto3" json:"fallback,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelRole) Reset() {
+	*x = ModelRole{}
+	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelRole) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelRole) ProtoMessage() {}
+
+func (x *ModelRole) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelRole.ProtoReflect.Descriptor instead.
+func (*ModelRole) Descriptor() ([]byte, []int) {
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ModelRole) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *ModelRole) GetFallback() string {
+	if x != nil {
+		return x.Fallback
+	}
+	return ""
+}
+
 // Project is the project of the Cedar resource Plan (decision 0141).
 type Project struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -211,7 +280,7 @@ type Project struct {
 
 func (x *Project) Reset() {
 	*x = Project{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -223,7 +292,7 @@ func (x *Project) String() string {
 func (*Project) ProtoMessage() {}
 
 func (x *Project) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -236,7 +305,7 @@ func (x *Project) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Project.ProtoReflect.Descriptor instead.
 func (*Project) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{2}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Project) GetName() string {
@@ -269,7 +338,7 @@ type Settings struct {
 
 func (x *Settings) Reset() {
 	*x = Settings{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +350,7 @@ func (x *Settings) String() string {
 func (*Settings) ProtoMessage() {}
 
 func (x *Settings) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +363,7 @@ func (x *Settings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Settings.ProtoReflect.Descriptor instead.
 func (*Settings) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{3}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Settings) GetParallelism() int32 {
@@ -324,9 +393,17 @@ const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\aproject\x18\x05 \x01(\v2\x17.pumi.config.v1.ProjectR\aproject\x123\n" +
 	"\thard_caps\x18\x06 \x01(\v2\x16.pumi.harness.v1.UsageR\bhardCaps\x124\n" +
 	"\bsettings\x18\a \x01(\v2\x18.pumi.config.v1.SettingsR\bsettings\x121\n" +
-	"\agateway\x18\b \x01(\v2\x17.pumi.config.v1.GatewayR\agateway\")\n" +
+	"\agateway\x18\b \x01(\v2\x17.pumi.config.v1.GatewayR\agateway\"\xcd\x01\n" +
 	"\aGateway\x12\x1e\n" +
-	"\vapi_key_env\x18\x01 \x01(\tR\tapiKeyEnv\"F\n" +
+	"\vapi_key_env\x18\x01 \x01(\tR\tapiKeyEnv\x12H\n" +
+	"\vmodel_roles\x18\x02 \x03(\v2'.pumi.config.v1.Gateway.ModelRolesEntryR\n" +
+	"modelRoles\x1aX\n" +
+	"\x0fModelRolesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12/\n" +
+	"\x05value\x18\x02 \x01(\v2\x19.pumi.config.v1.ModelRoleR\x05value:\x028\x01\"=\n" +
+	"\tModelRole\x12\x14\n" +
+	"\x05model\x18\x01 \x01(\tR\x05model\x12\x1a\n" +
+	"\bfallback\x18\x02 \x01(\tR\bfallback\"F\n" +
 	"\aProject\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
 	"\x0fprotected_paths\x18\x02 \x03(\tR\x0eprotectedPaths\"\xba\x01\n" +
@@ -350,28 +427,32 @@ func file_pumi_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_pumi_config_v1_config_proto_rawDescData
 }
 
-var file_pumi_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_pumi_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_pumi_config_v1_config_proto_goTypes = []any{
 	(*Config)(nil),        // 0: pumi.config.v1.Config
 	(*Gateway)(nil),       // 1: pumi.config.v1.Gateway
-	(*Project)(nil),       // 2: pumi.config.v1.Project
-	(*Settings)(nil),      // 3: pumi.config.v1.Settings
-	nil,                   // 4: pumi.config.v1.Settings.MaxAttemptsEntry
-	(*v1.Invocation)(nil), // 5: pumi.runner.v1.Invocation
-	(*v11.Usage)(nil),     // 6: pumi.harness.v1.Usage
+	(*ModelRole)(nil),     // 2: pumi.config.v1.ModelRole
+	(*Project)(nil),       // 3: pumi.config.v1.Project
+	(*Settings)(nil),      // 4: pumi.config.v1.Settings
+	nil,                   // 5: pumi.config.v1.Gateway.ModelRolesEntry
+	nil,                   // 6: pumi.config.v1.Settings.MaxAttemptsEntry
+	(*v1.Invocation)(nil), // 7: pumi.runner.v1.Invocation
+	(*v11.Usage)(nil),     // 8: pumi.harness.v1.Usage
 }
 var file_pumi_config_v1_config_proto_depIdxs = []int32{
-	5, // 0: pumi.config.v1.Config.base:type_name -> pumi.runner.v1.Invocation
-	2, // 1: pumi.config.v1.Config.project:type_name -> pumi.config.v1.Project
-	6, // 2: pumi.config.v1.Config.hard_caps:type_name -> pumi.harness.v1.Usage
-	3, // 3: pumi.config.v1.Config.settings:type_name -> pumi.config.v1.Settings
+	7, // 0: pumi.config.v1.Config.base:type_name -> pumi.runner.v1.Invocation
+	3, // 1: pumi.config.v1.Config.project:type_name -> pumi.config.v1.Project
+	8, // 2: pumi.config.v1.Config.hard_caps:type_name -> pumi.harness.v1.Usage
+	4, // 3: pumi.config.v1.Config.settings:type_name -> pumi.config.v1.Settings
 	1, // 4: pumi.config.v1.Config.gateway:type_name -> pumi.config.v1.Gateway
-	4, // 5: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	5, // 5: pumi.config.v1.Gateway.model_roles:type_name -> pumi.config.v1.Gateway.ModelRolesEntry
+	6, // 6: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
+	2, // 7: pumi.config.v1.Gateway.ModelRolesEntry.value:type_name -> pumi.config.v1.ModelRole
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_pumi_config_v1_config_proto_init() }
@@ -385,7 +466,7 @@ func file_pumi_config_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_config_v1_config_proto_rawDesc), len(file_pumi_config_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

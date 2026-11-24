@@ -21,6 +21,7 @@ states {
   parent: "active"
   invoke {
     kind: KIND_HARNESS
+    model_role: "frontier"
     task: "plan"
     output_message: "pumi.workflow.v1.PlanningOutput"
   }
@@ -84,6 +85,7 @@ states {
   invoke {
     role: ROLE_GATE
     kind: KIND_HARNESS
+    model_role: "frontier"
     task: "review-plan"
     output_message: "pumi.workflow.v1.SecondOpinion"
   }

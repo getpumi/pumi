@@ -315,6 +315,11 @@
           "description": "The environment, as the digest of a devcontainer image. The invocation\n runs in a fresh container from it.",
           "type": "string"
         },
+        "^(model_role)$": {
+          "default": "",
+          "description": "The model role of an agent run, from the workflow state that started\n it (decision 0233).",
+          "type": "string"
+        },
         "^(output_message)$": {
           "default": "",
           "description": "The output schema: the full name of a protobuf message in the api\n module (decision 0160).",
@@ -382,6 +387,11 @@
           "default": 0,
           "description": "The isolation level.",
           "title": "Isolation"
+        },
+        "modelRole": {
+          "default": "",
+          "description": "The model role of an agent run, from the workflow state that started\n it (decision 0233).",
+          "type": "string"
         },
         "outputMessage": {
           "default": "",

@@ -47,6 +47,11 @@ message Invocation {
   Gateway gateway = 9;
   // The schema of the structured output.
   OutputSchema output_schema = 10;
+  // The model role of an agent run, such as "frontier". The adapter asks
+  // its harness for the role by name, as the model of its calls, and the
+  // model gateway sends each call to the model that the configuration maps
+  // the role to (decision 0233).
+  string model_role = 11;
 }
 
 // Component is the component that an invocation runs, with its name and

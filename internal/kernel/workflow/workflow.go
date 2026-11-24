@@ -142,6 +142,7 @@ const taskHeader = "<!--\nSPDX-License-Identifier: Apache-2.0\nSPDX-FileCopyrigh
 // transition in a state is not always allowed (decisions 0168 and 0169).
 // It also refuses what the machine could not run: a state with no entry, a
 // transition with no trigger, an invocation with no role or kind, a
+// harness with no model role or another kind of component with one, a
 // superstate that does more than wait or that a transition or the initial
 // state names, a final state with transitions, a result or in-doubt
 // trigger in a state that starts no invocation, an in-doubt trigger in a
@@ -315,7 +316,28 @@ func (l *loader) checkInvoke(state string, inv *workflowv1.Invoke) {
 	if !hasMessage(inv.GetOutputMessage()) {
 		l.problem("state %q expects the output message %q, which the api module does not have", state, inv.GetOutputMessage())
 	}
+	switch harness := inv.GetKind() == workflowv1.Invoke_KIND_HARNESS; {
+	case harness && inv.GetModelRole() == "":
+		l.problem("state %q starts a harness and names no model role (decision 0233)", state)
+	case !harness && inv.GetModelRole() != "":
+		l.problem("state %q starts a %s and names the model role %q, which only an agent run has (decision 0233)", state, kindName(inv.GetKind()), inv.GetModelRole())
+	}
 	l.readTask(state, inv.GetTask())
+}
+
+// kindName names a kind of component in a problem.
+func kindName(k workflowv1.Invoke_Kind) string {
+	switch k {
+	case workflowv1.Invoke_KIND_HARNESS:
+		return "harness"
+	case workflowv1.Invoke_KIND_CHECK:
+		return "check"
+	case workflowv1.Invoke_KIND_EXTERNAL_ACTION:
+		return "external action"
+	case workflowv1.Invoke_KIND_UNSPECIFIED:
+		return "component of no kind"
+	}
+	return k.String()
 }
 
 // hasMessage reports whether name is the full name of a message in a file
@@ -493,4 +515,18 @@ func (l *loader) checkReachable() {
 			l.problem("state %q cannot be reached from the initial state %q", s.GetName(), l.def.GetInitial())
 		}
 	}
+}
+
+// ModelRoles returns the model roles that the states that start a harness
+// name, sorted, each once (decision 0233). The configuration of the model
+// gateway must map each of them.
+func (w *Workflow) ModelRoles() []string {
+	var roles []string
+	for _, s := range w.def.GetStates() {
+		if r := s.GetInvoke().GetModelRole(); r != "" && !slices.Contains(roles, r) {
+			roles = append(roles, r)
+		}
+	}
+	slices.Sort(roles)
+	return roles
 }

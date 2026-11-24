@@ -31,10 +31,10 @@ func TestTheHarnessInvocationHasTheFieldsOf0158(t *testing.T) {
 	inv := (&harnessv1.Invocation{}).ProtoReflect().Descriptor()
 	want := []string{
 		"budget", "capabilities", "component", "gateway", "idempotency_key", "input",
-		"invocation", "output_schema", "role", "workspace",
+		"invocation", "model_role", "output_schema", "role", "workspace",
 	}
 	if got := fieldNames(inv); !slices.Equal(got, want) {
-		t.Errorf("Invocation has %q, want %q (decision 0158)", got, want)
+		t.Errorf("Invocation has %q, want %q (decisions 0158 and 0233)", got, want)
 	}
 	gateway := fieldOf(t, inv, "gateway").Message()
 	if got := fieldNames(gateway); !slices.Equal(got, []string{"base_url", "keeps_sign_in", "token"}) {

@@ -85,8 +85,10 @@ type Gateway interface {
 	// is when the gateway holds no API key (decision 0225).
 	KeepsSignIn() bool
 	// Open opens the invocation with its budget and returns a random token
-	// that is valid for it until Close.
-	Open(invocation string, budget *harnessv1.Usage) (string, error)
+	// that is valid for it until Close. The gateway writes each fallback
+	// and retry of the invocation's calls to log, the invocation's log
+	// (decision 0233).
+	Open(invocation string, budget *harnessv1.Usage, log io.Writer) (string, error)
 	// Totals returns the usage that the gateway counted for the token's
 	// invocation.
 	Totals(token string) (GatewayTotals, error)
@@ -276,7 +278,7 @@ func (r *run) openGateway() (*harnessv1.Gateway, error) {
 	if r.doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN {
 		return nil, nil
 	}
-	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.doc.GetBudget())
+	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.doc.GetBudget(), r.log)
 	if err != nil {
 		return nil, fmt.Errorf("the model gateway could not open the invocation: %w", err)
 	}

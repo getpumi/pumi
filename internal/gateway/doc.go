@@ -13,6 +13,12 @@
 // 0230) and refuses an invocation's next call once its tokens or cost reach
 // its budget (decision 0228).
 //
+// It sends a call that names a model role to the role's model. Before any
+// of the answer reaches the harness, it sends a call answered with a usage
+// or rate limit once to the role's fallback model, and a call answered with
+// a server error once more to the same model after a wait. It writes each
+// fallback and retry to the invocation's log (decision 0233).
+//
 // Import rule: it may import the standard library, internal/shared, the api
 // module (getpumi.dev/pumi/api), the third-party modules on its allowlist and
 // its own subpackages. It never imports another component or anything under

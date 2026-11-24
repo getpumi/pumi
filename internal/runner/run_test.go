@@ -392,7 +392,10 @@ type fixture struct {
 	repo    *testRepo
 	service *fakeService
 	blobs   *fakeBlobs
-	cfg     Config
+	gateway *fakeGateway
+	// doc is the invocation document that the fake service hands out.
+	doc *runnerv1.Invocation
+	cfg Config
 	// pidDir is the directory in which the fake adapter writes its
 	// process id.
 	pidDir string
@@ -413,8 +416,10 @@ func newFixture(t *testing.T, mode string) *fixture {
 		Role:           harnessv1.Role_ROLE_AGENT,
 		Capabilities: &harnessv1.Capabilities{
 			WritePaths: []string{"internal/runner/**"},
+			Network:    &harnessv1.Capabilities_Network{Access: harnessv1.Capabilities_Network_ACCESS_GATEWAY},
 			Tools:      []harnessv1.Capabilities_ToolKind{harnessv1.Capabilities_TOOL_KIND_EDIT},
 		},
+		Budget:            &harnessv1.Usage{Tokens: 50_000, CostMicrodollars: 70_000},
 		OutputMessage:     "pumi.workflow.v1.ImplementationOutput",
 		CredentialHandles: []string{"handle-never-sent"},
 	}
@@ -425,9 +430,11 @@ func newFixture(t *testing.T, mode string) *fixture {
 		LeaseTimeout:    durationpb.New(testLeaseTimeout),
 	}}
 	blobs := &fakeBlobs{}
-	return &fixture{repo: repo, service: service, blobs: blobs, pidDir: pidDir, cfg: Config{
+	gateway := &fakeGateway{totals: GatewayTotals{Tokens: gatewayTokens, CostMicrodollars: gatewayCost}}
+	return &fixture{repo: repo, service: service, blobs: blobs, gateway: gateway, doc: doc, pidDir: pidDir, cfg: Config{
 		Service:    service,
 		Blobs:      blobs,
+		Gateway:    gateway,
 		Adapter:    "/proc/self/exe",
 		Repository: repo.dir,
 		WorkDir:    t.TempDir(),
@@ -522,8 +529,8 @@ func TestASuccessfulInvocation(t *testing.T) {
 	if err := protojson.Unmarshal([]byte(result.GetOutput()), out); err != nil || out.GetSummary() != "done" {
 		t.Errorf("the output %q parses to %v, %v; want the summary done", result.GetOutput(), out, err)
 	}
-	if u := result.GetUsage(); u.GetTokens() != 10 || u.GetCostMicrodollars() != 20 || u.GetSeconds() != 1 {
-		t.Errorf("the usage is %v, want the adapter's", u)
+	if u := result.GetUsage(); u.GetTokens() != gatewayTokens || u.GetCostMicrodollars() != gatewayCost || u.GetSeconds() < 1 {
+		t.Errorf("the usage is %v, want the gateway's totals and the measured seconds (decision 0230)", u)
 	}
 	if f.service.heartbeats == 0 {
 		t.Error("the runner sent no heartbeat while the adapter ran")
@@ -545,8 +552,8 @@ func TestTheAdapterGetsTheHarnessInvocation(t *testing.T) {
 	if schema.GetMessage() != "pumi.workflow.v1.ImplementationOutput" || !strings.Contains(schema.GetJsonSchema(), `"summary"`) {
 		t.Errorf("the output schema is %v, want ImplementationOutput's", schema)
 	}
-	if inv.GetGateway() != nil {
-		t.Errorf("the gateway is %v, want none until E7 (decision 0185)", inv.GetGateway())
+	if g := inv.GetGateway(); g.GetBaseUrl() != fakeGatewayURL || g.GetToken() != maskedCredential || g.GetKeepsSignIn() {
+		t.Errorf("the gateway is %v, want the fake gateway's URL, the masked token and no sign-in kept", g)
 	}
 	if strings.Contains(f.service.log(), "handle-never-sent") {
 		t.Error("the adapter got a credential handle")
@@ -615,8 +622,8 @@ func TestAFailedRun(t *testing.T) {
 	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_FAILED {
 		t.Errorf("the outcome is %v, want failed", report.GetOutcome())
 	}
-	if report.GetResult().GetUsage().GetTokens() != 10 {
-		t.Errorf("the usage is %v, want the adapter's", report.GetResult().GetUsage())
+	if report.GetResult().GetUsage().GetTokens() != gatewayTokens {
+		t.Errorf("the usage is %v, want the gateway's totals", report.GetResult().GetUsage())
 	}
 }
 
@@ -843,7 +850,7 @@ var unreachable = connect.NewError(connect.CodeUnavailable, "the control plane c
 // limit seconds, and tokens and cost that the adapter's own figures are
 // not.
 func (f *fixture) withLimit(seconds int64) {
-	f.service.claim.Invocation.Budget = &harnessv1.Usage{Tokens: 5_000, CostMicrodollars: 7_000, Seconds: seconds}
+	f.service.claim.Invocation.Budget = &harnessv1.Usage{Tokens: 50_000, CostMicrodollars: 70_000, Seconds: seconds}
 }
 
 // elapsed reports the wall time of RunOne.
@@ -870,11 +877,11 @@ func TestTheWallTimeLimitStopsTheAdapter(t *testing.T) {
 	if !strings.Contains(f.service.log(), runnerPrefix) || !strings.Contains(f.service.log(), "wall-time limit") {
 		t.Errorf("the log does not say that the invocation reached its wall-time limit; it is\n%s", f.service.log())
 	}
-	// The adapter reported its usage, so the tokens and cost are its own;
-	// the seconds are the measured wall time (decision 0204).
+	// The tokens and cost are the gateway's totals; the seconds are the
+	// measured wall time (decisions 0204 and 0230).
 	u := report.GetResult().GetUsage()
-	if u.GetTokens() != 10 || u.GetCostMicrodollars() != 20 {
-		t.Errorf("the usage is %v, want the adapter's tokens and cost", u)
+	if u.GetTokens() != gatewayTokens || u.GetCostMicrodollars() != gatewayCost {
+		t.Errorf("the usage is %v, want the gateway's tokens and cost", u)
 	}
 	if u.GetSeconds() < 1 || u.GetSeconds() > int64(elapsed/time.Second)+1 {
 		t.Errorf("the usage has %d seconds, want the measured wall time, %v", u.GetSeconds(), elapsed)
@@ -884,7 +891,7 @@ func TestTheWallTimeLimitStopsTheAdapter(t *testing.T) {
 	}
 }
 
-func TestAnAdapterKilledAtTheLimitCountsItsWholeBudget(t *testing.T) {
+func TestAnAdapterKilledAtTheLimitCountsTheGatewaysTotals(t *testing.T) {
 	f := newFixture(t, "ignore stop")
 	f.withLimit(1)
 	f.cfg.Grace = 500 * time.Millisecond
@@ -895,11 +902,11 @@ func TestAnAdapterKilledAtTheLimitCountsItsWholeBudget(t *testing.T) {
 	if elapsed < time.Second+f.cfg.Grace {
 		t.Errorf("the runner killed the adapter after %v, before the limit and the grace period", elapsed)
 	}
-	// The adapter wrote no result, so the tokens and cost are the budget's
+	// The adapter wrote no result, but the gateway counted its calls
 	// (decision 0204).
 	u := report.GetResult().GetUsage()
-	if u.GetTokens() != 5_000 || u.GetCostMicrodollars() != 7_000 {
-		t.Errorf("the usage is %v, want the tokens and cost of the budget", u)
+	if u.GetTokens() != gatewayTokens || u.GetCostMicrodollars() != gatewayCost {
+		t.Errorf("the usage is %v, want the gateway's totals", u)
 	}
 	if u.GetSeconds() < 1 {
 		t.Errorf("the usage has %d seconds, want the measured wall time, %v", u.GetSeconds(), elapsed)
@@ -914,8 +921,8 @@ func TestAnAdapterDoneBeforeTheLimitSucceeds(t *testing.T) {
 	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
 		t.Errorf("the outcome is %v, want succeeded; the log is\n%s", report.GetOutcome(), f.service.log())
 	}
-	if u := report.GetResult().GetUsage(); u.GetTokens() != 10 || u.GetCostMicrodollars() != 20 || u.GetSeconds() != 1 {
-		t.Errorf("the usage is %v, want the adapter's", u)
+	if u := report.GetResult().GetUsage(); u.GetTokens() != gatewayTokens || u.GetCostMicrodollars() != gatewayCost || u.GetSeconds() < 1 {
+		t.Errorf("the usage is %v, want the gateway's totals and the measured seconds", u)
 	}
 }
 

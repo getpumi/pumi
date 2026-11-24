@@ -720,7 +720,8 @@ type Trigger_InDoubt struct {
 }
 
 type Trigger_CapReached struct {
-	// The state's invocation reached its wall-time limit.
+	// The state's invocation reached a cap of its budget: its wall-time
+	// limit, or its token or cost cap at the model gateway.
 	CapReached *Trigger_InvocationCapReached `protobuf:"bytes,5,opt,name=cap_reached,json=capReached,proto3,oneof"`
 }
 

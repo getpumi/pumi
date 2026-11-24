@@ -438,11 +438,11 @@ func usageIn(t *testing.T, d *eventsv1.DecisionMade) *factsv1.Usage {
 	return nil
 }
 
-func TestAdvanceReadsTheAdaptersUsageWhenNoGatewayCounted(t *testing.T) {
-	// Until E7 no gateway counts an invocation, so the usage fact is the
-	// usage that the adapter reported in the invocation's invocation.result,
-	// and the hard caps apply to it (decision 0185). The usage projection is
-	// the real one, and no gateway event is in the log.
+func TestAdvanceReadsTheUsageOfTheResult(t *testing.T) {
+	// The usage fact is the usage of the invocation's invocation.result,
+	// which the runner fills with the model gateway's totals (decision
+	// 0230), and the hard caps apply to it. The usage projection is the
+	// real one.
 	caps := policy.DefaultHardCaps()
 	permitted, forbidden := []string{"core.workflow-actions", "permit-all"}, []string{"invariant.caps"}
 	for _, c := range []struct {

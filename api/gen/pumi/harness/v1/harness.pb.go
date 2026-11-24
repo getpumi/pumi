@@ -320,8 +320,8 @@ func (Result_Status) EnumDescriptor() ([]byte, []int) {
 // 0024): it leaves out what only the runner needs, which is the credential
 // handles, the image digest and the isolation level, and adds what it has
 // resolved, which is the workspace, the model gateway and the output schema
-// (decision 0158). The model gateway is optional until E7 (decision 0185). An adapter never receives a credential handle or a
-// provider key.
+// (decision 0158). An agent run always has the model gateway (decision
+// 0226). An adapter never receives a credential handle or a provider key.
 type Invocation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The invocation.
@@ -339,16 +339,16 @@ type Invocation struct {
 	// own settings; the runner checks the workspace after the run (decision
 	// 0159).
 	Capabilities *Capabilities `protobuf:"bytes,6,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
-	// The budget. The model gateway's caps enforce it; the adapter can also
-	// pass it to its harness. Until E7, when there is no gateway, only the
-	// adapter and its harness enforce it during the run (decision 0185).
+	// The budget. The model gateway's caps enforce its tokens and cost, and
+	// the runner its seconds; the adapter can also pass it to its harness
+	// (decisions 0193 and 0228).
 	Budget *Usage `protobuf:"bytes,7,opt,name=budget,proto3" json:"budget,omitempty"`
 	// The absolute path of the workspace, a checkout of the input tree, in
 	// which the runner started the adapter.
 	Workspace string `protobuf:"bytes,8,opt,name=workspace,proto3" json:"workspace,omitempty"`
 	// The model gateway, through which every model call goes (decision 0036).
-	// The gateway is optional until E7: when it is not set, the harness uses
-	// its own sign-in on the machine that runs it (decision 0185).
+	// An agent run always has it; the runner refuses one without it (decision
+	// 0226). A check or an external action has none.
 	Gateway *Gateway `protobuf:"bytes,9,opt,name=gateway,proto3" json:"gateway,omitempty"`
 	// The schema of the structured output.
 	OutputSchema  *OutputSchema `protobuf:"bytes,10,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
@@ -732,7 +732,13 @@ type Gateway struct {
 	BaseUrl string `protobuf:"bytes,1,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
 	// The short-lived token, valid for this invocation only. The runner masks
 	// it in the log.
-	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	Token string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	// Whether the harness keeps its own sign-in, such as a Claude
+	// subscription. When it does, the gateway forwards the harness's own
+	// credential, and the harness sends the token in the header X-Pumi-Token
+	// on every call. When it does not, the gateway holds the provider's API
+	// key, and the harness sends the token as its API key (decision 0225).
+	KeepsSignIn   bool `protobuf:"varint,3,opt,name=keeps_sign_in,json=keepsSignIn,proto3" json:"keeps_sign_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -779,6 +785,13 @@ func (x *Gateway) GetToken() string {
 		return x.Token
 	}
 	return ""
+}
+
+func (x *Gateway) GetKeepsSignIn() bool {
+	if x != nil {
+		return x.KeepsSignIn
+	}
+	return false
 }
 
 // OutputSchema is the schema of an invocation's structured output (decision
@@ -855,11 +868,10 @@ type Result struct {
 	// uploads them to the blob store and records them by hash (decision
 	// 0033).
 	OutputFiles []string `protobuf:"bytes,3,rep,name=output_files,json=outputFiles,proto3" json:"output_files,omitempty"`
-	// The adapter's own usage figures. When the model gateway counted the
-	// invocation, its count is the one that counts (decision 0036). The
-	// gateway is optional until E7, and when no gateway counted the
-	// invocation, these figures are the usage of its invocation.result, which
-	// the usage fact and the hard caps read (decision 0185).
+	// The adapter's own usage figures, for information only. The runner
+	// writes them to the invocation's log; the usage of invocation.result is
+	// the model gateway's totals with the wall time the runner measured
+	// (decision 0230).
 	Usage         *Usage `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1035,10 +1047,11 @@ const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\x05Usage\x12\x16\n" +
 	"\x06tokens\x18\x01 \x01(\x03R\x06tokens\x12+\n" +
 	"\x11cost_microdollars\x18\x02 \x01(\x03R\x10costMicrodollars\x12\x18\n" +
-	"\aseconds\x18\x03 \x01(\x03R\aseconds\":\n" +
+	"\aseconds\x18\x03 \x01(\x03R\aseconds\"^\n" +
 	"\aGateway\x12\x19\n" +
 	"\bbase_url\x18\x01 \x01(\tR\abaseUrl\x12\x14\n" +
-	"\x05token\x18\x02 \x01(\tR\x05token\"I\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\x12\"\n" +
+	"\rkeeps_sign_in\x18\x03 \x01(\bR\vkeepsSignIn\"I\n" +
 	"\fOutputSchema\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1f\n" +
 	"\vjson_schema\x18\x02 \x01(\tR\n" +

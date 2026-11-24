@@ -70,11 +70,40 @@ type Config struct {
 	// is written, each line after the invocation's id and ": ", so that
 	// pumi run prints it (getpumi/pumi#88).
 	Output io.Writer
+	// Gateway is the model gateway, through which every agent run's model
+	// calls go. The runner refuses an agent run when it is nil (decisions
+	// 0226 and 0231).
+	Gateway Gateway
+}
 
-	// gateway, when set, resolves the model gateway of an invocation. The
-	// tests set it until the runner opens each agent run with the gateway
-	// (getpumi/pumi#100).
-	gateway func(*runnerv1.Invocation) *harnessv1.Gateway
+// Gateway is the model gateway as the runner sees it (decisions 0225,
+// 0230 and 0231).
+type Gateway interface {
+	// URL is the base URL that a harness is given.
+	URL() string
+	// KeepsSignIn reports whether the harness keeps its own sign-in, which
+	// is when the gateway holds no API key (decision 0225).
+	KeepsSignIn() bool
+	// Open opens the invocation with its budget and returns a random token
+	// that is valid for it until Close.
+	Open(invocation string, budget *harnessv1.Usage) (string, error)
+	// Totals returns the usage that the gateway counted for the token's
+	// invocation.
+	Totals(token string) (GatewayTotals, error)
+	// Close ends the token.
+	Close(token string) error
+}
+
+// GatewayTotals are an invocation's usage as the gateway counted it.
+type GatewayTotals struct {
+	// Tokens are all the tokens of every call (decision 0227).
+	Tokens int64
+	// CostMicrodollars is the reference cost at the list prices (decision
+	// 0229).
+	CostMicrodollars int64
+	// CapReached is set when the gateway refused a call of the invocation
+	// because it had reached its token or cost cap (decision 0228).
+	CapReached bool
 }
 
 // Blobs is the blob store as the runner sees it: bound to the runner's
@@ -145,13 +174,24 @@ func Run(ctx context.Context, cfg Config) error {
 // the result by its hash, whatever the outcome (decisions 0034, 0163 and
 // 0232).
 //
+// Before it starts the adapter of an agent run, the runner opens the
+// invocation with the model gateway and passes the gateway's base URL, the
+// token and whether the harness keeps its own sign-in in the harness
+// invocation; after the adapter exits, it reads the gateway's totals and
+// closes the token. It refuses an agent run when it has no gateway, or
+// when the run's network access does not reach the gateway (decisions
+// 0226 and 0231). The usage of the result is the gateway's totals, none
+// for a check or an external action, with the wall time measured from the
+// start of the adapter; the adapter's own figures go to the log (decision
+// 0230). When the gateway refused a call of the invocation at its token or
+// cost cap, the outcome is cap reached, whatever the adapter reports
+// (decision 0228).
+//
 // When a heartbeat carries a cancel request, the runner closes the
 // adapter's standard input, kills it after the grace period and reports
 // the outcome cancelled (decision 0035). When the wall time reaches the
 // budget's seconds, it stops the adapter the same way and reports the
-// outcome cap reached, with the measured seconds and, when the adapter
-// reported none, the tokens and cost of the budget (decisions 0193 and
-// 0204). When ctx is done, or a call of RunnerService fails while the
+// outcome cap reached (decisions 0193 and 0204). When ctx is done, or a call of RunnerService fails while the
 // adapter runs, it stops the adapter the same way, reports nothing and
 // returns the error: an invocation with no result is in doubt (decisions
 // 0182 and 0199). A call that cannot reach the control plane ends the
@@ -193,6 +233,8 @@ type run struct {
 	claimed time.Time
 	doc     *runnerv1.Invocation
 	log     *logBuffer
+	// token is the invocation's gateway token while it is open.
+	token string
 }
 
 // do runs the invocation in a new directory, which it removes after, and
@@ -206,29 +248,74 @@ func (r *run) do(ctx context.Context) error {
 	work, index := filepath.Join(dir, "workspace"), filepath.Join(dir, "index")
 	result := &eventsv1.InvocationResult{Invocation: r.doc.GetInvocation()}
 	ex, mt, err := r.start(ctx, work, index)
+	// The adapter has exited, or never started: the runner reads the
+	// gateway's totals and ends the token (decisions 0230 and 0231).
+	totals, gerr := r.closeGateway()
 	if err != nil {
 		return r.report(ctx, result, eventsv1.InvocationFinished_OUTCOME_FAILED, err)
 	}
 	if ex.ended != nil {
 		return ex.ended
 	}
-	outcome, err := r.judge(ctx, ex, mt, work, index, result)
+	if gerr != nil {
+		return r.report(ctx, result, eventsv1.InvocationFinished_OUTCOME_FAILED, gerr)
+	}
+	outcome, err := r.judge(ctx, ex, mt, work, index, totals, result)
 	return r.report(ctx, result, outcome, err)
+}
+
+// openGateway opens an agent run with the model gateway, with its budget,
+// and returns how the harness reaches the gateway; the log masks the token
+// (decisions 0226, 0231 and 0232). It returns nil for any other kind of
+// invocation, which makes no model calls. It refuses an agent run that
+// checkAgentRun refuses.
+func (r *run) openGateway() (*harnessv1.Gateway, error) {
+	if err := checkAgentRun(r.doc, r.cfg.Gateway != nil); err != nil {
+		return nil, err
+	}
+	if r.doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN {
+		return nil, nil
+	}
+	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.doc.GetBudget())
+	if err != nil {
+		return nil, fmt.Errorf("the model gateway could not open the invocation: %w", err)
+	}
+	r.token = token
+	r.log.mask(token)
+	return &harnessv1.Gateway{BaseUrl: r.cfg.Gateway.URL(), Token: token, KeepsSignIn: r.cfg.Gateway.KeepsSignIn()}, nil
+}
+
+// closeGateway reads the totals of the open token and closes it. It
+// returns no totals when no token is open.
+func (r *run) closeGateway() (GatewayTotals, error) {
+	if r.token == "" {
+		return GatewayTotals{}, nil
+	}
+	token := r.token
+	r.token = ""
+	totals, err := r.cfg.Gateway.Totals(token)
+	if cerr := r.cfg.Gateway.Close(token); cerr != nil {
+		r.log.note("the model gateway could not close the token of %s: %v", r.doc.GetInvocation(), cerr)
+	}
+	if err != nil {
+		return GatewayTotals{}, fmt.Errorf("the model gateway's totals could not be read: %w", err)
+	}
+	return totals, nil
 }
 
 // start checks the input tree out into work, finds the output message and
 // its JSON Schema, and runs the adapter. An error fails the invocation
 // before the adapter starts.
 func (r *run) start(ctx context.Context, work, index string) (*execution, protoreflect.MessageType, error) {
+	gateway, err := r.openGateway()
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := r.repo.checkout(ctx, r.doc.GetInput().GetTree(), work, index); err != nil {
 		return nil, nil, fmt.Errorf("the input tree could not be checked out: %w", err)
 	}
 	var mt protoreflect.MessageType
-	resolved := Resolved{Workspace: work}
-	if r.cfg.gateway != nil {
-		resolved.Gateway = r.cfg.gateway(r.doc)
-	}
-	r.log.mask(resolved.Gateway.GetToken())
+	resolved := Resolved{Workspace: work, Gateway: gateway}
 	if name := r.doc.GetOutputMessage(); name != "" {
 		var err error
 		if mt, resolved.JSONSchema, err = api.Output(name); err != nil {

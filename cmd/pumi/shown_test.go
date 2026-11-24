@@ -23,6 +23,7 @@ import (
 
 	"getpumi.dev/pumi/api/events"
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
@@ -42,8 +43,8 @@ import (
 // skipped unless PUMI_SHOWN_CLONE names a local clone of ScaleWholesale and
 // PUMI_SHOWN_PLAN the path, in that clone, of a plan of a change in
 // openspec/changes/archive. The Claude Code adapter is PUMI_SHOWN_ADAPTER,
-// or adapter-claude-code on the PATH, and claude runs on its own sign-in
-// (decision 0185).
+// or adapter-claude-code on the PATH, and claude keeps its own sign-in and
+// reaches the model through the gateway (decisions 0225 and 0226).
 //
 // Each run makes a new git repository in a temporary directory that reads
 // the objects of the clone, checks it out at the plan's base commit and adds
@@ -51,7 +52,7 @@ import (
 // as the input. That working tree is the input tree. The repository has no
 // remote, so nothing is pushed. pumi runs in embedded mode: the embedded
 // log in that repository, the control plane, the kernel on the spike
-// workflow, and the in-process runner with the adapter.
+// workflow, the model gateway and the in-process runner with the adapter.
 const (
 	envClone   = "PUMI_SHOWN_CLONE"
 	envPlan    = "PUMI_SHOWN_PLAN"
@@ -241,8 +242,8 @@ func writeFile(t *testing.T, dir, name, content string) {
 // shownBase is the part of each invocation document that the wiring of the
 // shown run sets: the adapter, the input tree, the capabilities and the
 // budget. The run may read, edit the plan's paths and run Go's tests;
-// claude reaches the model on its own sign-in, so the network access names
-// no host for the web tools.
+// claude reaches the model through the gateway, and the network access
+// names no host for the web tools (decision 0226).
 func shownBase(run shownRun) *runnerv1.Invocation {
 	return &runnerv1.Invocation{
 		Component: &harnessv1.Component{Name: "adapter-claude-code", Version: "0"},
@@ -250,7 +251,7 @@ func shownBase(run shownRun) *runnerv1.Invocation {
 		Capabilities: &harnessv1.Capabilities{
 			WritePaths: run.Paths,
 			Commands:   []string{"go -C tools/regime test", "go test"},
-			Network:    &harnessv1.Capabilities_Network{Access: harnessv1.Capabilities_Network_ACCESS_NONE},
+			Network:    &harnessv1.Capabilities_Network{Access: harnessv1.Capabilities_Network_ACCESS_GATEWAY},
 			Tools: []harnessv1.Capabilities_ToolKind{
 				harnessv1.Capabilities_TOOL_KIND_READ,
 				harnessv1.Capabilities_TOOL_KIND_EDIT,
@@ -302,23 +303,16 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 	if err != nil {
 		return err
 	}
-	blobs, err := blobstore.OpenLocal(log.Dir())
+	rcfg, closeRunner, err := shownRunner(ctx, run, log.Dir())
 	if err != nil {
 		return err
 	}
-	defer func() { _ = blobs.Close() }()
+	defer closeRunner()
+	rcfg.Service = runnerv1connect.NewRunnerServiceClient(runnerConn)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ran := make(chan error, 1)
-	go func() {
-		ran <- runner.Run(ctx, runner.Config{
-			Service:    runnerv1connect.NewRunnerServiceClient(runnerConn),
-			Adapter:    run.Adapter,
-			Repository: run.Repository,
-			WorkDir:    run.WorkDir,
-			Blobs:      blobstore.ForTenant(blobs, embeddedlog.Tenant),
-		})
-	}()
+	go func() { ran <- runner.Run(ctx, rcfg) }()
 	final := false
 	err = kernel.Run(ctx, kernel.Config{
 		Client:   controlplanev1connect.NewControlPlaneServiceClient(kernelConn),
@@ -341,6 +335,31 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 		err = fmt.Errorf("the runner stopped with %w", rerr)
 	}
 	return err
+}
+
+// shownRunner returns the configuration of the shown run's runner, without
+// its service: the local blob store in the pumi directory dir and the model
+// gateway, on which claude keeps its own sign-in. The function it returns
+// closes them.
+func shownRunner(ctx context.Context, run shownRun, dir string) (runner.Config, func(), error) {
+	blobs, err := blobstore.OpenLocal(dir)
+	if err != nil {
+		return runner.Config{}, nil, err
+	}
+	gw, err := serveGateway(ctx, &config{file: &configv1.Config{}}, os.Stderr)
+	if err != nil {
+		_ = blobs.Close()
+		return runner.Config{}, nil, err
+	}
+	cfg := runner.Config{
+		Adapter: run.Adapter, Repository: run.Repository, WorkDir: run.WorkDir,
+		Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: gw,
+	}
+	closeAll := func() {
+		gw.shutdown(ctx)
+		_ = blobs.Close()
+	}
+	return cfg, closeAll, nil
 }
 
 // addShownPlan appends the plan.added of plan as the person, unless the log

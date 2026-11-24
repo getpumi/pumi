@@ -25,7 +25,6 @@ import (
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
-	"getpumi.dev/pumi/api/policy"
 )
 
 // The tests of the pumi commands run them in this process, on a temporary
@@ -47,6 +46,9 @@ const (
 	adapterOverCaps = "over caps"
 	// adapterWaits runs until the runner closes its standard input.
 	adapterWaits = "waits"
+	// adapterCallsUntilRefused makes model calls through the gateway until
+	// the gateway refuses one, and then completes.
+	adapterCallsUntilRefused = "calls until refused"
 	// adapterReportsAFile writes outputFileContent to outputFilePath and
 	// reports it as an output file.
 	adapterReportsAFile = "reports a file"
@@ -75,7 +77,11 @@ func TestMain(m *testing.M) {
 
 // testAdapter acts as a harness adapter in mode and returns its exit
 // status: it reads the harness invocation from standard input, logs a line
-// to standard error and does what mode says (decision 0158).
+// to standard error and does what mode says (decision 0158). Every mode
+// but adapterWaits makes model calls through the gateway, whose fake
+// provider answers each with testInputTokens input tokens and as many
+// output tokens as the call's max_tokens. The usage that the adapter
+// reports is its own figure, which the runner only logs (decision 0230).
 func testAdapter(mode string) int {
 	in := bufio.NewReader(os.Stdin)
 	line, err := in.ReadString('\n')
@@ -91,8 +97,11 @@ func testAdapter(mode string) int {
 	fmt.Fprintf(os.Stderr, "%sruns %s on the tree %s\n", testAdapterPrefix, inv.GetInvocation(), inv.GetInput().GetTree())
 	usage := &harnessv1.Usage{Tokens: 10, CostMicrodollars: 20, Seconds: 1}
 	var files []string
+	if !adapterCalls(mode, inv) {
+		return 9
+	}
 	switch mode {
-	case adapterSucceeds:
+	case adapterSucceeds, adapterCallsUntilRefused:
 	case adapterReportsAFile:
 		if err := os.MkdirAll(filepath.Dir(outputFilePath), 0o750); err != nil {
 			panic(err)
@@ -102,7 +111,6 @@ func testAdapter(mode string) int {
 		}
 		files = []string{outputFilePath}
 	case adapterOverCaps:
-		usage.CostMicrodollars = policy.DefaultHardCaps().CostMicrodollars + 1
 	case adapterWaits:
 		_, _ = in.ReadString('\n')
 		fmt.Fprintln(os.Stderr, testAdapterPrefix+"standard input closed")
@@ -144,6 +152,9 @@ type commandClone struct {
 	t      *testing.T
 	dir    string
 	config string
+	// provider is the fake provider that the gateway of its pumi run sends
+	// calls to.
+	provider *provider
 }
 
 // newCommandClone returns a clone whose git user.email is testPerson, with
@@ -152,6 +163,15 @@ type commandClone struct {
 // configuration of the user or the system, so the clone's is the only one.
 func newCommandClone(t *testing.T, workflow, mode string) *commandClone {
 	t.Helper()
+	return newCommandCloneWith(t, workflow, mode, "")
+}
+
+// newCommandCloneWith returns the clone of newCommandClone with more, text
+// format, added to its configuration file, and serves the fake provider
+// that the gateway of its pumi run sends calls to.
+func newCommandCloneWith(t *testing.T, workflow, mode, more string) *commandClone {
+	t.Helper()
+	p := fakeProvider(t)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	t.Setenv(testAdapterMode, mode)
@@ -169,6 +189,7 @@ trunk: "main"
 base {
   component { name: "test-adapter" version: "1" }
   input { repo: "case" }
+  capabilities { network { access: ACCESS_GATEWAY } }
   budget { seconds: 600 cost_microdollars: 5000000 }
 }
 project { name: "case" }
@@ -176,8 +197,8 @@ settings {
   parallelism: 1
   max_attempts { key: "in-doubt" value: 1 }
 }
-`, wf))
-	return &commandClone{t: t, dir: dir, config: config}
+%s`, wf, more))
+	return &commandClone{t: t, dir: dir, config: config, provider: p}
 }
 
 // pumi runs the pumi command with args in the clone and returns its

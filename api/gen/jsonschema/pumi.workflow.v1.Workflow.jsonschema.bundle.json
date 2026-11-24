@@ -200,7 +200,7 @@
       "patternProperties": {
         "^(cap_reached)$": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationCapReached.jsonschema.json",
-          "description": "The state's invocation reached its wall-time limit."
+          "description": "The state's invocation reached a cap of its budget: its wall-time\n limit, or its token or cost cap at the model gateway."
         },
         "^(in_doubt)$": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationInDoubt.jsonschema.json",
@@ -210,7 +210,7 @@
       "properties": {
         "capReached": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.InvocationCapReached.jsonschema.json",
-          "description": "The state's invocation reached its wall-time limit."
+          "description": "The state's invocation reached a cap of its budget: its wall-time\n limit, or its token or cost cap at the model gateway."
         },
         "entered": {
           "$ref": "#/$defs/pumi.workflow.v1.Trigger.StateEntered.jsonschema.json",

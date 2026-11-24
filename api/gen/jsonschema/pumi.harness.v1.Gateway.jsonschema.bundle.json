@@ -9,6 +9,11 @@
           "default": "",
           "description": "The base URL.",
           "type": "string"
+        },
+        "^(keeps_sign_in)$": {
+          "default": false,
+          "description": "Whether the harness keeps its own sign-in, such as a Claude\n subscription. When it does, the gateway forwards the harness's own\n credential, and the harness sends the token in the header X-Pumi-Token\n on every call. When it does not, the gateway holds the provider's API\n key, and the harness sends the token as its API key (decision 0225).",
+          "type": "boolean"
         }
       },
       "properties": {
@@ -16,6 +21,11 @@
           "default": "",
           "description": "The base URL.",
           "type": "string"
+        },
+        "keepsSignIn": {
+          "default": false,
+          "description": "Whether the harness keeps its own sign-in, such as a Claude\n subscription. When it does, the gateway forwards the harness's own\n credential, and the harness sends the token in the header X-Pumi-Token\n on every call. When it does not, the gateway holds the provider's API\n key, and the harness sends the token as its API key (decision 0225).",
+          "type": "boolean"
         },
         "token": {
           "default": "",

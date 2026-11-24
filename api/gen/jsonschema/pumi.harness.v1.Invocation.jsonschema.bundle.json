@@ -152,6 +152,11 @@
           "default": "",
           "description": "The base URL.",
           "type": "string"
+        },
+        "^(keeps_sign_in)$": {
+          "default": false,
+          "description": "Whether the harness keeps its own sign-in, such as a Claude\n subscription. When it does, the gateway forwards the harness's own\n credential, and the harness sends the token in the header X-Pumi-Token\n on every call. When it does not, the gateway holds the provider's API\n key, and the harness sends the token as its API key (decision 0225).",
+          "type": "boolean"
         }
       },
       "properties": {
@@ -159,6 +164,11 @@
           "default": "",
           "description": "The base URL.",
           "type": "string"
+        },
+        "keepsSignIn": {
+          "default": false,
+          "description": "Whether the harness keeps its own sign-in, such as a Claude\n subscription. When it does, the gateway forwards the harness's own\n credential, and the harness sends the token in the header X-Pumi-Token\n on every call. When it does not, the gateway holds the provider's API\n key, and the harness sends the token as its API key (decision 0225).",
+          "type": "boolean"
         },
         "token": {
           "default": "",
@@ -196,7 +206,7 @@
     "pumi.harness.v1.Invocation.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "description": "Invocation is what the runner gives a harness adapter. The runner derives\n it from the invocation document (pumi.runner.v1.Invocation, decision\n 0024): it leaves out what only the runner needs, which is the credential\n handles, the image digest and the isolation level, and adds what it has\n resolved, which is the workspace, the model gateway and the output schema\n (decision 0158). The model gateway is optional until E7 (decision 0185). An adapter never receives a credential handle or a\n provider key.",
+      "description": "Invocation is what the runner gives a harness adapter. The runner derives\n it from the invocation document (pumi.runner.v1.Invocation, decision\n 0024): it leaves out what only the runner needs, which is the credential\n handles, the image digest and the isolation level, and adds what it has\n resolved, which is the workspace, the model gateway and the output schema\n (decision 0158). An agent run always has the model gateway (decision\n 0226). An adapter never receives a credential handle or a provider key.",
       "patternProperties": {
         "^(idempotency_key)$": {
           "default": "",
@@ -211,7 +221,7 @@
       "properties": {
         "budget": {
           "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
-          "description": "The budget. The model gateway's caps enforce it; the adapter can also\n pass it to its harness. Until E7, when there is no gateway, only the\n adapter and its harness enforce it during the run (decision 0185)."
+          "description": "The budget. The model gateway's caps enforce its tokens and cost, and\n the runner its seconds; the adapter can also pass it to its harness\n (decisions 0193 and 0228)."
         },
         "capabilities": {
           "$ref": "#/$defs/pumi.harness.v1.Capabilities.jsonschema.json",
@@ -223,7 +233,7 @@
         },
         "gateway": {
           "$ref": "#/$defs/pumi.harness.v1.Gateway.jsonschema.json",
-          "description": "The model gateway, through which every model call goes (decision 0036).\n The gateway is optional until E7: when it is not set, the harness uses\n its own sign-in on the machine that runs it (decision 0185)."
+          "description": "The model gateway, through which every model call goes (decision 0036).\n An agent run always has it; the runner refuses one without it (decision\n 0226). A check or an external action has none."
         },
         "idempotencyKey": {
           "default": "",

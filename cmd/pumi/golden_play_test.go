@@ -547,6 +547,10 @@ var seeds = map[string][]step{
 	// the outcome cap reached; the plan escalates (decisions 0193 and
 	// 0203).
 	"spike/wall-time-limit": {addPlanA, claimStep, reportCapReachedOf("plan-a/1")},
+	// The model gateway refuses a call of the agent run at its token cap,
+	// and the runner reports cap reached with the gateway's totals
+	// (decisions 0228 and 0230).
+	"spike/token-cap": {addPlanA, claimStep, reportTokenCapOf("plan-a/1")},
 	// The runner reports the agent run as failed; with maxAttempts 1 for
 	// in-doubt, it runs again as plan-a/2, which succeeds, and the plan goes
 	// to done (decision 0235).

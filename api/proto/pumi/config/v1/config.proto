@@ -35,6 +35,19 @@ message Config {
   pumi.harness.v1.Usage hard_caps = 6;
   // The profile settings.
   Settings settings = 7;
+  // The model gateway that pumi run serves (decisions 0225 and 0231).
+  Gateway gateway = 8;
+}
+
+// Gateway configures the model gateway that pumi run serves.
+message Gateway {
+  // The name of the environment variable that holds the provider's API
+  // key, such as ANTHROPIC_API_KEY. When it is set, pumi run reads the key
+  // from that variable, which must not be empty, and the gateway sends the
+  // key on every call. When it is not set, the harness keeps its own
+  // sign-in, and the gateway forwards the credential that the harness
+  // sends (decision 0225).
+  string api_key_env = 1;
 }
 
 // Project is the project of the Cedar resource Plan (decision 0141).

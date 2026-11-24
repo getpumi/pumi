@@ -247,25 +247,34 @@ func heartbeatInterval(timeout *durationpb.Duration) time.Duration {
 }
 
 // judge checks how the adapter's run ended and fills result: the usage,
-// the resulting tree and the structured output. It returns the outcome,
-// with the reason when the invocation failed. A failed invocation's result
-// holds at most the usage.
-func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageType, work, index string, result *eventsv1.InvocationResult) (eventsv1.InvocationFinished_Outcome, error) {
+// the resulting tree and the structured output. The usage is the gateway's
+// totals with the measured wall time (decision 0230). It returns the
+// outcome, with the reason when the invocation failed. A failed
+// invocation's result holds at most the usage.
+func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageType, work, index string, totals GatewayTotals, result *eventsv1.InvocationResult) (eventsv1.InvocationFinished_Outcome, error) {
+	result.Usage = &eventsv1.InvocationResult_Usage{
+		Tokens: totals.Tokens, CostMicrodollars: totals.CostMicrodollars,
+		Seconds: int64((ex.elapsed + time.Second - 1) / time.Second),
+	}
+	// A cancel outranks a cap: the person asked to stop the run.
+	capReached := !ex.cancelled && (ex.capped || totals.CapReached)
+	if totals.CapReached {
+		r.log.note("the model gateway refused a call of %s at its token or cost cap (decision 0228)", r.doc.GetInvocation())
+	}
 	failed := eventsv1.InvocationFinished_OUTCOME_FAILED
 	switch {
 	case ex.cancelled:
 		failed = eventsv1.InvocationFinished_OUTCOME_CANCELLED
-	case ex.capped:
+	case capReached:
 		failed = eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
-		result.Usage = r.cappedUsage(ex, nil)
 	}
 	res, err := parseResult(ex)
 	if err != nil {
 		return failed, err
 	}
-	result.Usage = usageOf(res.GetUsage())
-	if ex.capped {
-		result.Usage = r.cappedUsage(ex, res.GetUsage())
+	if u := res.GetUsage(); u != nil {
+		r.log.note("the adapter reported %d tokens, %d microdollars and %d s; the usage is the model gateway's totals (decision 0230)",
+			u.GetTokens(), u.GetCostMicrodollars(), u.GetSeconds())
 	}
 	tree, err := r.resultingTree(ctx, work, index)
 	if err != nil {
@@ -279,7 +288,7 @@ func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageT
 	if err != nil {
 		return failed, err
 	}
-	if ex.capped {
+	if capReached {
 		outcome = eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
 	}
 	// The output files are uploaded last, so that the blob store gets none
@@ -343,21 +352,6 @@ func (r *run) put(ctx context.Context, root *os.Root, name string) (string, erro
 		return "", fmt.Errorf("the blob store: %w", err)
 	}
 	return hash, nil
-}
-
-// cappedUsage returns the usage of a run that the runner stopped at its
-// wall-time limit: the measured seconds, rounded up, and the tokens and
-// cost of reported, the adapter's figures, or of the budget when the
-// adapter reported none (decision 0204).
-func (r *run) cappedUsage(ex *execution, reported *harnessv1.Usage) *eventsv1.InvocationResult_Usage {
-	from := reported
-	if from == nil {
-		from = r.doc.GetBudget()
-	}
-	return &eventsv1.InvocationResult_Usage{
-		Tokens: from.GetTokens(), CostMicrodollars: from.GetCostMicrodollars(),
-		Seconds: int64((ex.elapsed + time.Second - 1) / time.Second),
-	}
 }
 
 // parseResult parses the adapter's result from its standard output, with
@@ -450,14 +444,4 @@ func (r *run) resultingTree(ctx context.Context, work, index string) (string, er
 		return "", nil
 	}
 	return tree, nil
-}
-
-// usageOf returns the usage of invocation.result for the adapter's usage
-// figures, which count until the model gateway of E7 counts them (decision
-// 0185).
-func usageOf(u *harnessv1.Usage) *eventsv1.InvocationResult_Usage {
-	if u == nil {
-		return nil
-	}
-	return &eventsv1.InvocationResult_Usage{Tokens: u.GetTokens(), CostMicrodollars: u.GetCostMicrodollars(), Seconds: u.GetSeconds()}
 }

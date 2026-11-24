@@ -54,7 +54,9 @@ type Config struct {
 	// the default hard caps of its release.
 	HardCaps *v11.Usage `protobuf:"bytes,6,opt,name=hard_caps,json=hardCaps,proto3" json:"hard_caps,omitempty"`
 	// The profile settings.
-	Settings      *Settings `protobuf:"bytes,7,opt,name=settings,proto3" json:"settings,omitempty"`
+	Settings *Settings `protobuf:"bytes,7,opt,name=settings,proto3" json:"settings,omitempty"`
+	// The model gateway that pumi run serves (decisions 0225 and 0231).
+	Gateway       *Gateway `protobuf:"bytes,8,opt,name=gateway,proto3" json:"gateway,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -138,6 +140,64 @@ func (x *Config) GetSettings() *Settings {
 	return nil
 }
 
+func (x *Config) GetGateway() *Gateway {
+	if x != nil {
+		return x.Gateway
+	}
+	return nil
+}
+
+// Gateway configures the model gateway that pumi run serves.
+type Gateway struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name of the environment variable that holds the provider's API
+	// key, such as ANTHROPIC_API_KEY. When it is set, pumi run reads the key
+	// from that variable, which must not be empty, and the gateway sends the
+	// key on every call. When it is not set, the harness keeps its own
+	// sign-in, and the gateway forwards the credential that the harness
+	// sends (decision 0225).
+	ApiKeyEnv     string `protobuf:"bytes,1,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Gateway) Reset() {
+	*x = Gateway{}
+	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Gateway) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Gateway) ProtoMessage() {}
+
+func (x *Gateway) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Gateway.ProtoReflect.Descriptor instead.
+func (*Gateway) Descriptor() ([]byte, []int) {
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Gateway) GetApiKeyEnv() string {
+	if x != nil {
+		return x.ApiKeyEnv
+	}
+	return ""
+}
+
 // Project is the project of the Cedar resource Plan (decision 0141).
 type Project struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -151,7 +211,7 @@ type Project struct {
 
 func (x *Project) Reset() {
 	*x = Project{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -163,7 +223,7 @@ func (x *Project) String() string {
 func (*Project) ProtoMessage() {}
 
 func (x *Project) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -176,7 +236,7 @@ func (x *Project) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Project.ProtoReflect.Descriptor instead.
 func (*Project) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{1}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Project) GetName() string {
@@ -209,7 +269,7 @@ type Settings struct {
 
 func (x *Settings) Reset() {
 	*x = Settings{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -221,7 +281,7 @@ func (x *Settings) String() string {
 func (*Settings) ProtoMessage() {}
 
 func (x *Settings) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -234,7 +294,7 @@ func (x *Settings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Settings.ProtoReflect.Descriptor instead.
 func (*Settings) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{2}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Settings) GetParallelism() int32 {
@@ -255,7 +315,7 @@ var File_pumi_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpumi/config/v1/config.proto\x12\x0epumi.config.v1\x1a\x1dpumi/harness/v1/harness.proto\x1a\x1bpumi/runner/v1/runner.proto\"\xa2\x02\n" +
+	"\x1bpumi/config/v1/config.proto\x12\x0epumi.config.v1\x1a\x1dpumi/harness/v1/harness.proto\x1a\x1bpumi/runner/v1/runner.proto\"\xd5\x02\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x18\n" +
 	"\aadapter\x18\x02 \x01(\tR\aadapter\x12\x14\n" +
@@ -263,7 +323,10 @@ const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\x04base\x18\x04 \x01(\v2\x1a.pumi.runner.v1.InvocationR\x04base\x121\n" +
 	"\aproject\x18\x05 \x01(\v2\x17.pumi.config.v1.ProjectR\aproject\x123\n" +
 	"\thard_caps\x18\x06 \x01(\v2\x16.pumi.harness.v1.UsageR\bhardCaps\x124\n" +
-	"\bsettings\x18\a \x01(\v2\x18.pumi.config.v1.SettingsR\bsettings\"F\n" +
+	"\bsettings\x18\a \x01(\v2\x18.pumi.config.v1.SettingsR\bsettings\x121\n" +
+	"\agateway\x18\b \x01(\v2\x17.pumi.config.v1.GatewayR\agateway\")\n" +
+	"\aGateway\x12\x1e\n" +
+	"\vapi_key_env\x18\x01 \x01(\tR\tapiKeyEnv\"F\n" +
 	"\aProject\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
 	"\x0fprotected_paths\x18\x02 \x03(\tR\x0eprotectedPaths\"\xba\x01\n" +
@@ -287,26 +350,28 @@ func file_pumi_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_pumi_config_v1_config_proto_rawDescData
 }
 
-var file_pumi_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_pumi_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_pumi_config_v1_config_proto_goTypes = []any{
 	(*Config)(nil),        // 0: pumi.config.v1.Config
-	(*Project)(nil),       // 1: pumi.config.v1.Project
-	(*Settings)(nil),      // 2: pumi.config.v1.Settings
-	nil,                   // 3: pumi.config.v1.Settings.MaxAttemptsEntry
-	(*v1.Invocation)(nil), // 4: pumi.runner.v1.Invocation
-	(*v11.Usage)(nil),     // 5: pumi.harness.v1.Usage
+	(*Gateway)(nil),       // 1: pumi.config.v1.Gateway
+	(*Project)(nil),       // 2: pumi.config.v1.Project
+	(*Settings)(nil),      // 3: pumi.config.v1.Settings
+	nil,                   // 4: pumi.config.v1.Settings.MaxAttemptsEntry
+	(*v1.Invocation)(nil), // 5: pumi.runner.v1.Invocation
+	(*v11.Usage)(nil),     // 6: pumi.harness.v1.Usage
 }
 var file_pumi_config_v1_config_proto_depIdxs = []int32{
-	4, // 0: pumi.config.v1.Config.base:type_name -> pumi.runner.v1.Invocation
-	1, // 1: pumi.config.v1.Config.project:type_name -> pumi.config.v1.Project
-	5, // 2: pumi.config.v1.Config.hard_caps:type_name -> pumi.harness.v1.Usage
-	2, // 3: pumi.config.v1.Config.settings:type_name -> pumi.config.v1.Settings
-	3, // 4: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	5, // 0: pumi.config.v1.Config.base:type_name -> pumi.runner.v1.Invocation
+	2, // 1: pumi.config.v1.Config.project:type_name -> pumi.config.v1.Project
+	6, // 2: pumi.config.v1.Config.hard_caps:type_name -> pumi.harness.v1.Usage
+	3, // 3: pumi.config.v1.Config.settings:type_name -> pumi.config.v1.Settings
+	1, // 4: pumi.config.v1.Config.gateway:type_name -> pumi.config.v1.Gateway
+	4, // 5: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_pumi_config_v1_config_proto_init() }
@@ -320,7 +385,7 @@ func file_pumi_config_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_config_v1_config_proto_rawDesc), len(file_pumi_config_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

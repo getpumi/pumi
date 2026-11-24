@@ -16,8 +16,8 @@ package pumi.harness.v1;
 // 0024): it leaves out what only the runner needs, which is the credential
 // handles, the image digest and the isolation level, and adds what it has
 // resolved, which is the workspace, the model gateway and the output schema
-// (decision 0158). The model gateway is optional until E7 (decision 0185). An adapter never receives a credential handle or a
-// provider key.
+// (decision 0158). An agent run always has the model gateway (decision
+// 0226). An adapter never receives a credential handle or a provider key.
 message Invocation {
   // The invocation.
   string invocation = 1;
@@ -34,16 +34,16 @@ message Invocation {
   // own settings; the runner checks the workspace after the run (decision
   // 0159).
   Capabilities capabilities = 6;
-  // The budget. The model gateway's caps enforce it; the adapter can also
-  // pass it to its harness. Until E7, when there is no gateway, only the
-  // adapter and its harness enforce it during the run (decision 0185).
+  // The budget. The model gateway's caps enforce its tokens and cost, and
+  // the runner its seconds; the adapter can also pass it to its harness
+  // (decisions 0193 and 0228).
   Usage budget = 7;
   // The absolute path of the workspace, a checkout of the input tree, in
   // which the runner started the adapter.
   string workspace = 8;
   // The model gateway, through which every model call goes (decision 0036).
-  // The gateway is optional until E7: when it is not set, the harness uses
-  // its own sign-in on the machine that runs it (decision 0185).
+  // An agent run always has it; the runner refuses one without it (decision
+  // 0226). A check or an external action has none.
   Gateway gateway = 9;
   // The schema of the structured output.
   OutputSchema output_schema = 10;
@@ -157,6 +157,12 @@ message Gateway {
   // The short-lived token, valid for this invocation only. The runner masks
   // it in the log.
   string token = 2;
+  // Whether the harness keeps its own sign-in, such as a Claude
+  // subscription. When it does, the gateway forwards the harness's own
+  // credential, and the harness sends the token in the header X-Pumi-Token
+  // on every call. When it does not, the gateway holds the provider's API
+  // key, and the harness sends the token as its API key (decision 0225).
+  bool keeps_sign_in = 3;
 }
 
 // OutputSchema is the schema of an invocation's structured output (decision
@@ -197,10 +203,9 @@ message Result {
   // uploads them to the blob store and records them by hash (decision
   // 0033).
   repeated string output_files = 3;
-  // The adapter's own usage figures. When the model gateway counted the
-  // invocation, its count is the one that counts (decision 0036). The
-  // gateway is optional until E7, and when no gateway counted the
-  // invocation, these figures are the usage of its invocation.result, which
-  // the usage fact and the hard caps read (decision 0185).
+  // The adapter's own usage figures, for information only. The runner
+  // writes them to the invocation's log; the usage of invocation.result is
+  // the model gateway's totals with the wall time the runner measured
+  // (decision 0230).
   Usage usage = 4;
 }

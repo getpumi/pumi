@@ -148,27 +148,54 @@ func TestHarnessInvocationWithoutAnOutput(t *testing.T) {
 	}
 }
 
-func TestAHarnessInvocationMayHaveNoGatewayUntilE7(t *testing.T) {
-	// Until E7, the runner may resolve no gateway, and the harness then uses
-	// its own sign-in (decision 0185).
+func TestAnAgentRunNeedsAGatewayAndNetworkAccess(t *testing.T) {
+	// From E7 every agent run goes through the gateway and reaches at least
+	// the gateway (decision 0226).
 	for _, c := range []struct {
 		name    string
 		gateway *harnessv1.Gateway
+		access  harnessv1.Capabilities_Network_Access
+		ok      bool
 	}{
-		{"a gateway", &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived"}},
-		{"no gateway", nil},
+		{"the gateway", &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived"}, harnessv1.Capabilities_Network_ACCESS_GATEWAY, true},
+		{"the listed hosts", &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived", KeepsSignIn: true}, harnessv1.Capabilities_Network_ACCESS_HOSTS, true},
+		{"no gateway", nil, harnessv1.Capabilities_Network_ACCESS_GATEWAY, false},
+		{"no network", &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived"}, harnessv1.Capabilities_Network_ACCESS_NONE, false},
+		{"unspecified access", &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived"}, harnessv1.Capabilities_Network_ACCESS_UNSPECIFIED, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			r := resolved()
+			doc, r := document(), resolved()
+			doc.Capabilities.Network.Access = c.access
 			r.Gateway = c.gateway
-			inv, err := HarnessInvocation(document(), r)
+			inv, err := HarnessInvocation(doc, r)
+			if !c.ok {
+				if err == nil || !strings.Contains(err.Error(), "0226") {
+					t.Errorf("HarnessInvocation = %v, %v; want an error that names decision 0226", inv, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
 			if !proto.Equal(inv.GetGateway(), c.gateway) {
 				t.Errorf("the gateway is %v, want %v", inv.GetGateway(), c.gateway)
 			}
-			if c.gateway == nil && inv.Gateway != nil {
+		})
+	}
+}
+
+func TestACheckMayHaveNoGateway(t *testing.T) {
+	for _, kind := range []harnessv1.Component_Kind{harnessv1.Component_KIND_CHECK, harnessv1.Component_KIND_EXTERNAL_ACTION} {
+		t.Run(kind.String(), func(t *testing.T) {
+			doc, r := document(), resolved()
+			doc.Component.Kind = kind
+			doc.Capabilities.Network.Access = harnessv1.Capabilities_Network_ACCESS_NONE
+			r.Gateway = nil
+			inv, err := HarnessInvocation(doc, r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if inv.Gateway != nil {
 				t.Errorf("the gateway is %v, want it left out", inv.GetGateway())
 			}
 		})

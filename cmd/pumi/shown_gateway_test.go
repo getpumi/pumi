@@ -28,7 +28,7 @@ import (
 // environment variable that holds the provider's API key: then the
 // configuration file's gateway.api_key_env names it, and the gateway sends
 // the key (decision 0225).
-const envAPIKeyEnv = "PUMI_SHOWN_API_KEY_ENV"
+const envProviderVariable = "PUMI_SHOWN_API_KEY_ENV"
 
 // The model role of the spike workflow and the models it maps to in the
 // shown runs (decision 0233).
@@ -41,7 +41,7 @@ const (
 // shownGateway is the gateway block of the shown runs' configuration.
 func shownGateway() *configv1.Gateway {
 	return &configv1.Gateway{
-		ApiKeyEnv:  os.Getenv(envAPIKeyEnv),
+		ApiKeyEnv:  os.Getenv(envProviderVariable),
 		ModelRoles: map[string]*configv1.ModelRole{shownRole: {Model: shownModel, Fallback: shownFallback}},
 	}
 }
@@ -134,14 +134,14 @@ func tokenInEnviron(pid string) (gatewayToken, bool) {
 // (decision 0225).
 func checkTokenPath(t *testing.T, invocation string, tok gatewayToken) {
 	t.Helper()
-	keyEnv := os.Getenv(envAPIKeyEnv)
+	keyEnv := os.Getenv(envProviderVariable)
 	switch {
 	case keyEnv == "" && tok.header:
 		t.Logf("claude of %s keeps its sign-in and sends the gateway token in X-Pumi-Token", invocation)
 	case keyEnv != "" && !tok.header:
 		t.Logf("claude of %s sends the gateway token as its bearer token; the gateway sends the API key of %s", invocation, keyEnv)
 	default:
-		t.Errorf("claude of %s sends the gateway token in the header %v, but %s is %q", invocation, tok.header, envAPIKeyEnv, keyEnv)
+		t.Errorf("claude of %s sends the gateway token in the header %v, but %s is %q", invocation, tok.header, envProviderVariable, keyEnv)
 	}
 }
 

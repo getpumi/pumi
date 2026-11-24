@@ -59,70 +59,91 @@ func person(ctx context.Context, dir string) (controlplane.Identity, error) {
 
 // connectPerson returns the person's session with the control plane of the clone
 // that dir is in: through the socket of the pumi run that holds the log,
-// or, when no run serves it, on the log opened here with the configuration
-// file, which is then required (decision 0206).
+// or, when no run serves it, on the log and the local blob store opened
+// here with the configuration file, which is then required (decision
+// 0206).
 func connectPerson(ctx context.Context, dir, configPath string) (*cli.Session, error) {
 	id, err := person(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
 	var cfg *config
-	initial := ""
 	if configPath != "" {
 		if cfg, err = readConfig(configPath); err != nil {
 			return nil, err
 		}
-		wf, err := cfg.workflow()
-		if err != nil {
-			return nil, err
-		}
-		initial = wf.Definition().GetInitial()
 	}
 	logDir, err := embeddedlog.DirOf(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	client := controlplanev1connect.NewControlPlaneServiceClient(controlplane.SocketClient(filepath.Join(logDir, socketName)))
+	conn := controlplane.SocketClient(filepath.Join(logDir, socketName))
+	client := controlplanev1connect.NewControlPlaneServiceClient(conn)
 	_, err = client.Query(ctx, &controlplanev1.QueryRequest{Limit: 1})
 	switch {
 	case err == nil:
-		return &cli.Session{Client: client, Person: id.Principal, Initial: initial, Close: func() error { return nil }}, nil
+		return &cli.Session{
+			Client: client, View: controlplanev1connect.NewViewServiceClient(conn), Person: id.Principal,
+			Close: func() error { return nil },
+		}, nil
 	case !controlplane.NotServed(err):
 		return nil, fmt.Errorf("the socket of pumi run: %w", err)
 	case cfg == nil:
 		return nil, errors.New("no pumi run serves the clone's log, and opening it needs the configuration file: give --config")
 	}
+	return openPerson(ctx, dir, cfg, id)
+}
+
+// openPerson returns the person's session with the embedded control plane
+// on the log of the clone that dir is in and the local blob store beside
+// it, opened in this process.
+func openPerson(ctx context.Context, dir string, cfg *config, id controlplane.Identity) (*cli.Session, error) {
 	log, err := embeddedlog.Open(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
-	client, err = personClient(log, cfg, id)
+	blobs, err := blobstore.OpenLocal(log.Dir())
 	if err != nil {
 		_ = log.Close()
 		return nil, err
 	}
-	return &cli.Session{Client: client, Person: id.Principal, Initial: initial, Close: log.Close}, nil
-}
-
-// personClient returns the person's client of the embedded control plane
-// on log, in-process.
-func personClient(log *embeddedlog.Log, cfg *config, id controlplane.Identity) (controlplanev1connect.ControlPlaneServiceClient, error) {
-	svc, err := controlplane.New(log, cfg.plane())
+	closeAll := func() error { return errors.Join(blobs.Close(), log.Close()) }
+	svc, err := newPlane(log, blobs, cfg)
 	if err != nil {
+		_ = closeAll()
 		return nil, err
 	}
 	conn, err := svc.Client(id)
 	if err != nil {
+		_ = closeAll()
 		return nil, err
 	}
-	return controlplanev1connect.NewControlPlaneServiceClient(conn), nil
+	return &cli.Session{
+		Client: controlplanev1connect.NewControlPlaneServiceClient(conn), View: controlplanev1connect.NewViewServiceClient(conn),
+		Person: id.Principal, Close: closeAll,
+	}, nil
+}
+
+// newPlane returns the embedded control plane on log with the
+// configuration file cfg, which reads stored logs from blobs and gives the
+// file's workflow.
+func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*controlplane.Service, error) {
+	wf, err := cfg.workflow()
+	if err != nil {
+		return nil, err
+	}
+	plane := cfg.plane()
+	plane.Blobs = blobs
+	plane.Workflow = wf.Definition()
+	return controlplane.New(log, plane)
 }
 
 // runEmbedded runs embedded mode on the clone that dir is in, with the
 // configuration file at configPath, until ctx is done, and returns nil then
 // (decisions 0188 and 0198): the embedded control plane on the clone's log,
-// served to the person on the socket beside it (decision 0206), the kernel
-// on the file's workflow, starting each plan from the trunk's tree
+// with the local blob store and the file's workflow, which ViewService
+// reads, served to the person on the socket beside it (decision 0206), the
+// kernel on the file's workflow, starting each plan from the trunk's tree
 // (decision 0209), and the in-process runner with the file's adapter,
 // whose output goes to out and whose output files go to the local blob
 // store beside the log (decision 0232). It stops when any of them fails.
@@ -144,10 +165,6 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		return err
 	}
 	defer func() { _ = log.Close() }()
-	svc, err := controlplane.New(log, cfg.plane())
-	if err != nil {
-		return err
-	}
 	// The local blob store is beside the log, in the pumi directory
 	// (decision 0232). It is opened while the log's lock is held, which
 	// lets it remove the temporary files that a crash left.
@@ -156,6 +173,10 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		return err
 	}
 	defer func() { _ = blobs.Close() }()
+	svc, err := newPlane(log, blobs, cfg)
+	if err != nil {
+		return err
+	}
 	kernelClient, runnerClient, err := newClients(svc)
 	if err != nil {
 		return err

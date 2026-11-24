@@ -102,6 +102,7 @@ var apiFiles = []protoreflect.FileDescriptor{
 	cloudeventsv1.File_io_cloudevents_v1_cloudevents_proto,
 	configv1.File_pumi_config_v1_config_proto,
 	controlplanev1.File_pumi_controlplane_v1_controlplane_proto,
+	controlplanev1.File_pumi_controlplane_v1_view_proto,
 	eventsv1.File_pumi_events_v1_basis_proto,
 	eventsv1.File_pumi_events_v1_forge_proto,
 	eventsv1.File_pumi_events_v1_gates_proto,

@@ -6,6 +6,7 @@ package cli
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -22,11 +23,6 @@ import (
 // started, because the plans it depends on have not merged or no slot is
 // free (decision 0189).
 const waiting = "waiting"
-
-// started is the state that pumi status shows for a plan that started and
-// is still in its initial state, when no configuration file names the
-// workflow.
-const started = "started"
 
 // plan is what the log says of one plan, for pumi status.
 type plan struct {
@@ -100,17 +96,17 @@ func readEvent(e *cloudeventsv1.CloudEvent, order *[]*plan, byName map[string]*p
 	return nil
 }
 
-// stateOf returns the state that pumi status shows for p.
+// stateOf returns the state that pumi status shows for p: the state its
+// last transition entered, or waiting before it started, or else the
+// workflow's initial state.
 func stateOf(p *plan, initial string) string {
 	switch {
 	case p.state != "":
 		return p.state
 	case !p.requested:
 		return waiting
-	case initial != "":
-		return initial
 	}
-	return started
+	return initial
 }
 
 // status writes each plan's track, state and open escalation, one plan to
@@ -120,10 +116,15 @@ func status(ctx context.Context, s *Session, _ []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	wf, err := s.View.GetWorkflow(ctx, &controlplanev1.GetWorkflowRequest{})
+	if err != nil {
+		return fmt.Errorf("cannot read the workflow: %w", err)
+	}
+	initial := wf.GetWorkflow().GetInitial()
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintln(tw, "PLAN\tTRACK\tSTATE\tESCALATION")
 	for _, p := range plans {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.name, p.track, stateOf(p, s.Initial), oneLine(p.question))
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.name, p.track, stateOf(p, initial), oneLine(p.question))
 	}
 	return tw.Flush()
 }
@@ -235,5 +236,50 @@ func answer(ctx context.Context, s *Session, args []string, w io.Writer) error {
 		return err
 	}
 	_, err = fmt.Fprintf(w, "Answered the escalation %s of the plan %s.\n", p.escalation, name)
+	return err
+}
+
+// printLog writes the log of the invocation to w: its recent output while
+// it runs, with a note to notes that it is not the whole log, or else its
+// stored full log (decision 0232), or a line that says it has none yet.
+func printLog(ctx context.Context, s *Session, invocation string, w, notes io.Writer) error {
+	stream, err := s.View.ReadLog(ctx, &controlplanev1.ReadLogRequest{Invocation: invocation})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stream.Close() }()
+	source, written := controlplanev1.ReadLogResponse_SOURCE_UNSPECIFIED, 0
+	for {
+		res, err := stream.Receive()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if len(res.GetOutput()) == 0 {
+			source = res.GetSource()
+			continue
+		}
+		if written == 0 && res.GetSource() == controlplanev1.ReadLogResponse_SOURCE_RECENT {
+			_, _ = fmt.Fprintf(notes, "The invocation %s is running; this is its recent output.\n", invocation)
+		}
+		source = res.GetSource()
+		n, err := w.Write(res.GetOutput())
+		written += n
+		if err != nil {
+			return err
+		}
+	}
+	switch {
+	case written > 0:
+		return nil
+	case source == controlplanev1.ReadLogResponse_SOURCE_RECENT:
+		_, err = fmt.Fprintf(w, "The invocation %s is running and has sent no output yet.\n", invocation)
+	case source == controlplanev1.ReadLogResponse_SOURCE_STORED:
+		_, err = fmt.Fprintf(w, "The stored log of the invocation %s is empty.\n", invocation)
+	default:
+		_, err = fmt.Fprintf(w, "The invocation %s has no log yet.\n", invocation)
+	}
 	return err
 }

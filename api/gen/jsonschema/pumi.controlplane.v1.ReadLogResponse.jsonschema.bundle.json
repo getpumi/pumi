@@ -1,0 +1,45 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.ReadLogResponse.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ReadLogResponse is one chunk of the log, in order.",
+      "properties": {
+        "output": {
+          "default": null,
+          "description": "The chunk of output.",
+          "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "pattern": "^SOURCE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "SOURCE_RECENT",
+                "SOURCE_STORED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Which log the chunk is of, the same in every chunk of a stream.",
+          "title": "Source"
+        }
+      },
+      "title": "Read Log Response",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.ReadLogResponse.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.ReadLogResponse.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,21 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.ReadLogRequest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ReadLogRequest is the request of ReadLog.",
+      "properties": {
+        "invocation": {
+          "default": "",
+          "description": "The invocation.",
+          "type": "string"
+        }
+      },
+      "title": "Read Log Request",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.ReadLogRequest.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.ReadLogRequest.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

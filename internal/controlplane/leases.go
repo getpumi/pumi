@@ -420,6 +420,18 @@ func (s *Service) keepOutput(invocation string, number int64, output []byte) err
 	return nil
 }
 
+// recentLog returns a copy of the recent log output of invocation and
+// true while it holds a lease, or nil and false when it is not running.
+func (s *Service) recentLog(invocation string) ([]byte, bool) {
+	r := s.runs
+	r.leaseMu.Lock()
+	defer r.leaseMu.Unlock()
+	if r.leases[invocation] == nil {
+		return nil, false
+	}
+	return slices.Clone(r.output[invocation]), true
+}
+
 // RecentLog returns a copy of the recent log output of a running
 // invocation, the last bytes that its runner sent with SendLog, or nil when
 // the invocation is not running. The output is not in the event log

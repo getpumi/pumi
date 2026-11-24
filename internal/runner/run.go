@@ -4,6 +4,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"getpumi.dev/pumi/api"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
+	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
 	"getpumi.dev/pumi/api/gen/pumi/runner/v1/runnerv1connect"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -64,10 +66,15 @@ type Config struct {
 	// uploads the output files that the adapter reports (decisions 0033
 	// and 0160).
 	Blobs Blobs
-	// Output, when set, also receives each invocation's log as it is
-	// written, each line after the invocation's id and ": ", so that pumi
-	// run prints it (getpumi/pumi#88).
+	// Output, when set, also receives each invocation's log, masked, as it
+	// is written, each line after the invocation's id and ": ", so that
+	// pumi run prints it (getpumi/pumi#88).
 	Output io.Writer
+
+	// gateway, when set, resolves the model gateway of an invocation. The
+	// tests set it until the runner opens each agent run with the gateway
+	// (getpumi/pumi#100).
+	gateway func(*runnerv1.Invocation) *harnessv1.Gateway
 }
 
 // Blobs is the blob store as the runner sees it: bound to the runner's
@@ -131,6 +138,12 @@ func Run(ctx context.Context, cfg Config) error {
 // uploads each output file that the adapter reports to the blob store and
 // records its path and hash in the result; a path outside the workspace
 // fails the invocation (decision 0160).
+//
+// The runner masks the values of the credentials it holds for the
+// invocation, the gateway token included, in the log batches, in Output
+// and in the full log, which it stores in the blob store and records in
+// the result by its hash, whatever the outcome (decisions 0034, 0163 and
+// 0232).
 //
 // When a heartbeat carries a cancel request, the runner closes the
 // adapter's standard input, kills it after the grace period and reports
@@ -212,6 +225,10 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	}
 	var mt protoreflect.MessageType
 	resolved := Resolved{Workspace: work}
+	if r.cfg.gateway != nil {
+		resolved.Gateway = r.cfg.gateway(r.doc)
+	}
+	r.log.mask(resolved.Gateway.GetToken())
 	if name := r.doc.GetOutputMessage(); name != "" {
 		var err error
 		if mt, resolved.JSONSchema, err = api.Output(name); err != nil {
@@ -226,16 +243,26 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	return ex, mt, err
 }
 
-// report sends the remaining log, with the reason the invocation failed
-// when problem is not nil, and reports the result with the outcome.
+// report adds the reason the invocation failed to the log when problem is
+// not nil, stores the full log in the blob store and records its hash in
+// result, sends the remaining log and reports the result with the outcome
+// (decisions 0034 and 0232). When the log cannot be stored, the result has
+// no log hash, the log sent says why, and the outcome stands.
 func (r *run) report(ctx context.Context, result *eventsv1.InvocationResult, outcome eventsv1.InvocationFinished_Outcome, problem error) error {
 	if problem != nil {
 		r.log.note("the invocation %s failed: %v", r.doc.GetInvocation(), problem)
 	}
+	r.log.end()
+	hash, err := r.cfg.Blobs.Put(ctx, bytes.NewReader(r.log.full()))
+	if err != nil {
+		r.log.note("the log of %s could not be stored: %v", r.doc.GetInvocation(), err)
+		r.log.end()
+	}
+	result.LogBlobHash = hash
 	if err := r.sendLog(ctx); err != nil {
 		return err
 	}
-	_, err := r.cfg.Service.Report(ctx, &runnerv1.ReportRequest{
+	_, err = r.cfg.Service.Report(ctx, &runnerv1.ReportRequest{
 		Invocation: r.doc.GetInvocation(), LeaseNumber: r.claim.GetLeaseNumber(), Result: result, Outcome: outcome,
 	})
 	if err != nil {

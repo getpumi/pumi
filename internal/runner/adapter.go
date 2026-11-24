@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -461,95 +460,4 @@ func usageOf(u *harnessv1.Usage) *eventsv1.InvocationResult_Usage {
 		return nil
 	}
 	return &eventsv1.InvocationResult_Usage{Tokens: u.GetTokens(), CostMicrodollars: u.GetCostMicrodollars(), Seconds: u.GetSeconds()}
-}
-
-// logBuffer holds the log output that has not been sent yet: the
-// adapter's standard error and the runner's own lines.
-type logBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-	// out, when set, also receives the log as it is written.
-	out *lineWriter
-}
-
-// Write adds p to the log.
-func (l *logBuffer) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.out != nil {
-		l.out.write(p)
-	}
-	return l.buf.Write(p)
-}
-
-// note adds a line of the runner to the log.
-func (l *logBuffer) note(format string, args ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	line := fmt.Sprintf(runnerPrefix+format+"\n", args...)
-	if l.out != nil {
-		l.out.write([]byte(line))
-	}
-	l.buf.WriteString(line)
-}
-
-// flush writes a line of the output that has not ended.
-func (l *logBuffer) flush() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.out != nil {
-		l.out.flush()
-	}
-}
-
-// lineWriter writes each line of what it is given to out after prefix. It
-// keeps a line that has not ended until it ends or flush is called. Its
-// callers serialize the calls, and an error of out is dropped: the output
-// is for the person who watches, and the log goes to the control plane
-// either way.
-type lineWriter struct {
-	out     io.Writer
-	prefix  string
-	partial []byte
-}
-
-// write writes the lines of p that end, and keeps the rest.
-func (w *lineWriter) write(p []byte) {
-	w.partial = append(w.partial, p...)
-	for {
-		i := bytes.IndexByte(w.partial, '\n')
-		if i < 0 {
-			return
-		}
-		_, _ = io.WriteString(w.out, w.prefix+string(w.partial[:i+1]))
-		w.partial = w.partial[i+1:]
-	}
-}
-
-// flush writes a line that has not ended, with a newline.
-func (w *lineWriter) flush() {
-	if len(w.partial) > 0 {
-		_, _ = io.WriteString(w.out, w.prefix+string(w.partial)+"\n")
-		w.partial = nil
-	}
-}
-
-// restore puts out, which take returned and which could not be sent,
-// back before the output written since.
-func (l *logBuffer) restore(out []byte) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	rest := bytes.Clone(l.buf.Bytes())
-	l.buf.Reset()
-	l.buf.Write(out)
-	l.buf.Write(rest)
-}
-
-// take returns the log output that has not been sent and forgets it.
-func (l *logBuffer) take() []byte {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	out := bytes.Clone(l.buf.Bytes())
-	l.buf.Reset()
-	return out
 }

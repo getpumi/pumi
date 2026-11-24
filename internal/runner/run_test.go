@@ -128,6 +128,14 @@ func fakeAdapter(mode string) int {
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{"internal/runner"}, Usage: usage})
 	case "output file empty":
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{""}, Usage: usage})
+	case "split credential":
+		// The gateway token in two writes, with log batches between them.
+		token := inv.GetGateway().GetToken()
+		half := len(token) / 2
+		fmt.Fprintf(os.Stderr, "%stoken %s", fakeAdapterPrefix, token[:half])
+		time.Sleep(200 * time.Millisecond)
+		fmt.Fprintf(os.Stderr, "%s end\n", token[half:])
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
 	case "not json":
 		fmt.Println("this is not a result")
 		return 0
@@ -246,7 +254,9 @@ type fakeService struct {
 	leaseTimeout time.Duration
 	heartbeats   int
 	logs         []byte
-	reports      []*runnerv1.ReportRequest
+	// batches are the log batches sent, one entry for each.
+	batches []string
+	reports []*runnerv1.ReportRequest
 }
 
 func (f *fakeService) Claim(_ context.Context, req *runnerv1.ClaimRequest) (*runnerv1.ClaimResponse, error) {
@@ -302,6 +312,7 @@ func (f *fakeService) SendLog(_ context.Context, req *runnerv1.SendLogRequest) (
 		return nil, unreachable
 	}
 	f.logs = append(f.logs, req.GetOutput()...)
+	f.batches = append(f.batches, string(req.GetOutput()))
 	return &runnerv1.SendLogResponse{}, nil
 }
 
@@ -336,6 +347,14 @@ func (b *fakeBlobs) stored() map[string]string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return maps.Clone(b.blobs)
+}
+
+// outputBlobs returns the blobs stored so far, without the log of the
+// report.
+func (f *fixture) outputBlobs(report *runnerv1.ReportRequest) map[string]string {
+	stored := f.blobs.stored()
+	delete(stored, report.GetResult().GetLogBlobHash())
+	return stored
 }
 
 // blobHash returns the blob hash of content: "sha256:" and its SHA-256.
@@ -638,7 +657,7 @@ func TestOutputFilesAreUploaded(t *testing.T) {
 			t.Errorf("output file %d is %v, want %v", i, got[i], want[i])
 		}
 	}
-	stored := f.blobs.stored()
+	stored := f.outputBlobs(report)
 	if stored[blobHash("report\n")] != "report\n" || stored[blobHash("notes\n")] != "notes\n" || len(stored) != 2 {
 		t.Errorf("the blob store holds %q, want the two files", stored)
 	}
@@ -662,8 +681,8 @@ func TestABadOutputFileFailsTheInvocation(t *testing.T) {
 			if r := report.GetResult(); r.GetTree() != "" || r.GetOutput() != "" || len(r.GetOutputFiles()) != 0 {
 				t.Errorf("the result holds the tree %q, the output %q and the output files %v, want none", r.GetTree(), r.GetOutput(), r.GetOutputFiles())
 			}
-			if stored := f.blobs.stored(); len(stored) != 0 {
-				t.Errorf("the runner stored %q, want nothing", stored)
+			if stored := f.outputBlobs(report); len(stored) != 0 {
+				t.Errorf("the runner stored %q besides the log, want nothing", stored)
 			}
 			if log := f.service.log(); !strings.Contains(log, runnerPrefix) || !strings.Contains(log, named) {
 				t.Errorf("the log does not name %s as the reason the invocation failed; it is\n%s", named, log)
@@ -693,8 +712,8 @@ func TestOutputFilesOfAnInvocationThatFailsAreNotUploaded(t *testing.T) {
 	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_FAILED {
 		t.Errorf("the outcome is %v, want failed (decision 0159)", report.GetOutcome())
 	}
-	if stored := f.blobs.stored(); len(stored) != 0 {
-		t.Errorf("the runner stored %q for an invocation that failed, want nothing", stored)
+	if stored := f.outputBlobs(report); len(stored) != 0 {
+		t.Errorf("the runner stored %q besides the log for an invocation that failed, want nothing", stored)
 	}
 }
 

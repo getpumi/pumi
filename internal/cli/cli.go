@@ -36,12 +36,12 @@ type Env struct {
 type Session struct {
 	// Client is the person's client of the control plane.
 	Client controlplanev1connect.ControlPlaneServiceClient
+	// View is the person's client of ViewService, with which the commands
+	// read an invocation's log and the workflow that the kernel runs.
+	View controlplanev1connect.ViewServiceClient
 	// Person is the person's principal, the clone's git user.email
 	// (decision 0208).
 	Person string
-	// Initial is the initial state of the workflow, when the configuration
-	// file was given, or empty.
-	Initial string
 	// Close ends the session.
 	Close func() error
 }
@@ -57,6 +57,8 @@ Commands:
   cancel [--config <file>] <plan>      cancel a plan
   answer [--config <file>] <plan> <answer>...
                                        answer a plan's open escalation
+  log [--config <file>] <invocation>   show an invocation's log: its stored log,
+                                       or the recent output of a running one
   version                              show pumi's version
 
 Every command but run and version reaches the control plane of the pumi run
@@ -109,6 +111,11 @@ var commands = map[string]func(ctx context.Context, name string, args []string, 
 	},
 	"cancel": personCommand(1, nil, cancelPlan),
 	"answer": personCommand(-2, nil, answer),
+	"log": func(ctx context.Context, name string, args []string, env Env) error {
+		return personCommand(1, nil, func(ctx context.Context, s *Session, args []string, w io.Writer) error {
+			return printLog(ctx, s, args[0], w, env.Stderr)
+		})(ctx, name, args, env)
+	},
 }
 
 // parse parses the flags of the command name from args, with the flags

@@ -8,7 +8,9 @@ import (
 
 	"github.com/cedar-policy/cedar-go"
 
+	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 	"getpumi.dev/pumi/api/policy"
+	"getpumi.dev/pumi/internal/controlplane/blobstore"
 )
 
 // Config is how the wiring sets up the embedded control plane: the
@@ -34,6 +36,12 @@ type Config struct {
 	// ClaimWait is how long Claim waits for an invocation before it returns
 	// none; DefaultClaimWait when it is 0.
 	ClaimWait time.Duration
+	// Blobs is the blob store from which ReadLog reads an invocation's
+	// stored log, or nil (decision 0232).
+	Blobs blobstore.Store
+	// Workflow is the definition of the workflow that the kernel runs,
+	// which GetWorkflow returns, or nil.
+	Workflow *workflowv1.Workflow
 }
 
 // DefaultLeaseTimeout is the lease timeout when the wiring sets none.

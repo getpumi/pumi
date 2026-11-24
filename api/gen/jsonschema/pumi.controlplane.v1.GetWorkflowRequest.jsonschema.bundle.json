@@ -1,0 +1,15 @@
+{
+  "$defs": {
+    "pumi.controlplane.v1.GetWorkflowRequest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "GetWorkflowRequest is the request of GetWorkflow.",
+      "properties": {},
+      "title": "Get Workflow Request",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.controlplane.v1.GetWorkflowRequest.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.controlplane.v1.GetWorkflowRequest.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

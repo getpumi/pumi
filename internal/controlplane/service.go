@@ -114,8 +114,8 @@ func New(log *embeddedlog.Log, cfg Config) (*Service, error) {
 	return s, nil
 }
 
-// Server returns a Connect server that serves ControlPlaneService and
-// RunnerService to a client with the identity id. The wiring gives each
+// Server returns a Connect server that serves ControlPlaneService,
+// RunnerService and ViewService to a client with the identity id. The wiring gives each
 // client its own server, built with that client's identity, so a client
 // cannot call as anyone else. It refuses a caller that it does not know, an identity with
 // no principal, a tenant other than the embedded log's, and a runner whose
@@ -141,13 +141,14 @@ func (s *Service) Server(id Identity) (*connect.Server, error) {
 	server := connect.NewServer()
 	controlplanev1connect.RegisterControlPlaneServiceHandler(server, &handler{svc: s, log: s.log, id: id})
 	runnerv1connect.RegisterRunnerServiceHandler(server, &runnerHandler{svc: s, id: id})
+	controlplanev1connect.RegisterViewServiceHandler(server, &viewHandler{svc: s, id: id})
 	return server, nil
 }
 
-// Client returns a client of ControlPlaneService and RunnerService that
-// calls the server of the identity id in-process, the transport of
-// embedded mode (decisions 0152 and 0161). The wiring wraps it in the
-// generated clients. It refuses an identity that Server refuses.
+// Client returns a client of ControlPlaneService, RunnerService and
+// ViewService that calls the server of the identity id in-process, the
+// transport of embedded mode (decisions 0152 and 0161). The wiring wraps it
+// in the generated clients. It refuses an identity that Server refuses.
 func (s *Service) Client(id Identity) (*connect.Client, error) {
 	server, err := s.Server(id)
 	if err != nil {

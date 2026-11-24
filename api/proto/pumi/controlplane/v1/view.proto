@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.controlplane.v1;
+
+import "pumi/workflow/v1/workflow.proto";
+
+// ViewService serves what a person reads beside the event log: an
+// invocation's log, which stays out of the event log (decision 0034), and
+// the workflow that the kernel runs. The control plane serves it beside
+// ControlPlaneService, whose four verbs it leaves unchanged, and refuses
+// runners. pumi run serves it on its socket (decision 0206).
+service ViewService {
+  // ReadLog streams an invocation's log in chunks: the recent output of a
+  // running invocation, which its runner sent with SendLog, or else the
+  // full log that the invocation's result stores in the blob store
+  // (decision 0232). It sends nothing when the invocation has no log yet,
+  // and fails with the code not found when the log has no such invocation.
+  rpc ReadLog(ReadLogRequest) returns (stream ReadLogResponse);
+
+  // GetWorkflow returns the definition of the workflow that the kernel
+  // runs, such as its initial state, which pumi status shows for a plan
+  // that has started and fired no transition.
+  rpc GetWorkflow(GetWorkflowRequest) returns (GetWorkflowResponse);
+}
+
+// ReadLogRequest is the request of ReadLog.
+message ReadLogRequest {
+  // The invocation.
+  string invocation = 1;
+}
+
+// ReadLogResponse is one chunk of the log, in order.
+message ReadLogResponse {
+  // Source is which log the chunks are of.
+  enum Source {
+    SOURCE_UNSPECIFIED = 0;
+    // The recent output of a running invocation: its last output, not all
+    // of it.
+    SOURCE_RECENT = 1;
+    // The full log stored when the invocation reported.
+    SOURCE_STORED = 2;
+  }
+
+  // Which log the chunk is of, the same in every chunk of a stream.
+  Source source = 1;
+  // The chunk of output.
+  bytes output = 2;
+}
+
+// GetWorkflowRequest is the request of GetWorkflow.
+message GetWorkflowRequest {}
+
+// GetWorkflowResponse is the response of GetWorkflow.
+message GetWorkflowResponse {
+  // The workflow's definition.
+  pumi.workflow.v1.Workflow workflow = 1;
+}

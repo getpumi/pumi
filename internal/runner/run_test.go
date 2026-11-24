@@ -7,8 +7,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +29,7 @@ import (
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
 	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -100,7 +105,29 @@ func fakeAdapter(mode string) int {
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: `{"summary":"done","extra":1}`, Usage: usage})
 	case "output files":
 		write("internal/runner/report.txt", "report\n")
+		write("internal/runner/notes/b.txt", "notes\n")
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done,
+			OutputFiles: []string{"internal/runner/report.txt", "internal/runner/./notes/b.txt"}, Usage: usage})
+	case "output files outside the paths":
+		write("internal/runner/report.txt", "report\n")
+		write("README.md", "changed outside the paths\n")
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{"internal/runner/report.txt"}, Usage: usage})
+	case "output file absolute":
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done,
+			OutputFiles: []string{filepath.Join(os.Getenv(fakeAdapterPIDDir), "pid")}, Usage: usage})
+	case "output file above":
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{"../index"}, Usage: usage})
+	case "output file link":
+		if err := os.Symlink(filepath.Join(os.Getenv(fakeAdapterPIDDir), "pid"), "internal/runner/link"); err != nil {
+			panic(err)
+		}
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{"internal/runner/link"}, Usage: usage})
+	case "output file missing":
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{"internal/runner/never.txt"}, Usage: usage})
+	case "output file directory":
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{"internal/runner"}, Usage: usage})
+	case "output file empty":
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, OutputFiles: []string{""}, Usage: usage})
 	case "not json":
 		fmt.Println("this is not a result")
 		return 0
@@ -275,6 +302,45 @@ func (f *fakeService) SendLog(_ context.Context, req *runnerv1.SendLogRequest) (
 	return &runnerv1.SendLogResponse{}, nil
 }
 
+// fakeBlobs is the blob store of the runner's tenant in the tests: it
+// keeps each blob in memory, or fails every Put with err when it is set.
+type fakeBlobs struct {
+	mu    sync.Mutex
+	blobs map[string]string
+	err   error
+}
+
+func (b *fakeBlobs) Put(_ context.Context, content io.Reader) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.err != nil {
+		return "", b.err
+	}
+	data, err := io.ReadAll(content)
+	if err != nil {
+		return "", err
+	}
+	hash := blobHash(string(data))
+	if b.blobs == nil {
+		b.blobs = map[string]string{}
+	}
+	b.blobs[hash] = string(data)
+	return hash, nil
+}
+
+// stored returns the blobs stored so far.
+func (b *fakeBlobs) stored() map[string]string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return maps.Clone(b.blobs)
+}
+
+// blobHash returns the blob hash of content: "sha256:" and its SHA-256.
+func blobHash(content string) string {
+	sum := sha256.Sum256([]byte(content))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
 // report returns the one report, failing the test when there is not
 // exactly one.
 func (f *fakeService) report(t *testing.T) *runnerv1.ReportRequest {
@@ -303,6 +369,7 @@ const testLeaseTimeout = 30 * time.Millisecond
 type fixture struct {
 	repo    *testRepo
 	service *fakeService
+	blobs   *fakeBlobs
 	cfg     Config
 	// pidDir is the directory in which the fake adapter writes its
 	// process id.
@@ -335,8 +402,10 @@ func newFixture(t *testing.T, mode string) *fixture {
 		LeaseNumber:     4,
 		LeaseTimeout:    durationpb.New(testLeaseTimeout),
 	}}
-	return &fixture{repo: repo, service: service, pidDir: pidDir, cfg: Config{
+	blobs := &fakeBlobs{}
+	return &fixture{repo: repo, service: service, blobs: blobs, pidDir: pidDir, cfg: Config{
 		Service:    service,
+		Blobs:      blobs,
 		Adapter:    "/proc/self/exe",
 		Repository: repo.dir,
 		WorkDir:    t.TempDir(),
@@ -517,7 +586,7 @@ func TestAFailedRun(t *testing.T) {
 }
 
 func TestAnInvalidResultFailsTheInvocation(t *testing.T) {
-	for _, mode := range []string{"not json", "no result", "exit 3", "unknown field", "no output", "output files", "stopped unasked"} {
+	for _, mode := range []string{"not json", "no result", "exit 3", "unknown field", "no output", "stopped unasked"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newFixture(t, mode)
 			report := f.runOne(t)
@@ -531,6 +600,85 @@ func TestAnInvalidResultFailsTheInvocation(t *testing.T) {
 				t.Errorf("the log does not say why the invocation failed; it is\n%s", f.service.log())
 			}
 		})
+	}
+}
+
+func TestOutputFilesAreUploaded(t *testing.T) {
+	f := newFixture(t, "output files")
+	report := f.runOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
+		t.Fatalf("the outcome is %v, want succeeded; the log is\n%s", report.GetOutcome(), f.service.log())
+	}
+	want := []*eventsv1.InvocationResult_OutputFile{
+		{Path: "internal/runner/report.txt", BlobHash: blobHash("report\n")},
+		{Path: "internal/runner/notes/b.txt", BlobHash: blobHash("notes\n")},
+	}
+	got := report.GetResult().GetOutputFiles()
+	if len(got) != len(want) {
+		t.Fatalf("the output files are %v, want %v", got, want)
+	}
+	for i := range want {
+		if !proto.Equal(got[i], want[i]) {
+			t.Errorf("output file %d is %v, want %v", i, got[i], want[i])
+		}
+	}
+	stored := f.blobs.stored()
+	if stored[blobHash("report\n")] != "report\n" || stored[blobHash("notes\n")] != "notes\n" || len(stored) != 2 {
+		t.Errorf("the blob store holds %q, want the two files", stored)
+	}
+}
+
+func TestABadOutputFileFailsTheInvocation(t *testing.T) {
+	for mode, named := range map[string]string{
+		"output file absolute":  `/pid" is not a path in the workspace`,
+		"output file above":     `"../index" is not a path in the workspace`,
+		"output file link":      `"internal/runner/link": openat internal/runner/link: path escapes from parent`,
+		"output file missing":   `"internal/runner/never.txt": openat internal/runner/never.txt: no such file or directory`,
+		"output file directory": `"internal/runner": it is not a regular file`,
+		"output file empty":     `"" is not a path in the workspace`,
+	} {
+		t.Run(mode, func(t *testing.T) {
+			f := newFixture(t, mode)
+			report := f.runOne(t)
+			if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_FAILED {
+				t.Errorf("the outcome is %v, want failed", report.GetOutcome())
+			}
+			if r := report.GetResult(); r.GetTree() != "" || r.GetOutput() != "" || len(r.GetOutputFiles()) != 0 {
+				t.Errorf("the result holds the tree %q, the output %q and the output files %v, want none", r.GetTree(), r.GetOutput(), r.GetOutputFiles())
+			}
+			if stored := f.blobs.stored(); len(stored) != 0 {
+				t.Errorf("the runner stored %q, want nothing", stored)
+			}
+			if log := f.service.log(); !strings.Contains(log, runnerPrefix) || !strings.Contains(log, named) {
+				t.Errorf("the log does not name %s as the reason the invocation failed; it is\n%s", named, log)
+			}
+		})
+	}
+}
+
+func TestAFailedUploadFailsTheInvocation(t *testing.T) {
+	f := newFixture(t, "output files")
+	f.blobs.err = errors.New("the disk is full")
+	report := f.runOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_FAILED {
+		t.Errorf("the outcome is %v, want failed", report.GetOutcome())
+	}
+	if r := report.GetResult(); len(r.GetOutputFiles()) != 0 || r.GetTree() != "" {
+		t.Errorf("the result holds the output files %v and the tree %q, want neither", r.GetOutputFiles(), r.GetTree())
+	}
+	if log := f.service.log(); !strings.Contains(log, "the disk is full") {
+		t.Errorf("the log does not give the store's error; it is\n%s", log)
+	}
+}
+
+func TestOutputFilesOfAnInvocationThatFailsAreNotUploaded(t *testing.T) {
+	f := newFixture(t, "output files outside the paths")
+	report := f.runOne(t)
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_FAILED {
+		t.Errorf("the outcome is %v, want failed (decision 0159)", report.GetOutcome())
+	}
+	if stored := f.blobs.stored(); len(stored) != 0 {
+		t.Errorf("the runner stored %q for an invocation that failed, want nothing", stored)
 	}
 }
 
@@ -822,6 +970,7 @@ func TestABadConfigIsRefused(t *testing.T) {
 		"a relative adapter": func(c *Config) { c.Adapter = "adapter" },
 		"no repository":      func(c *Config) { c.Repository = "" },
 		"no work directory":  func(c *Config) { c.WorkDir = "" },
+		"no blob store":      func(c *Config) { c.Blobs = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t, "success")

@@ -60,10 +60,22 @@ type Config struct {
 	// LogInterval is how often the runner sends a batch of the adapter's
 	// standard error; DefaultLogInterval when zero.
 	LogInterval time.Duration
+	// Blobs is the blob store of the runner's tenant, to which the runner
+	// uploads the output files that the adapter reports (decisions 0033
+	// and 0160).
+	Blobs Blobs
 	// Output, when set, also receives each invocation's log as it is
 	// written, each line after the invocation's id and ": ", so that pumi
 	// run prints it (getpumi/pumi#88).
 	Output io.Writer
+}
+
+// Blobs is the blob store as the runner sees it: bound to the runner's
+// tenant, which the runner never names (decision 0039).
+type Blobs interface {
+	// Put stores the content read from content and returns its hash,
+	// "sha256:" and the hexadecimal SHA-256.
+	Put(ctx context.Context, content io.Reader) (string, error)
 }
 
 // check refuses a configuration that lacks a value the runner needs, and
@@ -78,6 +90,8 @@ func (c *Config) check() error {
 		return errors.New("runner: no repository")
 	case c.WorkDir == "":
 		return errors.New("runner: no work directory")
+	case c.Blobs == nil:
+		return errors.New("runner: no blob store")
 	}
 	if c.Grace <= 0 {
 		c.Grace = DefaultGrace
@@ -113,7 +127,10 @@ func Run(ctx context.Context, cfg Config) error {
 // 0158). It parses the structured output strictly into the message that
 // the document names, computes the resulting tree from the workspace and
 // fails the invocation when a file was written outside the allowed paths,
-// before the result is appended (decisions 0159, 0160 and 0162).
+// before the result is appended (decisions 0159, 0160 and 0162). It then
+// uploads each output file that the adapter reports to the blob store and
+// records its path and hash in the result; a path outside the workspace
+// fails the invocation (decision 0160).
 //
 // When a heartbeat carries a cancel request, the runner closes the
 // adapter's standard input, kills it after the grace period and reports

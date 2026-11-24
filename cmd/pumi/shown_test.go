@@ -31,6 +31,7 @@ import (
 	"getpumi.dev/pumi/api/gen/pumi/runner/v1/runnerv1connect"
 	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane"
+	"getpumi.dev/pumi/internal/controlplane/blobstore"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
 	"getpumi.dev/pumi/internal/kernel"
 	"getpumi.dev/pumi/internal/kernel/workflow"
@@ -301,6 +302,11 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 	if err != nil {
 		return err
 	}
+	blobs, err := blobstore.OpenLocal(log.Dir())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = blobs.Close() }()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ran := make(chan error, 1)
@@ -310,6 +316,7 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 			Adapter:    run.Adapter,
 			Repository: run.Repository,
 			WorkDir:    run.WorkDir,
+			Blobs:      blobstore.ForTenant(blobs, embeddedlog.Tenant),
 		})
 	}()
 	final := false

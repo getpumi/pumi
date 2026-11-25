@@ -165,16 +165,13 @@ func tokenInEnviron(pid string) (gatewayToken, bool) {
 	return gatewayToken{}, false
 }
 
-// checkTokenPath fails the test unless claude sends the token as the
-// configuration's credential path says: in the header when it keeps its
-// sign-in, as its bearer token when the gateway sends the API key
-// (decision 0225).
+// checkTokenPath fails the test unless claude sends the token as its
+// bearer token, because the gateway sends the API key (decisions 0225 and
+// 0240).
 func checkTokenPath(t *testing.T, invocation string, tok gatewayToken) {
 	t.Helper()
 	keyEnv := os.Getenv(envProviderVariable)
 	switch {
-	case keyEnv == "" && tok.header:
-		t.Logf("claude of %s keeps its sign-in and sends the gateway token in X-Pumi-Token", invocation)
 	case keyEnv != "" && !tok.header:
 		t.Logf("claude of %s sends the gateway token as its bearer token; the gateway sends the API key of %s", invocation, keyEnv)
 	default:
@@ -219,7 +216,15 @@ func (s *shownCommands) writeCappedConfig() {
 // with the outcome cap_reached and the plan escalates (decisions 0203 and
 // 0228). pumi log prints each invocation's log, and neither it, the output
 // of pumi run nor the event log holds the gateway token (decision 0232).
+//
+// Since decision 0240 only an adapter in the API key mode goes through the
+// gateway, so the test is skipped unless PUMI_SHOWN_API_KEY_ENV names the
+// key's variable; the shown run on a sign-in is the Claude Code adapter's
+// (getpumi/adapter-claude-code#5).
 func TestShownRunsThroughTheGateway(t *testing.T) {
+	if os.Getenv(envProviderVariable) == "" {
+		t.Skipf("%s does not name the provider's API key; only the API key mode goes through the gateway (decision 0240)", envProviderVariable)
+	}
 	clone, plan, adapter := shownSetup(t)
 	s := prepareCommands(t, clone, plan, adapter)
 	s.writeCappedConfig()

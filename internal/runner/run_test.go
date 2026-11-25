@@ -201,8 +201,56 @@ func fakeAdapter(mode string) int {
 		time.Sleep(time.Hour)
 		return 0
 	}
+	if status, ok := figureModes(mode, in, done, usage); ok {
+		return status
+	}
 	fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"no mode", mode)
 	return 9
+}
+
+// figureModes acts in the modes of the sign-in path, which pass usage
+// figures, and reports whether mode is one of them (decision 0241).
+func figureModes(mode string, in *bufio.Reader, done string, usage *harnessv1.Usage) (int, bool) {
+	switch mode {
+	case "figures":
+		// Two usage figures, then the result, whose own usage the runner
+		// does not count when figures came (decision 0241).
+		writeLine(&harnessv1.Line{Kind: &harnessv1.Line_Usage{Usage: testFigure()}})
+		writeLine(&harnessv1.Line{Kind: &harnessv1.Line_Usage{Usage: testFigure()}})
+		return resultOK(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
+	case "figures until stopped":
+		// A usage figure every few milliseconds until standard input
+		// closes, as a harness that keeps calling the model does.
+		closed := make(chan struct{})
+		go func() {
+			_, _ = in.ReadString(0)
+			close(closed)
+		}()
+		for start := time.Now(); time.Since(start) < figureLimit; {
+			select {
+			case <-closed:
+				fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"standard input closed")
+				return resultOK(&harnessv1.Result{Status: harnessv1.Result_STATUS_STOPPED, Output: `{"summary":"partial"}`, Usage: usage})
+			case <-time.After(5 * time.Millisecond):
+				writeLine(&harnessv1.Line{Kind: &harnessv1.Line_Usage{Usage: testFigure()}})
+			}
+		}
+		fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"nobody stopped me")
+		return resultOK(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
+	case "unlisted figure":
+		figure := testFigure()
+		figure.Model = unlistedModel
+		writeLine(&harnessv1.Line{Kind: &harnessv1.Line_Usage{Usage: figure}})
+		_, _ = in.ReadString(0)
+		fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"standard input closed")
+		return resultOK(&harnessv1.Result{Status: harnessv1.Result_STATUS_STOPPED, Usage: usage})
+	}
+	return 0, false
+}
+
+// resultOK writes r as result does and returns its status and true.
+func resultOK(r *harnessv1.Result) (int, bool) {
+	return result(r), true
 }
 
 // writePID writes the process id to the file pid in the directory that

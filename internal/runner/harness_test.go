@@ -203,3 +203,54 @@ func TestACheckMayHaveNoGateway(t *testing.T) {
 		})
 	}
 }
+
+// signInResolved returns what the runner resolves for document when its
+// adapter is in the sign-in mode: no gateway, and the models of its model
+// role (decisions 0240 and 0254).
+func signInResolved() Resolved {
+	r := resolved()
+	r.Gateway, r.SignIn, r.Model, r.FallbackModel = nil, true, "claude-opus-5-5", "claude-sonnet-5-5"
+	return r
+}
+
+func TestASignInRunHasTheModelsAndNoGateway(t *testing.T) {
+	inv, err := HarnessInvocation(document(), signInResolved())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.Gateway != nil {
+		t.Errorf("the gateway is %v, want none on the sign-in path (decision 0240)", inv.GetGateway())
+	}
+	if inv.GetModel() != "claude-opus-5-5" || inv.GetFallbackModel() != "claude-sonnet-5-5" || inv.GetModelRole() != "frontier" {
+		t.Errorf("the model, fallback model and model role are %q, %q and %q; want the role's models and the role (decision 0254)",
+			inv.GetModel(), inv.GetFallbackModel(), inv.GetModelRole())
+	}
+}
+
+func TestHarnessInvocationRefusesTheWrongPath(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		change func(*runnerv1.Invocation, *Resolved)
+		reason string
+	}{
+		{"a gateway on the sign-in path", func(_ *runnerv1.Invocation, r *Resolved) {
+			r.Gateway = &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived"}
+		}, "0240"},
+		{"no model on the sign-in path", func(_ *runnerv1.Invocation, r *Resolved) { r.Model = "" }, "0254"},
+		{"no network on the sign-in path", func(d *runnerv1.Invocation, _ *Resolved) {
+			d.Capabilities.Network.Access = harnessv1.Capabilities_Network_ACCESS_NONE
+		}, "ACCESS_NONE"},
+		{"a model beside the gateway", func(_ *runnerv1.Invocation, r *Resolved) {
+			r.SignIn = false
+			r.Gateway = &harnessv1.Gateway{BaseUrl: "http://127.0.0.1:7070", Token: "short-lived"}
+		}, "0254"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			doc, r := document(), signInResolved()
+			c.change(doc, &r)
+			if inv, err := HarnessInvocation(doc, r); err == nil || !strings.Contains(err.Error(), c.reason) {
+				t.Errorf("HarnessInvocation = %v, %v; want an error that says %q", inv, err, c.reason)
+			}
+		})
+	}
+}

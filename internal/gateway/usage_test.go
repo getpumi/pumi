@@ -6,6 +6,8 @@ package gateway
 import (
 	"strings"
 	"testing"
+
+	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 )
 
 func TestPicodollarsPricesEachKindOfToken(t *testing.T) {
@@ -116,5 +118,25 @@ func TestUsageReaderWithoutUsage(t *testing.T) {
 				t.Errorf("usage() = %+v, true, want false", got)
 			}
 		})
+	}
+}
+
+// TestFigureCostPricesAFigureAsACall: a usage figure that an adapter
+// passes on the sign-in path costs what the same call through the gateway
+// costs, and a figure of a model the table does not list is not priced
+// (decision 0241).
+func TestFigureCostPricesAFigureAsACall(t *testing.T) {
+	figure := &harnessv1.UsageFigure{
+		Model: "claude-opus-5-5", InputTokens: 1_000, FiveMinuteCacheWriteTokens: 20, OneHourCacheWriteTokens: 300,
+		CacheReadTokens: 4_000, OutputTokens: 50_000, WebSearches: 2, Speed: "fast", InferenceGeo: "us",
+	}
+	opus, _ := Price("claude-opus-5-5")
+	want := opus.picodollars(usage{input: 1_000, write5m: 20, write1h: 300, read: 4_000, output: 50_000, webSearches: 2, fast: true, usOnly: true})
+	if got, listed := FigureCost(figure); got != want || !listed {
+		t.Errorf("FigureCost = %d, %v; want %d, true", got, listed, want)
+	}
+	figure.Model = "not-a-model"
+	if got, listed := FigureCost(figure); got != 0 || listed {
+		t.Errorf("FigureCost of an unlisted model = %d, %v; want 0, false", got, listed)
 	}
 }

@@ -58,7 +58,7 @@ func (r *run) execute(ctx context.Context, path string, inv *harnessv1.Invocatio
 	if err != nil {
 		return nil, fmt.Errorf("the harness invocation could not be written: %w", err)
 	}
-	stdout := &stdoutReader{usage: r.logUsage}
+	stdout := &stdoutReader{usage: r.passUsage}
 	cmd := &exec.Cmd{
 		Path: path, Args: []string{path}, Dir: inv.GetWorkspace(), Env: os.Environ(),
 		Stdout: stdout, Stderr: r.log,
@@ -116,6 +116,10 @@ type supervisor struct {
 	// limit fires when the wall time reaches the budget's seconds; nil
 	// when the budget sets none.
 	limit <-chan time.Time
+	// metered is closed when the runner's count of the usage figures on
+	// the sign-in path says that the run must stop; nil on any other path
+	// (decision 0241).
+	metered <-chan struct{}
 	// leaseEnd is when the lease ends unless a heartbeat renews it,
 	// counted from the claim or the last heartbeat that renewed it.
 	leaseEnd time.Time
@@ -133,6 +137,9 @@ func (s *supervisor) supervise(ctx context.Context) *execution {
 		limit := time.NewTimer(time.Duration(seconds) * time.Second)
 		defer limit.Stop()
 		s.limit = limit.C
+	}
+	if m := s.run.meter; m != nil {
+		s.metered = m.stop
 	}
 	stopped := ctx.Done()
 	for {
@@ -152,6 +159,9 @@ func (s *supervisor) supervise(ctx context.Context) *execution {
 		case <-s.limit:
 			s.limit = nil
 			s.capReached()
+		case <-s.metered:
+			s.metered = nil
+			s.meterStop()
 		case <-s.kill:
 			s.kill = nil
 			if err := killGroup(s.process); err != nil {
@@ -216,6 +226,26 @@ func (s *supervisor) capReached() {
 	s.stop()
 }
 
+// meterStop stops the adapter when the runner's count of its usage figures
+// reaches the token or cost cap, which is cap reached unless a cancel or
+// the wall-time limit already stopped it, or when a figure cannot be
+// priced, which fails the invocation (decision 0241).
+func (s *supervisor) meterStop() {
+	if err := s.run.meter.failure(); err != nil {
+		s.run.log.note("the runner stops the adapter of %s: %v", s.run.doc.GetInvocation(), err)
+		s.stop()
+		return
+	}
+	if s.ex.cancelled || s.ex.capped {
+		return
+	}
+	s.ex.capped = true
+	tokens, microdollars := s.run.meter.current()
+	s.run.log.note("the invocation %s reached its token or cost cap with %d tokens and %d microdollars that the runner counted from the adapter's usage figures (decision 0241)",
+		s.run.doc.GetInvocation(), tokens, microdollars)
+	s.stop()
+}
+
 // end ends the invocation without a report, with err: it stops the
 // heartbeats and log batches and the adapter.
 func (s *supervisor) end(err error) {
@@ -253,30 +283,22 @@ func heartbeatInterval(timeout *durationpb.Duration) time.Duration {
 
 // judge checks how the adapter's run ended and fills result: the usage,
 // the resulting tree and the structured output. The usage is the gateway's
-// totals with the measured wall time (decision 0230). It returns the
+// totals with the measured wall time (decision 0230), or on the sign-in
+// path the runner's count of the adapter's usage figures, or of its
+// result's usage when it passed none (decision 0241). It returns the
 // outcome, with the reason when the invocation failed. A failed
 // invocation's result holds at most the usage and the refusals that the
 // harness reported (decision 0249).
 func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageType, work, index string, totals GatewayTotals, result *eventsv1.InvocationResult) (eventsv1.InvocationFinished_Outcome, error) {
-	result.Usage = &eventsv1.InvocationResult_Usage{
-		Tokens: totals.Tokens, CostMicrodollars: totals.CostMicrodollars,
-		Seconds: int64((ex.elapsed + time.Second - 1) / time.Second),
+	res, resErr := resultOf(ex)
+	capReached, failed := r.usage(ex, res, totals, result)
+	if resErr != nil {
+		return failed, resErr
 	}
-	// A cancel outranks a cap: the person asked to stop the run.
-	capReached := !ex.cancelled && (ex.capped || totals.CapReached)
-	if totals.CapReached {
-		r.log.note("the model gateway refused a call of %s at its token or cost cap (decision 0228)", r.doc.GetInvocation())
-	}
-	failed := eventsv1.InvocationFinished_OUTCOME_FAILED
-	switch {
-	case ex.cancelled:
-		failed = eventsv1.InvocationFinished_OUTCOME_CANCELLED
-	case capReached:
-		failed = eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
-	}
-	res, err := resultOf(ex)
-	if err != nil {
-		return failed, err
+	if r.meter != nil {
+		if err := r.meter.failure(); err != nil {
+			return eventsv1.InvocationFinished_OUTCOME_FAILED, err
+		}
 	}
 	// The refusals stay in the result whatever the outcome, because they
 	// can say why the run failed (decision 0249).
@@ -287,10 +309,7 @@ func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageT
 	if res.GetStatus() == harnessv1.Result_STATUS_LIMITED {
 		r.log.note("the provider's usage or rate limit stopped the run of %s (decision 0249)", r.doc.GetInvocation())
 	}
-	if u := res.GetUsage(); u != nil {
-		r.log.note("the adapter reported %d tokens, %d microdollars and %d s; the usage is the model gateway's totals (decision 0230)",
-			u.GetTokens(), u.GetCostMicrodollars(), u.GetSeconds())
-	}
+	r.noteAdapterUsage(res.GetUsage())
 	tree, err := r.resultingTree(ctx, work, index)
 	if err != nil {
 		return failed, err
@@ -391,6 +410,69 @@ func cloneRefusals(refusals []*harnessv1.Refusal) []*harnessv1.Refusal {
 		out[i] = proto.CloneOf(r)
 	}
 	return out
+}
+
+// usage sets the usage of result: the gateway's totals, or on the sign-in
+// path the runner's count, with the measured wall time. It returns whether
+// the outcome is cap reached, and the outcome of the invocation if it
+// fails: cancelled, cap reached or failed.
+func (r *run) usage(ex *execution, res *harnessv1.Result, totals GatewayTotals, result *eventsv1.InvocationResult) (bool, eventsv1.InvocationFinished_Outcome) {
+	if r.meter != nil {
+		totals = r.signInTotals(res)
+	} else if totals.CapReached {
+		r.log.note("the model gateway refused a call of %s at its token or cost cap (decision 0228)", r.doc.GetInvocation())
+	}
+	result.Usage = &eventsv1.InvocationResult_Usage{
+		Tokens: totals.Tokens, CostMicrodollars: totals.CostMicrodollars,
+		Seconds: int64((ex.elapsed + time.Second - 1) / time.Second),
+	}
+	// A cancel outranks a cap: the person asked to stop the run.
+	capReached := !ex.cancelled && (ex.capped || totals.CapReached)
+	switch {
+	case ex.cancelled:
+		return capReached, eventsv1.InvocationFinished_OUTCOME_CANCELLED
+	case capReached:
+		return capReached, eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
+	}
+	return capReached, eventsv1.InvocationFinished_OUTCOME_FAILED
+}
+
+// signInTotals returns the usage of an agent run on the sign-in path: the
+// runner's count of the usage figures, or the usage of the result res when
+// the adapter passed none. It checks the caps on that usage, which for an
+// adapter that passed no figures is when the run ends (decision 0241).
+func (r *run) signInTotals(res *harnessv1.Result) GatewayTotals {
+	c := r.meter.count(res)
+	if c.figures == 0 && c.capReached {
+		r.log.note("the usage of %s reached its token or cost cap when the run ended, with %d tokens and %d microdollars (decision 0241)",
+			r.doc.GetInvocation(), c.tokens, c.microdollars)
+	}
+	return GatewayTotals{Tokens: c.tokens, CostMicrodollars: c.microdollars, CapReached: c.capReached}
+}
+
+// noteAdapterUsage writes the usage that the adapter reported in its
+// result to the log, and says which usage the result holds instead.
+func (r *run) noteAdapterUsage(u *harnessv1.Usage) {
+	if u == nil {
+		return
+	}
+	why := "the usage is the model gateway's totals (decision 0230)"
+	if r.meter != nil {
+		why = "the usage is the runner's count of its usage figures (decision 0241)"
+		if c := r.meter.count(nil); c.figures == 0 {
+			why = "it passed no usage figures, so the usage is the result's and the caps are checked when the run ends (decision 0241)"
+		}
+	}
+	r.log.note("the adapter reported %d tokens, %d microdollars and %d s; %s", u.GetTokens(), u.GetCostMicrodollars(), u.GetSeconds(), why)
+}
+
+// passUsage writes a usage figure that the adapter passed while it ran to
+// the log, and on the sign-in path counts it (decision 0241).
+func (r *run) passUsage(u *harnessv1.UsageFigure) {
+	r.logUsage(u)
+	if r.meter != nil {
+		r.meter.add(u)
+	}
 }
 
 // logUsage writes a usage figure that the adapter passed while it ran to

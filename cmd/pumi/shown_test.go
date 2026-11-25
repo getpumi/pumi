@@ -43,8 +43,8 @@ import (
 // skipped unless PUMI_SHOWN_CLONE names a local clone of ScaleWholesale and
 // PUMI_SHOWN_PLAN the path, in that clone, of a plan of a change in
 // openspec/changes/archive. The Claude Code adapter is PUMI_SHOWN_ADAPTER,
-// or adapter-claude-code on the PATH, and claude keeps its own sign-in and
-// reaches the model through the gateway (decisions 0225 and 0226).
+// or adapter-claude-code on the PATH, and claude reaches the model through
+// the gateway of shownGateway (decisions 0225 and 0226).
 //
 // Each run makes a new git repository in a temporary directory that reads
 // the objects of the clone, checks it out at the plan's base commit and adds
@@ -339,14 +339,14 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 
 // shownRunner returns the configuration of the shown run's runner, without
 // its service: the local blob store in the pumi directory dir and the model
-// gateway, on which claude keeps its own sign-in. The function it returns
+// gateway of shownGateway. The function it returns
 // closes them.
 func shownRunner(ctx context.Context, run shownRun, dir string) (runner.Config, func(), error) {
 	blobs, err := blobstore.OpenLocal(dir)
 	if err != nil {
 		return runner.Config{}, nil, err
 	}
-	gw, err := serveGateway(ctx, &config{file: &configv1.Config{}}, os.Stderr)
+	gw, err := serveGateway(ctx, &config{file: &configv1.Config{Gateway: shownGateway()}}, os.Stderr)
 	if err != nil {
 		_ = blobs.Close()
 		return runner.Config{}, nil, err

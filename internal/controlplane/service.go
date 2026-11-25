@@ -223,6 +223,9 @@ func (h *handler) checkEvents(evs []*cloudeventsv1.CloudEvent) ([]*cloudeventsv1
 			return nil, connect.Errorf(connect.CodePermissionDenied,
 				"event %d of the append: a %s may not append %s (decision 0156)", i+1, h.id.Caller, e.GetType())
 		}
+		if err := checkSwitch(i, e, nil); err != nil {
+			return nil, err
+		}
 		out = append(out, e)
 	}
 	return out, nil

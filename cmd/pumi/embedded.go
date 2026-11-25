@@ -147,7 +147,8 @@ func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*contro
 // kernel on the file's workflow, starting each plan from the trunk's tree
 // (decision 0209), the model gateway on 127.0.0.1 (decision 0231), and the
 // in-process runner with the file's adapters, the adapter of each agent
-// run picked by its model role (decision 0245), whose agent runs go through
+// run picked by its model role (decision 0245) or by the role's fallback on
+// another adapter after a limit (decision 0246), whose agent runs go through
 // the gateway when their adapter is in the API key mode, and otherwise talk
 // to the provider directly while the runner counts their usage (decisions
 // 0240 and 0241), whose output goes to out and whose output files go to the
@@ -225,7 +226,7 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 				Service: runnerClient, Adapters: cfg.adapters(), Roles: cfg.roleAdapters(),
 				CheckAdapter: cfg.file.GetModels().GetCheckAdapter(), Repository: dir, WorkDir: work, Output: out,
 				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: runnerGateway(gw),
-				Models: roleModels(cfg), Price: gateway.FigureCost,
+				Models: roleModels(cfg), Fallbacks: fallbacks(cfg), Price: gateway.FigureCost,
 			})
 		},
 		func() error {

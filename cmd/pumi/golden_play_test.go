@@ -300,7 +300,8 @@ func (p *pumi) play(want []*cloudeventsv1.CloudEvent, running bool) {
 			p.expire()
 		case next.GetType() == events.TypeInvocationResult:
 			result := dataOf(p.t, next, &eventsv1.InvocationResult{})
-			p.report(result, outcomeAfter(p.t, want, m, result.GetInvocation()), leaseNumber(p.t, want, m, result.GetInvocation()))
+			p.report(result, outcomeAfter(p.t, want, m, result.GetInvocation()), leaseNumber(p.t, want, m, result.GetInvocation()),
+				reportedAfter(p.t, want, m, got)...)
 		case strings.HasPrefix(next.GetSource(), personSource):
 			p.appendAsPerson(personEvent(p.t, next, got))
 		case permissionOfPerson(want, m) != nil:
@@ -346,6 +347,22 @@ func outcomeAfter(t *testing.T, want []*cloudeventsv1.CloudEvent, at int, invoca
 	}
 	t.Fatalf("the case has no invocation.finished of %s after line %d", invocation, at+1)
 	return eventsv1.InvocationFinished_OUTCOME_UNSPECIFIED
+}
+
+// reportedAfter returns the events that the runner reports with the
+// invocation.result at line at of want: the lines after it, up to its
+// invocation.finished, each with a new id and its references replaced as
+// personEvent replaces them, so that the scripted runner reports them again
+// (decision 0246).
+func reportedAfter(t *testing.T, want []*cloudeventsv1.CloudEvent, at int, got []*cloudeventsv1.CloudEvent) []*cloudeventsv1.CloudEvent {
+	t.Helper()
+	var out []*cloudeventsv1.CloudEvent
+	for i := at + 1; i < len(want) && want[i].GetType() != events.TypeInvocationFinished; i++ {
+		e := personEvent(t, want[i], got)
+		e.Id = fmt.Sprintf("reported-event-%d", i+1)
+		out = append(out, e)
+	}
+	return out
 }
 
 // leaseNumber returns the number of the last lease of invocation granted
@@ -558,6 +575,18 @@ var seeds = map[string][]step{
 	// plan-a/2 fails too; the retry has no attempts left, so it is denied,
 	// and the plan escalates on failed (decisions 0235 and 0237).
 	"spike/failed-attempts-escalate": {addPlanA, claimStep, reportFailedOf("plan-a/1"), claimStep, reportFailedOf("plan-a/2")},
+	// The provider's limit stops the agent run on its model role's own
+	// adapter; the runner falls back to the role's fallback on another
+	// adapter, reports that run's success with the switch, and the plan
+	// goes to done. The person then switches the role back (decision 0246).
+	"spike/role-falls-back": {addPlanA, claimStep, reportSwitchedOf("plan-a/1", eventsv1.InvocationFinished_OUTCOME_SUCCEEDED), resetStep("frontier")},
+	// The limit stops the fallback's run too, so plan-a/1 fails with the
+	// switch; it runs again as plan-a/2, on the fallback at once with no
+	// second switch, and fails again, and the plan escalates on failed
+	// (decisions 0235 and 0246).
+	"spike/fallback-limited": {
+		addPlanA, claimStep, reportSwitchedOf("plan-a/1", eventsv1.InvocationFinished_OUTCOME_FAILED), claimStep, reportFailedOf("plan-a/2"),
+	},
 	// With parallelism 1, b1 waits while a1 runs; the person cancels b1,
 	// and b1 does not start when a1 has merged.
 	"tracks/cancel-while-waiting": {

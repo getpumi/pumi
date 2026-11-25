@@ -110,6 +110,7 @@ var apiFiles = []protoreflect.FileDescriptor{
 	eventsv1.File_pumi_events_v1_gates_proto,
 	eventsv1.File_pumi_events_v1_invocations_proto,
 	eventsv1.File_pumi_events_v1_leases_proto,
+	eventsv1.File_pumi_events_v1_models_proto,
 	eventsv1.File_pumi_events_v1_people_proto,
 	eventsv1.File_pumi_events_v1_plans_proto,
 	factsv1.File_pumi_facts_v1_code_proto,

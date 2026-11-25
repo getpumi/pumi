@@ -374,7 +374,10 @@ type Role struct {
 	// The fallback, which may be on another adapter; none when not set.
 	// When it is on the same adapter, the model gateway also sends a call
 	// once to its model when the provider answers with a usage or rate limit
-	// (decision 0233).
+	// (decision 0233). When it is on another adapter, the runner starts that
+	// adapter once when the provider's limit stops a run of the role, and the
+	// role stays on its fallback until pumi role reset switches it back
+	// (decision 0246).
 	Fallback      *Fallback `protobuf:"bytes,3,opt,name=fallback,proto3" json:"fallback,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

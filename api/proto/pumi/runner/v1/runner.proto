@@ -78,6 +78,11 @@ message ClaimResponse {
   int64 lease_number = 3;
   // How long the lease lasts unless a heartbeat renews it.
   google.protobuf.Duration lease_timeout = 4;
+  // Whether the model role of the invocation is on its fallback: the last
+  // dev.getpumi.model_role.switched of the role in the log switched it to
+  // its fallback. The runner then starts the role's fallback adapter, and
+  // does not fall back again (decisions 0246 and 0266).
+  bool model_role_switched = 5;
 }
 
 // Invocation is the invocation document: a self-contained record of one
@@ -164,7 +169,8 @@ message ReportRequest {
   // types are allowed: a gate-role invocation may report verdict.recorded
   // and warning.raised, an external-action invocation merge.performed,
   // check.ingested and trunk.unattested, and an agent-role invocation
-  // nothing more (decision 0156).
+  // only dev.getpumi.model_role.switched, when a limit switched its model
+  // role to its fallback (decisions 0156 and 0246).
   repeated io.cloudevents.v1.CloudEvent events = 4;
   // The outcome, appended as invocation.finished.
   pumi.events.v1.InvocationFinished.Outcome outcome = 5;

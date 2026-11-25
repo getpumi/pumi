@@ -110,7 +110,8 @@ func stateOf(p *plan, initial string) string {
 }
 
 // status writes each plan's track, state and open escalation, one plan to
-// a line in the order the plans were added.
+// a line in the order the plans were added, and then each model role that
+// is on its fallback (decision 0246).
 func status(ctx context.Context, s *Session, _ []string, w io.Writer) error {
 	plans, _, err := readPlans(ctx, s)
 	if err != nil {
@@ -126,7 +127,14 @@ func status(ctx context.Context, s *Session, _ []string, w io.Writer) error {
 	for _, p := range plans {
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.name, p.track, stateOf(p, initial), oneLine(p.question))
 	}
-	return tw.Flush()
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	switched, err := switchedRoles(ctx, s)
+	if err != nil {
+		return err
+	}
+	return writeSwitchedRoles(w, switched)
 }
 
 // oneLine returns text with its white space, newlines included, joined to

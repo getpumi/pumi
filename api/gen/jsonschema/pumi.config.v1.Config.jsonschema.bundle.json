@@ -293,7 +293,7 @@
         },
         "fallback": {
           "$ref": "#/$defs/pumi.config.v1.Fallback.jsonschema.json",
-          "description": "The fallback, which may be on another adapter; none when not set.\n When it is on the same adapter, the model gateway also sends a call\n once to its model when the provider answers with a usage or rate limit\n (decision 0233)."
+          "description": "The fallback, which may be on another adapter; none when not set.\n When it is on the same adapter, the model gateway also sends a call\n once to its model when the provider answers with a usage or rate limit\n (decision 0233). When it is on another adapter, the runner starts that\n adapter once when the provider's limit stops a run of the role, and the\n role stays on its fallback until pumi role reset switches it back\n (decision 0246)."
         },
         "model": {
           "default": "",

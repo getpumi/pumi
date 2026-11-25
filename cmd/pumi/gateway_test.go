@@ -254,6 +254,17 @@ func (p *provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		req.Model, testInputTokens, req.MaxTokens)
 }
 
+// limit makes the provider answer the calls of models with a rate limit,
+// and every other call as usual.
+func (p *provider) limit(models ...string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.limited = map[string]bool{}
+	for _, m := range models {
+		p.limited[m] = true
+	}
+}
+
 // received returns the calls the provider received.
 func (p *provider) received() []providerCall {
 	p.mu.Lock()

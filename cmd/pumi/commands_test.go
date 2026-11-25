@@ -98,6 +98,9 @@ func testAdapter(mode string) int {
 		return 9
 	}
 	fmt.Fprintf(os.Stderr, "%sruns %s on the tree %s\n", testAdapterPrefix, inv.GetInvocation(), inv.GetInput().GetTree())
+	if mode == adapterStopsAtALimit {
+		return stopsAtALimit(inv)
+	}
 	usage := &harnessv1.Usage{Tokens: 10, CostMicrodollars: 20, Seconds: 1}
 	var files []string
 	// closed is closed when the runner closes standard input, which only
@@ -344,7 +347,10 @@ type statusRow struct {
 func (c *commandClone) status(args ...string) map[string]statusRow {
 	c.t.Helper()
 	out := c.must(append([]string{"status"}, args...)...)
-	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	// The plans' table ends at the first empty line, before the model roles
+	// that are on their fallback (decision 0246).
+	table, _, _ := strings.Cut(out, "\n\n")
+	lines := strings.Split(strings.TrimSuffix(table, "\n"), "\n")
 	if len(lines) == 0 || !strings.HasPrefix(lines[0], "PLAN") {
 		c.t.Fatalf("pumi status wrote no header:\n%s", out)
 	}

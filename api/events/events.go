@@ -33,7 +33,7 @@ const SpecVersion = "1.0"
 // TypePrefix starts every Pumi event type (decision 0133).
 const TypePrefix = "dev.getpumi."
 
-// The v1 event types (decision 0135). Each is written as TypePrefix and a
+// The v1 event types (decisions 0135 and 0246). Each is written as TypePrefix and a
 // name, which a test reads.
 const (
 	TypePlanAdded           = TypePrefix + "plan.added"
@@ -57,6 +57,8 @@ const (
 	TypeMergePerformed      = TypePrefix + "merge.performed"
 	TypeTrunkUnattested     = TypePrefix + "trunk.unattested"
 	TypeCheckIngested       = TypePrefix + "check.ingested"
+	// TypeModelRoleSwitched is the 22nd event type (decision 0246).
+	TypeModelRoleSwitched = TypePrefix + "model_role.switched"
 )
 
 // The names of Pumi's extension attributes (decision 0133).
@@ -99,6 +101,7 @@ var dataOf = map[string]proto.Message{
 	TypeMergePerformed:      &eventsv1.MergePerformed{},
 	TypeTrunkUnattested:     &eventsv1.TrunkUnattested{},
 	TypeCheckIngested:       &eventsv1.CheckIngested{},
+	TypeModelRoleSwitched:   &eventsv1.ModelRoleSwitched{},
 }
 
 // typeOf gives the type of each data message, by its full name.

@@ -55,6 +55,24 @@ func checkRoles(roles map[string]Role) error {
 	return errors.Join(errs...)
 }
 
+// checkAdapterRoles refuses a model role of an adapter that checkRoles
+// refuses, or that has a fallback model: the fallback on another adapter
+// has no fallback of its own (decision 0246).
+func checkAdapterRoles(byAdapter map[string]map[string]Role) error {
+	var errs []error
+	for adapter, roles := range byAdapter {
+		if err := checkRoles(roles); err != nil {
+			errs = append(errs, fmt.Errorf("gateway: the model roles of the adapter %q: %w", adapter, err))
+		}
+		for name, r := range roles {
+			if r.Fallback != "" {
+				errs = append(errs, fmt.Errorf("gateway: the model role %q of the adapter %q is a fallback on another adapter, which has no fallback model of its own", name, adapter))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // withModel returns the uncompressed body of a call of the Messages API
 // with its top-level model replaced by model, and every other byte as it
 // was.

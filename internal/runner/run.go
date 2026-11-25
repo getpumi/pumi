@@ -18,10 +18,13 @@ import (
 	"time"
 
 	"getpumi.dev/pumi/api"
+	"getpumi.dev/pumi/api/events"
+	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
 	"getpumi.dev/pumi/api/gen/pumi/runner/v1/runnerv1connect"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
@@ -64,6 +67,11 @@ type Config struct {
 	// Models maps each model role to the models that an adapter in the
 	// sign-in mode gets in the harness invocation (decision 0254).
 	Models map[string]Models
+	// Fallbacks maps each model role whose fallback is on another adapter
+	// to that adapter and model. When the provider's limit stops a run of
+	// the role, the runner starts the fallback's adapter once, and the
+	// role stays on it until a person switches it back (decision 0246).
+	Fallbacks map[string]Fallback
 	// Price prices a usage figure that an adapter in the sign-in mode
 	// passes with the gateway's list-price table, in picodollars, and
 	// reports whether the table lists its model (decision 0241). The runner
@@ -120,6 +128,15 @@ type Models struct {
 	// Fallback is the model of the role's fallback when the fallback is on
 	// the same adapter; empty otherwise (decision 0246).
 	Fallback string
+}
+
+// Fallback is the adapter and model of a model role's fallback on another
+// adapter (decision 0246).
+type Fallback struct {
+	// Adapter is the name of the adapter.
+	Adapter string
+	// Model is the model.
+	Model string
 }
 
 // Gateway is the model gateway as the runner sees it (decisions 0225,
@@ -219,6 +236,11 @@ func (c *Config) checkAdapters() error {
 			errs = append(errs, fmt.Errorf("runner: the model role %q names the adapter %q, which is not one of the adapters", role, c.Roles[role]))
 		}
 	}
+	for _, role := range slices.Sorted(maps.Keys(c.Fallbacks)) {
+		if _, ok := c.Adapters[c.Fallbacks[role].Adapter]; !ok {
+			errs = append(errs, fmt.Errorf("runner: the fallback of the model role %q names the adapter %q, which is not one of the adapters", role, c.Fallbacks[role].Adapter))
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -300,6 +322,14 @@ func Run(ctx context.Context, cfg Config) error {
 // no figures, the usage of its result, whose caps are checked when the run
 // ends (decision 0241).
 //
+// When the provider's limit stops a run of an agent run's model role and
+// the role has a fallback on another adapter, the runner starts the
+// fallback's adapter once in a fresh checkout of the same input tree, with
+// what the first run left of the budget, and reports that run's result
+// with the usage of both and the switch of the role; when the claim says
+// that the role is on its fallback, it starts only the fallback's adapter
+// (decision 0246).
+//
 // When a heartbeat carries a cancel request, the runner closes the
 // adapter's standard input, kills it after the grace period and reports
 // the outcome cancelled (decision 0035). When the wall time reaches the
@@ -354,39 +384,167 @@ type run struct {
 	// meter counts the usage figures of an agent run on the sign-in path;
 	// nil on any other (decision 0241).
 	meter *meter
+	// budget is what the current run of an adapter may use: the
+	// document's budget, or what the first run left for the run of the
+	// fallback (decision 0246).
+	budget *harnessv1.Usage
+	// onFallback is set while the invocation runs on its model role's
+	// fallback on another adapter (decision 0246).
+	onFallback bool
 }
 
-// do runs the invocation in a new directory, which it removes after, and
-// reports its result.
+// do runs the invocation and reports its result. When the provider's
+// limit stops a run of an agent run's model role on its own adapter, and
+// the role has a fallback on another adapter, the runner starts the
+// fallback's adapter once, in a fresh checkout of the same input tree,
+// with what the first run left of the budget, and reports that run's
+// result with both runs' usage and the switch of the role; both runs are
+// in the one log. When the claim says that the role is already on its
+// fallback, the runner starts only the fallback's adapter, and a limit
+// fails the invocation (decision 0246).
 func (r *run) do(ctx context.Context) error {
+	r.budget = r.doc.GetBudget()
+	role := r.doc.GetModelRole()
+	fallback, hasFallback := r.cfg.Fallbacks[role]
+	hasFallback = hasFallback && r.doc.GetComponent().GetKind() == harnessv1.Component_KIND_AGENT_RUN
+	if r.claim.GetModelRoleSwitched() {
+		if !hasFallback {
+			return r.report(ctx, &eventsv1.InvocationResult{Invocation: r.doc.GetInvocation()}, eventsv1.InvocationFinished_OUTCOME_FAILED,
+				fmt.Errorf("the log says that the model role %q is on its fallback, but the configuration gives it no fallback on another adapter; the runner does not switch the role back by itself, and a person does with pumi role reset %s (decision 0246)", role, role))
+		}
+		r.onFallback = true
+		r.log.note("the model role %s is on its fallback, the model %s on the adapter %s, since a limit switched it; pumi role reset %s switches it back (decision 0246)",
+			role, fallback.Model, fallback.Adapter, role)
+	}
+	first := r.attempt(ctx)
+	if first.ended != nil {
+		return first.ended
+	}
+	if !first.limited || r.onFallback || !hasFallback {
+		return r.report(ctx, first.result, first.outcome, first.problem)
+	}
+	switched, err := r.switchEvent(fallback)
+	if err != nil {
+		return r.report(ctx, first.result, eventsv1.InvocationFinished_OUTCOME_FAILED, err)
+	}
+	left, ok := remaining(r.budget, first.result.GetUsage())
+	if !ok {
+		r.log.note("the model role %s switches to its fallback, the model %s on the adapter %s, but the first run left none of the budget for it (decision 0246)",
+			role, fallback.Model, fallback.Adapter)
+		return r.report(ctx, first.result, first.outcome, first.problem, switched)
+	}
+	r.log.note("the model role %s switches to its fallback, the model %s on the adapter %s, after the provider's limit stopped its run on the adapter %s; the fallback runs once in a fresh checkout of the input tree with %d tokens, %d microdollars and %d s of the budget left, and the role stays on it until pumi role reset %s (decision 0246)",
+		role, fallback.Model, fallback.Adapter, r.adapter, left.GetTokens(), left.GetCostMicrodollars(), left.GetSeconds(), role)
+	r.onFallback, r.budget = true, left
+	second := r.attempt(ctx)
+	if second.ended != nil {
+		return second.ended
+	}
+	second.result.Usage = addUsage(first.result.GetUsage(), second.result.GetUsage())
+	return r.report(ctx, second.result, second.outcome, second.problem, switched)
+}
+
+// attempt is how one run of an adapter for the invocation ended.
+type attempt struct {
+	result  *eventsv1.InvocationResult
+	outcome eventsv1.InvocationFinished_Outcome
+	// problem is the reason the invocation failed, when it did.
+	problem error
+	// ended is the error that ends the invocation without a report.
+	ended error
+	// limited is set when the provider's usage or rate limit stopped the
+	// run, which the runner did not stop and whose caps were not reached
+	// (decision 0249).
+	limited bool
+}
+
+// attempt runs the adapter once in a new directory, which it removes
+// after, and judges how it ended.
+func (r *run) attempt(ctx context.Context) attempt {
+	result := &eventsv1.InvocationResult{Invocation: r.doc.GetInvocation()}
+	r.adapter, r.meter = "", nil
 	dir, err := os.MkdirTemp(r.cfg.WorkDir, "invocation-")
 	if err != nil {
-		return fmt.Errorf("runner: the directory of %s: %w", r.doc.GetInvocation(), err)
+		return attempt{ended: fmt.Errorf("runner: the directory of %s: %w", r.doc.GetInvocation(), err)}
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	work, index := filepath.Join(dir, "workspace"), filepath.Join(dir, "index")
-	result := &eventsv1.InvocationResult{Invocation: r.doc.GetInvocation()}
 	ex, mt, err := r.start(ctx, work, index)
 	// The adapter has exited, or never started: the runner reads the
 	// gateway's totals and ends the token (decisions 0230 and 0231).
 	totals, gerr := r.closeGateway()
-	if err != nil && ctx.Err() != nil {
+	switch {
+	case err != nil && ctx.Err() != nil:
 		// The runner stopped before the adapter started, as while it
 		// checked the input tree out: like a stop while the adapter runs,
 		// that ends the invocation without a report (decision 0182).
-		return ctx.Err()
-	}
-	if err != nil {
-		return r.report(ctx, result, eventsv1.InvocationFinished_OUTCOME_FAILED, err)
-	}
-	if ex.ended != nil {
-		return ex.ended
-	}
-	if gerr != nil {
-		return r.report(ctx, result, eventsv1.InvocationFinished_OUTCOME_FAILED, gerr)
+		return attempt{ended: ctx.Err()}
+	case err != nil:
+		return attempt{result: result, outcome: eventsv1.InvocationFinished_OUTCOME_FAILED, problem: err}
+	case ex.ended != nil:
+		return attempt{ended: ex.ended}
+	case gerr != nil:
+		return attempt{result: result, outcome: eventsv1.InvocationFinished_OUTCOME_FAILED, problem: gerr}
 	}
 	outcome, err := r.judge(ctx, ex, mt, work, index, totals, result)
-	return r.report(ctx, result, outcome, err)
+	limited := ex.result.GetStatus() == harnessv1.Result_STATUS_LIMITED && ex.waitErr == nil && ex.readErr == nil &&
+		!ex.cancelled && !ex.capped && outcome == eventsv1.InvocationFinished_OUTCOME_FAILED
+	return attempt{result: result, outcome: outcome, problem: err, limited: limited}
+}
+
+// switchEvent returns the model_role.switched of the invocation's model
+// role to fallback, which names the invocation and the limit: the adapter
+// that the limit stopped and the role's own model (decision 0246). The
+// control plane sets the tenant from the runner's identity.
+func (r *run) switchEvent(fallback Fallback) (*cloudeventsv1.CloudEvent, error) {
+	role := r.doc.GetModelRole()
+	e, err := events.New(&eventsv1.ModelRoleSwitched{
+		Role: role, Adapter: fallback.Adapter, Model: fallback.Model, Invocation: r.doc.GetInvocation(),
+		Limit: &eventsv1.ModelRoleSwitched_Limit{Adapter: r.adapter, Model: r.cfg.Models[role].Model},
+	}, events.Attributes{
+		ID: r.doc.GetInvocation() + "/model-role-switched", Source: switchSource, Subject: role, Tenant: switchTenant,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("the switch of the model role %s could not be written: %w", role, err)
+	}
+	return e, nil
+}
+
+// The source of the switch that the runner reports, and the tenant that it
+// names until the control plane replaces it with the runner's own
+// (decision 0039).
+const (
+	switchSource = "/runner"
+	switchTenant = "runner"
+)
+
+// remaining returns what budget leaves after used, and false when used
+// reached any of its caps. A cap of zero sets none and stays zero.
+func remaining(budget *harnessv1.Usage, used *eventsv1.InvocationResult_Usage) (*harnessv1.Usage, bool) {
+	left := &harnessv1.Usage{}
+	ok := true
+	less := func(limit, spent int64) int64 {
+		if limit <= 0 {
+			return 0
+		}
+		if spent >= limit {
+			ok = false
+		}
+		return limit - spent
+	}
+	left.Tokens = less(budget.GetTokens(), used.GetTokens())
+	left.CostMicrodollars = less(budget.GetCostMicrodollars(), used.GetCostMicrodollars())
+	left.Seconds = less(budget.GetSeconds(), used.GetSeconds())
+	return left, ok
+}
+
+// addUsage returns the sum of a and b.
+func addUsage(a, b *eventsv1.InvocationResult_Usage) *eventsv1.InvocationResult_Usage {
+	return &eventsv1.InvocationResult_Usage{
+		Tokens:           a.GetTokens() + b.GetTokens(),
+		CostMicrodollars: a.GetCostMicrodollars() + b.GetCostMicrodollars(),
+		Seconds:          a.GetSeconds() + b.GetSeconds(),
+	}
 }
 
 // openGateway opens an agent run whose adapter is in the API key mode with
@@ -404,10 +562,10 @@ func (r *run) openGateway(adapter Adapter) (*harnessv1.Gateway, error) {
 		return nil, nil
 	}
 	if adapter.SignIn {
-		r.meter = newMeter(r.doc.GetBudget(), r.cfg.Price)
+		r.meter = newMeter(r.budget, r.cfg.Price)
 		return nil, nil
 	}
-	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.adapter, r.doc.GetBudget(), r.log)
+	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.adapter, r.budget, r.log)
 	if err != nil {
 		return nil, fmt.Errorf("the model gateway could not open the invocation: %w", err)
 	}
@@ -453,6 +611,11 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	resolved := Resolved{Workspace: work, Gateway: gateway}
 	if r.meter != nil {
 		models := r.cfg.Models[r.doc.GetModelRole()]
+		if r.onFallback {
+			// The fallback on another adapter has no fallback of its own
+			// (decision 0246).
+			models = Models{Model: r.cfg.Fallbacks[r.doc.GetModelRole()].Model}
+		}
 		resolved.SignIn, resolved.Model, resolved.FallbackModel = true, models.Model, models.Fallback
 	}
 	if name := r.doc.GetOutputMessage(); name != "" {
@@ -461,7 +624,12 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 			return nil, nil, err
 		}
 	}
-	inv, err := HarnessInvocation(r.doc, resolved)
+	doc := r.doc
+	if !proto.Equal(doc.GetBudget(), r.budget) {
+		doc = proto.CloneOf(r.doc)
+		doc.Budget = proto.CloneOf(r.budget)
+	}
+	inv, err := HarnessInvocation(doc, resolved)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -470,8 +638,9 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 }
 
 // pickAdapter picks the adapter of the invocation: the adapter of the
-// model role of an agent run, or the check adapter for a check or an
-// external action (decisions 0245 and 0253). It checks the executable's
+// model role of an agent run, or of its fallback when the role is on it,
+// or the check adapter for a check or an external action (decisions 0245,
+// 0246 and 0253). It checks the executable's
 // SHA-256 and refuses one that does not match, and writes the adapter's
 // name, path and SHA-256 to the log (decision 0245).
 func (r *run) pickAdapter() (Adapter, error) {
@@ -480,6 +649,9 @@ func (r *run) pickAdapter() (Adapter, error) {
 		var ok bool
 		if name, ok = r.cfg.Roles[r.doc.GetModelRole()]; !ok {
 			return Adapter{}, fmt.Errorf("the model role %q of the agent run has no adapter (decision 0245)", r.doc.GetModelRole())
+		}
+		if r.onFallback {
+			name = r.cfg.Fallbacks[r.doc.GetModelRole()].Adapter
 		}
 	}
 	a := r.cfg.Adapters[name]
@@ -524,9 +696,9 @@ func hashFile(path string) (string, error) {
 // report adds the reason the invocation failed to the log when problem is
 // not nil, stores the full log in the blob store and records its hash in
 // result, sends the remaining log and reports the result with the outcome
-// (decisions 0034 and 0232). When the log cannot be stored, the result has
+// and the events evs (decisions 0034 and 0232). When the log cannot be stored, the result has
 // no log hash, the log sent says why, and the outcome stands.
-func (r *run) report(ctx context.Context, result *eventsv1.InvocationResult, outcome eventsv1.InvocationFinished_Outcome, problem error) error {
+func (r *run) report(ctx context.Context, result *eventsv1.InvocationResult, outcome eventsv1.InvocationFinished_Outcome, problem error, evs ...*cloudeventsv1.CloudEvent) error {
 	if problem != nil {
 		r.log.note("the invocation %s failed: %v", r.doc.GetInvocation(), problem)
 	}
@@ -541,7 +713,7 @@ func (r *run) report(ctx context.Context, result *eventsv1.InvocationResult, out
 		return err
 	}
 	_, err = r.cfg.Service.Report(ctx, &runnerv1.ReportRequest{
-		Invocation: r.doc.GetInvocation(), LeaseNumber: r.claim.GetLeaseNumber(), Result: result, Outcome: outcome,
+		Invocation: r.doc.GetInvocation(), LeaseNumber: r.claim.GetLeaseNumber(), Result: result, Outcome: outcome, Events: evs,
 	})
 	if err != nil {
 		return fmt.Errorf("runner: the report of %s: %w", r.doc.GetInvocation(), err)

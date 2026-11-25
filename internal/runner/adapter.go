@@ -133,7 +133,7 @@ func (s *supervisor) supervise(ctx context.Context) *execution {
 	defer s.logs.Stop()
 	s.beats, s.batches = s.beat.C, s.logs.C
 	s.leaseEnd = s.run.claimed.Add(s.run.claim.GetLeaseTimeout().AsDuration())
-	if seconds := s.run.doc.GetBudget().GetSeconds(); seconds > 0 {
+	if seconds := s.run.budget.GetSeconds(); seconds > 0 {
 		limit := time.NewTimer(time.Duration(seconds) * time.Second)
 		defer limit.Stop()
 		s.limit = limit.C
@@ -222,7 +222,7 @@ func (s *supervisor) capReached() {
 		return
 	}
 	s.ex.capped = true
-	s.run.log.note("the invocation %s reached its wall-time limit of %d s", s.run.doc.GetInvocation(), s.run.doc.GetBudget().GetSeconds())
+	s.run.log.note("the invocation %s reached its wall-time limit of %d s", s.run.doc.GetInvocation(), s.run.budget.GetSeconds())
 	s.stop()
 }
 

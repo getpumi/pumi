@@ -206,7 +206,7 @@ type ClaimResponse struct {
 	// Whether the model role of the invocation is on its fallback: the last
 	// dev.getpumi.model_role.switched of the role in the log switched it to
 	// its fallback. The runner then starts the role's fallback adapter, and
-	// does not fall back again (decision 0246).
+	// does not fall back again (decisions 0246 and 0266).
 	ModelRoleSwitched bool `protobuf:"varint,5,opt,name=model_role_switched,json=modelRoleSwitched,proto3" json:"model_role_switched,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache

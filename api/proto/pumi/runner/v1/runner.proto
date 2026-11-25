@@ -81,7 +81,7 @@ message ClaimResponse {
   // Whether the model role of the invocation is on its fallback: the last
   // dev.getpumi.model_role.switched of the role in the log switched it to
   // its fallback. The runner then starts the role's fallback adapter, and
-  // does not fall back again (decision 0246).
+  // does not fall back again (decisions 0246 and 0266).
   bool model_role_switched = 5;
 }
 

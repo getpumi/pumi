@@ -260,7 +260,7 @@
         },
         "^(model_role_switched)$": {
           "default": false,
-          "description": "Whether the model role of the invocation is on its fallback: the last\n dev.getpumi.model_role.switched of the role in the log switched it to\n its fallback. The runner then starts the role's fallback adapter, and\n does not fall back again (decision 0246).",
+          "description": "Whether the model role of the invocation is on its fallback: the last\n dev.getpumi.model_role.switched of the role in the log switched it to\n its fallback. The runner then starts the role's fallback adapter, and\n does not fall back again (decisions 0246 and 0266).",
           "type": "boolean"
         },
         "^(protocol_version)$": {
@@ -292,7 +292,7 @@
         },
         "modelRoleSwitched": {
           "default": false,
-          "description": "Whether the model role of the invocation is on its fallback: the last\n dev.getpumi.model_role.switched of the role in the log switched it to\n its fallback. The runner then starts the role's fallback adapter, and\n does not fall back again (decision 0246).",
+          "description": "Whether the model role of the invocation is on its fallback: the last\n dev.getpumi.model_role.switched of the role in the log switched it to\n its fallback. The runner then starts the role's fallback adapter, and\n does not fall back again (decisions 0246 and 0266).",
           "type": "boolean"
         },
         "protocolVersion": {

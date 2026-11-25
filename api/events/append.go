@@ -74,7 +74,7 @@ var appendTable = map[string][]Appender{
 	TypeTrunkUnattested: {AppenderRunnerReportExternalAction},
 	// The runner switches a model role to its fallback in the Report of
 	// the agent run that the provider's limit stopped, and a person
-	// switches it back (decision 0246).
+	// switches it back (decisions 0246 and 0266).
 	TypeModelRoleSwitched: {AppenderRunnerReportAgentRole, AppenderPerson},
 
 	TypeDecisionMade:  {AppenderControlPlane},

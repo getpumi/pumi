@@ -78,10 +78,13 @@ func TestMain(m *testing.M) {
 // testAdapter acts as a harness adapter in mode and returns its exit
 // status: it reads the harness invocation from standard input, logs a line
 // to standard error and does what mode says (decision 0158). Every mode
-// but adapterWaits makes model calls through the gateway, whose fake
+// but adapterWaits makes model calls, through the gateway when the
+// invocation has one and to the fake provider directly with its usage
+// passed as figures on the sign-in path (decisions 0240 and 0241); the fake
 // provider answers each with testInputTokens input tokens and as many
 // output tokens as the call's max_tokens. The usage that the adapter
-// reports is its own figure, which the runner only logs (decision 0230).
+// reports in its result is its own figure, which the runner only logs
+// (decision 0230).
 func testAdapter(mode string) int {
 	in := bufio.NewReader(os.Stdin)
 	line, err := in.ReadString('\n')
@@ -97,7 +100,16 @@ func testAdapter(mode string) int {
 	fmt.Fprintf(os.Stderr, "%sruns %s on the tree %s\n", testAdapterPrefix, inv.GetInvocation(), inv.GetInput().GetTree())
 	usage := &harnessv1.Usage{Tokens: 10, CostMicrodollars: 20, Seconds: 1}
 	var files []string
-	if !adapterCalls(mode, inv) {
+	// closed is closed when the runner closes standard input, which only
+	// the mode adapterCallsUntilRefused watches while it calls.
+	closed := make(chan struct{})
+	if mode == adapterCallsUntilRefused {
+		go func() {
+			_, _ = in.ReadString(0)
+			close(closed)
+		}()
+	}
+	if !adapterCalls(mode, inv, closed) {
 		return 9
 	}
 	switch mode {
@@ -159,12 +171,18 @@ type commandClone struct {
 
 // newCommandClone returns a clone whose git user.email is testPerson, with
 // a configuration file for the workflow of internal/kernel/testdata named
-// workflow, and makes the test binary the adapter in mode. git reads no
+// workflow, and makes the test binary the adapter in mode, in the API key
+// mode, so that its calls go through the gateway. git reads no
 // configuration of the user or the system, so the clone's is the only one.
 func newCommandClone(t *testing.T, workflow, mode string) *commandClone {
 	t.Helper()
-	return newCommandCloneWith(t, workflow, mode, testModels(t, signInMode))
+	t.Setenv(testKeyEnv, testProviderKey)
+	return newCommandCloneWith(t, workflow, mode, testModels(t, apiKeyMode))
 }
+
+// testProviderKey is the API key in the variable testKeyEnv of a test
+// clone in the API key mode.
+const testProviderKey = "sk-ant-the-adopters-key"
 
 // The credential modes of the test adapter's entry, in text format
 // (decision 0240).

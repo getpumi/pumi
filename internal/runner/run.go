@@ -61,6 +61,14 @@ type Config struct {
 	// CheckAdapter is the name of the adapter that runs the checks and
 	// external actions, which name no model role (decision 0253).
 	CheckAdapter string
+	// Models maps each model role to the models that an adapter in the
+	// sign-in mode gets in the harness invocation (decision 0254).
+	Models map[string]Models
+	// Price prices a usage figure that an adapter in the sign-in mode
+	// passes with the gateway's list-price table, in picodollars, and
+	// reports whether the table lists its model (decision 0241). The runner
+	// refuses an adapter in the sign-in mode without it.
+	Price func(*harnessv1.UsageFigure) (picodollars int64, listed bool)
 	// Remote is set when the runner runs in remote mode, which refuses an
 	// adapter in the sign-in mode (decision 0240).
 	Remote bool
@@ -102,6 +110,16 @@ type Adapter struct {
 	// SignIn is set when the harness uses the person's own sign-in, and
 	// not an API key that the gateway holds.
 	SignIn bool
+}
+
+// Models are the models that the configuration maps a model role to, for
+// an adapter in the sign-in mode (decision 0254).
+type Models struct {
+	// Model is the role's model.
+	Model string
+	// Fallback is the model of the role's fallback when the fallback is on
+	// the same adapter; empty otherwise (decision 0246).
+	Fallback string
 }
 
 // Gateway is the model gateway as the runner sees it (decisions 0225,
@@ -172,8 +190,9 @@ func (c *Config) check() error {
 
 // checkAdapters refuses a configuration with no adapter, with an adapter
 // whose path is not absolute or that has no SHA-256, with a check adapter
-// or a model role whose adapter it does not list, and, in remote mode,
-// with an adapter in the sign-in mode (decisions 0240, 0245 and 0253).
+// or a model role whose adapter it does not list, with an adapter in the
+// sign-in mode when it has no price table, and, in remote mode, with an
+// adapter in the sign-in mode (decisions 0240, 0241, 0245 and 0253).
 func (c *Config) checkAdapters() error {
 	if len(c.Adapters) == 0 {
 		return errors.New("runner: no adapter")
@@ -188,6 +207,8 @@ func (c *Config) checkAdapters() error {
 			errs = append(errs, fmt.Errorf("runner: the adapter %q has the SHA-256 %q, which is not 64 lowercase hexadecimal digits", name, a.SHA256))
 		case c.Remote && a.SignIn:
 			errs = append(errs, fmt.Errorf("runner: remote mode refuses the adapter %q, which is in the sign-in mode; remote mode uses API keys only (decision 0240)", name))
+		case a.SignIn && c.Price == nil:
+			errs = append(errs, fmt.Errorf("runner: the adapter %q is in the sign-in mode, and the runner has no price table to price its usage figures (decision 0241)", name))
 		}
 	}
 	if _, ok := c.Adapters[c.CheckAdapter]; !ok {
@@ -267,6 +288,18 @@ func Run(ctx context.Context, cfg Config) error {
 // cost cap, the outcome is cap reached, whatever the adapter reports
 // (decision 0228).
 //
+// An agent run whose adapter is in the sign-in mode has no gateway: its
+// harness talks to the provider directly, and the harness invocation
+// carries the models that the configuration maps its role to (decisions
+// 0240 and 0254). The runner counts the usage figures that the adapter
+// passes, prices them with the Price of the configuration, and stops the
+// adapter as for a cancel once the tokens or cost reach the budget, which
+// is cap reached; a figure whose model the price table does not list
+// stops it too and fails the invocation. The usage of the result is the
+// runner's count with the measured wall time, or, when the adapter passed
+// no figures, the usage of its result, whose caps are checked when the run
+// ends (decision 0241).
+//
 // When a heartbeat carries a cancel request, the runner closes the
 // adapter's standard input, kills it after the grace period and reports
 // the outcome cancelled (decision 0035). When the wall time reaches the
@@ -318,6 +351,9 @@ type run struct {
 	// adapter is the name of the adapter that runs the invocation, once
 	// the runner picked it.
 	adapter string
+	// meter counts the usage figures of an agent run on the sign-in path;
+	// nil on any other (decision 0241).
+	meter *meter
 }
 
 // do runs the invocation in a new directory, which it removes after, and
@@ -353,16 +389,22 @@ func (r *run) do(ctx context.Context) error {
 	return r.report(ctx, result, outcome, err)
 }
 
-// openGateway opens an agent run with the model gateway, with its budget,
-// and returns how the harness reaches the gateway; the log masks the token
-// (decisions 0226, 0231 and 0232). It returns nil for any other kind of
-// invocation, which makes no model calls. It refuses an agent run that
-// checkAgentRun refuses.
-func (r *run) openGateway() (*harnessv1.Gateway, error) {
-	if err := checkAgentRun(r.doc, r.cfg.Gateway != nil); err != nil {
+// openGateway opens an agent run whose adapter is in the API key mode with
+// the model gateway, with its budget, and returns how the harness reaches
+// the gateway; the log masks the token (decisions 0226, 0231 and 0232). It
+// returns nil for an agent run on the sign-in path, whose harness talks to
+// the provider directly and whose usage figures the runner counts instead
+// (decisions 0240 and 0241), and for any other kind of invocation, which
+// makes no model calls. It refuses an agent run that checkAgentRun refuses.
+func (r *run) openGateway(adapter Adapter) (*harnessv1.Gateway, error) {
+	if err := checkAgentRun(r.doc, adapter.SignIn, r.cfg.Gateway != nil && !adapter.SignIn); err != nil {
 		return nil, err
 	}
 	if r.doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN {
+		return nil, nil
+	}
+	if adapter.SignIn {
+		r.meter = newMeter(r.doc.GetBudget(), r.cfg.Price)
 		return nil, nil
 	}
 	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.adapter, r.doc.GetBudget(), r.log)
@@ -400,7 +442,7 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	if err != nil {
 		return nil, nil, err
 	}
-	gateway, err := r.openGateway()
+	gateway, err := r.openGateway(adapter)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -409,6 +451,10 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	}
 	var mt protoreflect.MessageType
 	resolved := Resolved{Workspace: work, Gateway: gateway}
+	if r.meter != nil {
+		models := r.cfg.Models[r.doc.GetModelRole()]
+		resolved.SignIn, resolved.Model, resolved.FallbackModel = true, models.Model, models.Fallback
+	}
 	if name := r.doc.GetOutputMessage(); name != "" {
 		var err error
 		if mt, resolved.JSONSchema, err = api.Output(name); err != nil {

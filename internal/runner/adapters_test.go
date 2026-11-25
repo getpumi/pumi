@@ -123,24 +123,30 @@ func (f *fixture) checkPicked(t *testing.T, role, adapter, path string) {
 	}
 }
 
-// TestTheGatewaySaysPerAdapterWhetherTheHarnessKeepsItsSignIn: the harness
-// invocation says that the harness keeps its sign-in when its adapter is
-// in the sign-in mode, and not when another adapter is (decision 0240).
-func TestTheGatewaySaysPerAdapterWhetherTheHarnessKeepsItsSignIn(t *testing.T) {
+// TestTheCredentialModeIsPerAdapter: an agent run whose adapter is in the
+// API key mode goes through the gateway, and one whose adapter is in the
+// sign-in mode has no gateway but its role's models, beside it in the same
+// configuration (decisions 0240 and 0254).
+func TestTheCredentialModeIsPerAdapter(t *testing.T) {
 	second := copyAdapter(t, "second-adapter")
 	for _, tc := range []struct {
-		role  string
-		keeps bool
+		role   string
+		signIn bool
 	}{{"frontier", false}, {"review", true}} {
 		t.Run(tc.role, func(t *testing.T) {
 			f := newFixture(t, "success")
-			f.gateway.signIn = map[string]bool{"second": true}
 			f.cfg.Adapters["second"] = Adapter{Path: second, SHA256: fakeAdapterHash(t), SignIn: true}
 			f.cfg.Roles["review"] = "second"
+			f.cfg.Price = testPrice
+			f.cfg.Models = map[string]Models{"review": {Model: signInModel}}
 			f.service.claim.Invocation.ModelRole = tc.role
 			f.runOne(t)
-			if got := sentInvocation(t, f.service.log()).GetGateway().GetKeepsSignIn(); got != tc.keeps {
-				t.Errorf("keeps_sign_in is %v, want %v", got, tc.keeps)
+			inv := sentInvocation(t, f.service.log())
+			if (inv.Gateway == nil) != tc.signIn || (inv.GetModel() == signInModel) != tc.signIn {
+				t.Errorf("the adapter got the gateway %v and the model %q; want the gateway only in the API key mode and the model only in the sign-in mode", inv.GetGateway(), inv.GetModel())
+			}
+			if opened, _ := f.gateway.state(); (len(opened) == 0) != tc.signIn {
+				t.Errorf("the runner opened %q with the gateway", opened)
 			}
 		})
 	}

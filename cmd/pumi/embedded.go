@@ -21,6 +21,7 @@ import (
 	"getpumi.dev/pumi/internal/controlplane"
 	"getpumi.dev/pumi/internal/controlplane/blobstore"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
+	"getpumi.dev/pumi/internal/gateway"
 	"getpumi.dev/pumi/internal/kernel"
 	"getpumi.dev/pumi/internal/runner"
 )
@@ -147,7 +148,9 @@ func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*contro
 // (decision 0209), the model gateway on 127.0.0.1 (decision 0231), and the
 // in-process runner with the file's adapters, the adapter of each agent
 // run picked by its model role (decision 0245), whose agent runs go through
-// the gateway, whose output goes to out and whose output files go to the
+// the gateway when their adapter is in the API key mode, and otherwise talk
+// to the provider directly while the runner counts their usage (decisions
+// 0240 and 0241), whose output goes to out and whose output files go to the
 // local blob store beside the log (decision 0232). It refuses a workflow
 // that names a model role which the file does not map (decision 0233). It
 // stops when any of them fails.
@@ -208,7 +211,9 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		_ = sock.Close()
 		return err
 	}
-	defer gw.shutdown(ctx)
+	if gw != nil {
+		defer gw.shutdown(ctx)
+	}
 	_, _ = fmt.Fprintf(out, "pumi runs the plans of %s; stop it with Ctrl-C.\n%s\n", log.Dir(), gw.describe(cfg))
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -219,7 +224,8 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 			return runner.Run(ctx, runner.Config{
 				Service: runnerClient, Adapters: cfg.adapters(), Roles: cfg.roleAdapters(),
 				CheckAdapter: cfg.file.GetModels().GetCheckAdapter(), Repository: dir, WorkDir: work, Output: out,
-				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: gw,
+				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: runnerGateway(gw),
+				Models: roleModels(cfg), Price: gateway.FigureCost,
 			})
 		},
 		func() error {

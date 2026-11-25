@@ -17,9 +17,12 @@ package pumi.harness.v1;
 // it from the invocation document (pumi.runner.v1.Invocation, decision
 // 0024): it leaves out what only the runner needs, which is the credential
 // handles, the image digest and the isolation level, and adds what it has
-// resolved, which is the workspace, the model gateway and the output schema
-// (decision 0158). An agent run always has the model gateway (decision
-// 0226). An adapter never receives a credential handle or a provider key.
+// resolved, which is the workspace, the model gateway or, on the sign-in
+// path, the models, and the output schema (decisions 0158 and 0254). An
+// agent run whose adapter is in the API key mode always has the model
+// gateway (decision 0226); one whose adapter is in the sign-in mode has none,
+// because its harness talks to the provider directly (decision 0240). An
+// adapter never receives a credential handle or a provider key.
 message Invocation {
   // The invocation.
   string invocation = 1;
@@ -36,24 +39,36 @@ message Invocation {
   // own settings; the runner checks the workspace after the run (decision
   // 0159).
   Capabilities capabilities = 6;
-  // The budget. The model gateway's caps enforce its tokens and cost, and
-  // the runner its seconds; the adapter can also pass it to its harness
-  // (decisions 0193 and 0228).
+  // The budget. The model gateway's caps enforce its tokens and cost, or on
+  // the sign-in path the runner's count of the usage figures that the
+  // adapter passes, and the runner enforces its seconds; the adapter can
+  // also pass it to its harness (decisions 0193, 0228 and 0241).
   Usage budget = 7;
   // The absolute path of the workspace, a checkout of the input tree, in
   // which the runner started the adapter.
   string workspace = 8;
-  // The model gateway, through which every model call goes (decision 0036).
-  // An agent run always has it; the runner refuses one without it (decision
-  // 0226). A check or an external action has none.
+  // The model gateway, through which every model call of an adapter in the
+  // API key mode goes (decision 0036). Such an agent run always has it; the
+  // runner refuses one without it (decision 0226). An agent run of an
+  // adapter in the sign-in mode, a check and an external action have none
+  // (decision 0240).
   Gateway gateway = 9;
   // The schema of the structured output.
   OutputSchema output_schema = 10;
-  // The model role of an agent run, such as "frontier". The adapter asks
-  // its harness for the role by name, as the model of its calls, and the
-  // model gateway sends each call to the model that the configuration maps
-  // the role to (decision 0233).
+  // The model role of an agent run, such as "frontier". Through the model
+  // gateway, the adapter asks its harness for the role by name, as the model
+  // of its calls, and the gateway sends each call to the model that the
+  // configuration maps the role to (decision 0233).
   string model_role = 11;
+  // On the sign-in path, the model that the configuration maps the model
+  // role to, which the adapter asks its harness for (decisions 0241 and
+  // 0254). Empty when the agent run has the model gateway, and for a check
+  // or an external action.
+  string model = 12;
+  // On the sign-in path, the model of the role's fallback when the fallback
+  // is on the same adapter, which the adapter gives its harness as the
+  // fallback within the run; empty otherwise (decisions 0241, 0246 and 0254).
+  string fallback_model = 13;
 }
 
 // Component is the component that an invocation runs, with its name and
@@ -110,9 +125,11 @@ message Capabilities {
       ACCESS_UNSPECIFIED = 0;
       // No network access.
       ACCESS_NONE = 1;
-      // The model gateway only.
+      // The model gateway only, or on the sign-in path, where the harness
+      // talks to the provider directly, the provider only (decision 0240).
       ACCESS_GATEWAY = 2;
-      // The model gateway and the hosts listed.
+      // The model gateway, or on the sign-in path the provider, and the
+      // hosts listed.
       ACCESS_HOSTS = 3;
     }
 

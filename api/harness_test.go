@@ -30,11 +30,16 @@ func TestHarnessHasNoService(t *testing.T) {
 func TestTheHarnessInvocationHasTheFieldsOf0158(t *testing.T) {
 	inv := (&harnessv1.Invocation{}).ProtoReflect().Descriptor()
 	want := []string{
-		"budget", "capabilities", "component", "gateway", "idempotency_key", "input",
-		"invocation", "model_role", "output_schema", "role", "workspace",
+		"budget", "capabilities", "component", "fallback_model", "gateway", "idempotency_key", "input",
+		"invocation", "model", "model_role", "output_schema", "role", "workspace",
 	}
 	if got := fieldNames(inv); !slices.Equal(got, want) {
-		t.Errorf("Invocation has %q, want %q (decisions 0158 and 0233)", got, want)
+		t.Errorf("Invocation has %q, want %q (decisions 0158, 0233 and 0254)", got, want)
+	}
+	for _, name := range []string{"model", "fallback_model"} {
+		if f := fieldOf(t, inv, name); f.Kind() != protoreflect.StringKind || f.IsList() {
+			t.Errorf("Invocation.%s is not a string (decision 0254)", name)
+		}
 	}
 	gateway := fieldOf(t, inv, "gateway").Message()
 	if got := fieldNames(gateway); !slices.Equal(got, []string{"base_url", "keeps_sign_in", "token"}) {

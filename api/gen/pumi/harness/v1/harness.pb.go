@@ -211,9 +211,11 @@ const (
 	Capabilities_Network_ACCESS_UNSPECIFIED Capabilities_Network_Access = 0
 	// No network access.
 	Capabilities_Network_ACCESS_NONE Capabilities_Network_Access = 1
-	// The model gateway only.
+	// The model gateway only, or on the sign-in path, where the harness
+	// talks to the provider directly, the provider only (decision 0240).
 	Capabilities_Network_ACCESS_GATEWAY Capabilities_Network_Access = 2
-	// The model gateway and the hosts listed.
+	// The model gateway, or on the sign-in path the provider, and the
+	// hosts listed.
 	Capabilities_Network_ACCESS_HOSTS Capabilities_Network_Access = 3
 )
 
@@ -327,9 +329,12 @@ func (Result_Status) EnumDescriptor() ([]byte, []int) {
 // it from the invocation document (pumi.runner.v1.Invocation, decision
 // 0024): it leaves out what only the runner needs, which is the credential
 // handles, the image digest and the isolation level, and adds what it has
-// resolved, which is the workspace, the model gateway and the output schema
-// (decision 0158). An agent run always has the model gateway (decision
-// 0226). An adapter never receives a credential handle or a provider key.
+// resolved, which is the workspace, the model gateway or, on the sign-in
+// path, the models, and the output schema (decisions 0158 and 0254). An
+// agent run whose adapter is in the API key mode always has the model
+// gateway (decision 0226); one whose adapter is in the sign-in mode has none,
+// because its harness talks to the provider directly (decision 0240). An
+// adapter never receives a credential handle or a provider key.
 type Invocation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The invocation.
@@ -347,24 +352,36 @@ type Invocation struct {
 	// own settings; the runner checks the workspace after the run (decision
 	// 0159).
 	Capabilities *Capabilities `protobuf:"bytes,6,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
-	// The budget. The model gateway's caps enforce its tokens and cost, and
-	// the runner its seconds; the adapter can also pass it to its harness
-	// (decisions 0193 and 0228).
+	// The budget. The model gateway's caps enforce its tokens and cost, or on
+	// the sign-in path the runner's count of the usage figures that the
+	// adapter passes, and the runner enforces its seconds; the adapter can
+	// also pass it to its harness (decisions 0193, 0228 and 0241).
 	Budget *Usage `protobuf:"bytes,7,opt,name=budget,proto3" json:"budget,omitempty"`
 	// The absolute path of the workspace, a checkout of the input tree, in
 	// which the runner started the adapter.
 	Workspace string `protobuf:"bytes,8,opt,name=workspace,proto3" json:"workspace,omitempty"`
-	// The model gateway, through which every model call goes (decision 0036).
-	// An agent run always has it; the runner refuses one without it (decision
-	// 0226). A check or an external action has none.
+	// The model gateway, through which every model call of an adapter in the
+	// API key mode goes (decision 0036). Such an agent run always has it; the
+	// runner refuses one without it (decision 0226). An agent run of an
+	// adapter in the sign-in mode, a check and an external action have none
+	// (decision 0240).
 	Gateway *Gateway `protobuf:"bytes,9,opt,name=gateway,proto3" json:"gateway,omitempty"`
 	// The schema of the structured output.
 	OutputSchema *OutputSchema `protobuf:"bytes,10,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
-	// The model role of an agent run, such as "frontier". The adapter asks
-	// its harness for the role by name, as the model of its calls, and the
-	// model gateway sends each call to the model that the configuration maps
-	// the role to (decision 0233).
-	ModelRole     string `protobuf:"bytes,11,opt,name=model_role,json=modelRole,proto3" json:"model_role,omitempty"`
+	// The model role of an agent run, such as "frontier". Through the model
+	// gateway, the adapter asks its harness for the role by name, as the model
+	// of its calls, and the gateway sends each call to the model that the
+	// configuration maps the role to (decision 0233).
+	ModelRole string `protobuf:"bytes,11,opt,name=model_role,json=modelRole,proto3" json:"model_role,omitempty"`
+	// On the sign-in path, the model that the configuration maps the model
+	// role to, which the adapter asks its harness for (decisions 0241 and
+	// 0254). Empty when the agent run has the model gateway, and for a check
+	// or an external action.
+	Model string `protobuf:"bytes,12,opt,name=model,proto3" json:"model,omitempty"`
+	// On the sign-in path, the model of the role's fallback when the fallback
+	// is on the same adapter, which the adapter gives its harness as the
+	// fallback within the run; empty otherwise (decisions 0241, 0246 and 0254).
+	FallbackModel string `protobuf:"bytes,13,opt,name=fallback_model,json=fallbackModel,proto3" json:"fallback_model,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -472,6 +489,20 @@ func (x *Invocation) GetOutputSchema() *OutputSchema {
 func (x *Invocation) GetModelRole() string {
 	if x != nil {
 		return x.ModelRole
+	}
+	return ""
+}
+
+func (x *Invocation) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *Invocation) GetFallbackModel() string {
+	if x != nil {
+		return x.FallbackModel
 	}
 	return ""
 }
@@ -1365,7 +1396,7 @@ var File_pumi_harness_v1_harness_proto protoreflect.FileDescriptor
 
 const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpumi/harness/v1/harness.proto\x12\x0fpumi.harness.v1\"\x90\x04\n" +
+	"\x1dpumi/harness/v1/harness.proto\x12\x0fpumi.harness.v1\"\xcd\x04\n" +
 	"\n" +
 	"Invocation\x12\x1e\n" +
 	"\n" +
@@ -1382,7 +1413,9 @@ const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\routput_schema\x18\n" +
 	" \x01(\v2\x1d.pumi.harness.v1.OutputSchemaR\foutputSchema\x12\x1d\n" +
 	"\n" +
-	"model_role\x18\v \x01(\tR\tmodelRole\"\xca\x01\n" +
+	"model_role\x18\v \x01(\tR\tmodelRole\x12\x14\n" +
+	"\x05model\x18\f \x01(\tR\x05model\x12%\n" +
+	"\x0efallback_model\x18\r \x01(\tR\rfallbackModel\"\xca\x01\n" +
 	"\tComponent\x123\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1f.pumi.harness.v1.Component.KindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +

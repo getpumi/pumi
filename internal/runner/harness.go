@@ -27,14 +27,26 @@ type Resolved struct {
 	// JSONSchema is the JSON Schema generated from the document's output
 	// message (decision 0160); empty when the document names none.
 	JSONSchema string
+	// SignIn is set when the adapter of an agent run is in the sign-in
+	// mode: its harness talks to the provider directly, so the run has no
+	// gateway (decision 0240).
+	SignIn bool
+	// Model and FallbackModel are, on the sign-in path, the models that the
+	// configuration maps the model role to: the role's model, and its
+	// fallback's model when the fallback is on the same adapter (decision
+	// 0254).
+	Model, FallbackModel string
 }
 
 // HarnessInvocation derives the harness invocation from the invocation
 // document doc and what the runner resolved for it (decision 0158). It
 // leaves out the credential handles, the image digest and the isolation
 // level, which only the runner needs, and it copies what it keeps, so that
-// the result shares nothing with doc. It refuses an agent run without the
-// gateway or without network access to it (decision 0226).
+// the result shares nothing with doc. It refuses an agent run without
+// network access to its models (decision 0226), and one that has the wrong
+// path: an agent run with the gateway has no models, and one on the
+// sign-in path has the role's model and no gateway (decisions 0240 and
+// 0254).
 func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocation, error) {
 	switch {
 	case doc == nil:
@@ -44,7 +56,10 @@ func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocat
 	case (doc.GetOutputMessage() == "") != (r.JSONSchema == ""):
 		return nil, errors.New("runner: the output message and its JSON Schema do not come together")
 	}
-	if err := checkAgentRun(doc, r.Gateway != nil); err != nil {
+	if err := checkAgentRun(doc, r.SignIn, r.Gateway != nil); err != nil {
+		return nil, err
+	}
+	if err := checkModels(doc, r); err != nil {
 		return nil, err
 	}
 	inv := &harnessv1.Invocation{
@@ -58,6 +73,8 @@ func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocat
 		Workspace:      r.Workspace,
 		Gateway:        proto.CloneOf(r.Gateway),
 		ModelRole:      doc.GetModelRole(),
+		Model:          r.Model,
+		FallbackModel:  r.FallbackModel,
 	}
 	if doc.GetOutputMessage() != "" {
 		inv.OutputSchema = &harnessv1.OutputSchema{Message: doc.GetOutputMessage(), JsonSchema: r.JSONSchema}
@@ -65,20 +82,39 @@ func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocat
 	return inv, nil
 }
 
-// checkAgentRun refuses an agent run when the runner has no model gateway,
-// or when its network access does not reach the gateway: every agent run
-// goes through the gateway (decision 0226). It allows any other kind of
-// invocation.
-func checkAgentRun(doc *runnerv1.Invocation, hasGateway bool) error {
+// checkAgentRun refuses an agent run whose adapter is in the API key mode
+// when the runner has no model gateway, or one whose adapter is in the
+// sign-in mode when it has a gateway, which that path does not use
+// (decisions 0226 and 0240). It also refuses an agent run whose network
+// access does not reach its models: the model gateway, or on the sign-in
+// path the provider. It allows any other kind of invocation.
+func checkAgentRun(doc *runnerv1.Invocation, signIn, hasGateway bool) error {
 	if doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN {
 		return nil
 	}
-	if !hasGateway {
+	switch {
+	case signIn && hasGateway:
+		return errors.New("runner: an agent run on the sign-in path talks to the provider directly and has no model gateway (decision 0240)")
+	case !signIn && !hasGateway:
 		return errors.New("runner: an agent run goes through the model gateway, and the runner has no model gateway (decision 0226)")
 	}
 	access := doc.GetCapabilities().GetNetwork().GetAccess()
 	if access != harnessv1.Capabilities_Network_ACCESS_GATEWAY && access != harnessv1.Capabilities_Network_ACCESS_HOSTS {
-		return fmt.Errorf("runner: an agent run reaches at least the model gateway, but its network access is %v (decision 0226)", access)
+		return fmt.Errorf("runner: an agent run reaches at least its models, through the model gateway or on the sign-in path at the provider, but its network access is %v (decision 0226)", access)
+	}
+	return nil
+}
+
+// checkModels refuses models where they do not belong: an agent run on the
+// sign-in path must have its role's model, and any other invocation has
+// none, because the gateway maps the role (decisions 0233 and 0254).
+func checkModels(doc *runnerv1.Invocation, r Resolved) error {
+	onSignIn := r.SignIn && doc.GetComponent().GetKind() == harnessv1.Component_KIND_AGENT_RUN
+	switch {
+	case onSignIn && r.Model == "":
+		return fmt.Errorf("runner: the model role %q of an agent run on the sign-in path has no model (decision 0254)", doc.GetModelRole())
+	case !onSignIn && (r.Model != "" || r.FallbackModel != ""):
+		return errors.New("runner: only an agent run on the sign-in path gets the models of its role (decision 0254)")
 	}
 	return nil
 }

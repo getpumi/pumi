@@ -3,6 +3,8 @@
 
 package gateway
 
+import harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
+
 // PricesVersion is the version of the list-price table (decision 0229). A
 // change to a price changes it, by pull request.
 const PricesVersion = "2026-11-24"
@@ -115,4 +117,21 @@ var prices = map[string]Model{
 func Price(model string) (Model, bool) {
 	m, ok := prices[model]
 	return m, ok
+}
+
+// FigureCost returns the reference cost in picodollars of a usage figure
+// that an adapter passes on the sign-in path, at the list prices, as the
+// gateway prices the same call (decisions 0229, 0239 and 0241), and
+// whether the table lists its model; a figure of a model it does not list
+// costs nothing.
+func FigureCost(u *harnessv1.UsageFigure) (int64, bool) {
+	m, ok := Price(u.GetModel())
+	if !ok {
+		return 0, false
+	}
+	return m.picodollars(usage{
+		model: u.GetModel(), input: u.GetInputTokens(), write5m: u.GetFiveMinuteCacheWriteTokens(),
+		write1h: u.GetOneHourCacheWriteTokens(), read: u.GetCacheReadTokens(), output: u.GetOutputTokens(),
+		webSearches: u.GetWebSearches(), fast: u.GetSpeed() == "fast", usOnly: u.GetInferenceGeo() == "us",
+	}), true
 }

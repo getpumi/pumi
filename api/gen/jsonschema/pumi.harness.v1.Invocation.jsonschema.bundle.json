@@ -206,8 +206,13 @@
     "pumi.harness.v1.Invocation.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "description": "Invocation is what the runner gives a harness adapter. The runner derives\n it from the invocation document (pumi.runner.v1.Invocation, decision\n 0024): it leaves out what only the runner needs, which is the credential\n handles, the image digest and the isolation level, and adds what it has\n resolved, which is the workspace, the model gateway and the output schema\n (decision 0158). An agent run always has the model gateway (decision\n 0226). An adapter never receives a credential handle or a provider key.",
+      "description": "Invocation is what the runner gives a harness adapter. The runner derives\n it from the invocation document (pumi.runner.v1.Invocation, decision\n 0024): it leaves out what only the runner needs, which is the credential\n handles, the image digest and the isolation level, and adds what it has\n resolved, which is the workspace, the model gateway or, on the sign-in\n path, the models, and the output schema (decisions 0158 and 0254). An\n agent run whose adapter is in the API key mode always has the model\n gateway (decision 0226); one whose adapter is in the sign-in mode has none,\n because its harness talks to the provider directly (decision 0240). An\n adapter never receives a credential handle or a provider key.",
       "patternProperties": {
+        "^(fallback_model)$": {
+          "default": "",
+          "description": "On the sign-in path, the model of the role's fallback when the fallback\n is on the same adapter, which the adapter gives its harness as the\n fallback within the run; empty otherwise (decisions 0241, 0246 and 0254).",
+          "type": "string"
+        },
         "^(idempotency_key)$": {
           "default": "",
           "description": "The idempotency key.",
@@ -215,7 +220,7 @@
         },
         "^(model_role)$": {
           "default": "",
-          "description": "The model role of an agent run, such as \"frontier\". The adapter asks\n its harness for the role by name, as the model of its calls, and the\n model gateway sends each call to the model that the configuration maps\n the role to (decision 0233).",
+          "description": "The model role of an agent run, such as \"frontier\". Through the model\n gateway, the adapter asks its harness for the role by name, as the model\n of its calls, and the gateway sends each call to the model that the\n configuration maps the role to (decision 0233).",
           "type": "string"
         },
         "^(output_schema)$": {
@@ -226,7 +231,7 @@
       "properties": {
         "budget": {
           "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
-          "description": "The budget. The model gateway's caps enforce its tokens and cost, and\n the runner its seconds; the adapter can also pass it to its harness\n (decisions 0193 and 0228)."
+          "description": "The budget. The model gateway's caps enforce its tokens and cost, or on\n the sign-in path the runner's count of the usage figures that the\n adapter passes, and the runner enforces its seconds; the adapter can\n also pass it to its harness (decisions 0193, 0228 and 0241)."
         },
         "capabilities": {
           "$ref": "#/$defs/pumi.harness.v1.Capabilities.jsonschema.json",
@@ -236,9 +241,14 @@
           "$ref": "#/$defs/pumi.harness.v1.Component.jsonschema.json",
           "description": "The component that the invocation runs."
         },
+        "fallbackModel": {
+          "default": "",
+          "description": "On the sign-in path, the model of the role's fallback when the fallback\n is on the same adapter, which the adapter gives its harness as the\n fallback within the run; empty otherwise (decisions 0241, 0246 and 0254).",
+          "type": "string"
+        },
         "gateway": {
           "$ref": "#/$defs/pumi.harness.v1.Gateway.jsonschema.json",
-          "description": "The model gateway, through which every model call goes (decision 0036).\n An agent run always has it; the runner refuses one without it (decision\n 0226). A check or an external action has none."
+          "description": "The model gateway, through which every model call of an adapter in the\n API key mode goes (decision 0036). Such an agent run always has it; the\n runner refuses one without it (decision 0226). An agent run of an\n adapter in the sign-in mode, a check and an external action have none\n (decision 0240)."
         },
         "idempotencyKey": {
           "default": "",
@@ -254,9 +264,14 @@
           "description": "The invocation.",
           "type": "string"
         },
+        "model": {
+          "default": "",
+          "description": "On the sign-in path, the model that the configuration maps the model\n role to, which the adapter asks its harness for (decisions 0241 and\n 0254). Empty when the agent run has the model gateway, and for a check\n or an external action.",
+          "type": "string"
+        },
         "modelRole": {
           "default": "",
-          "description": "The model role of an agent run, such as \"frontier\". The adapter asks\n its harness for the role by name, as the model of its calls, and the\n model gateway sends each call to the model that the configuration maps\n the role to (decision 0233).",
+          "description": "The model role of an agent run, such as \"frontier\". Through the model\n gateway, the adapter asks its harness for the role by name, as the model\n of its calls, and the gateway sends each call to the model that the\n configuration maps the role to (decision 0233).",
           "type": "string"
         },
         "outputSchema": {

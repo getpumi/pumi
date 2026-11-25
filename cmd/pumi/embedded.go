@@ -145,7 +145,8 @@ func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*contro
 // reads, served to the person on the socket beside it (decision 0206), the
 // kernel on the file's workflow, starting each plan from the trunk's tree
 // (decision 0209), the model gateway on 127.0.0.1 (decision 0231), and the
-// in-process runner with the file's adapter, whose agent runs go through
+// in-process runner with the file's adapters, the adapter of each agent
+// run picked by its model role (decision 0245), whose agent runs go through
 // the gateway, whose output goes to out and whose output files go to the
 // local blob store beside the log (decision 0232). It refuses a workflow
 // that names a model role which the file does not map (decision 0233). It
@@ -216,7 +217,8 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		func() error { return sock.Serve(ctx, personServer) },
 		func() error {
 			return runner.Run(ctx, runner.Config{
-				Service: runnerClient, Adapter: cfg.path(cfg.file.GetAdapter()), Repository: dir, WorkDir: work, Output: out,
+				Service: runnerClient, Adapters: cfg.adapters(), Roles: cfg.roleAdapters(),
+				CheckAdapter: cfg.file.GetModels().GetCheckAdapter(), Repository: dir, WorkDir: work, Output: out,
 				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: gw,
 			})
 		},

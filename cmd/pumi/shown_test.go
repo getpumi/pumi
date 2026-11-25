@@ -44,7 +44,7 @@ import (
 // PUMI_SHOWN_PLAN the path, in that clone, of a plan of a change in
 // openspec/changes/archive. The Claude Code adapter is PUMI_SHOWN_ADAPTER,
 // or adapter-claude-code on the PATH, and claude reaches the model through
-// the gateway of shownGateway (decisions 0225 and 0226).
+// the gateway of shownModels (decisions 0225 and 0226).
 //
 // Each run makes a new git repository in a temporary directory that reads
 // the objects of the clone, checks it out at the plan's base commit and adds
@@ -339,20 +339,27 @@ func embedded(ctx context.Context, run shownRun, idle func(head uint64)) error {
 
 // shownRunner returns the configuration of the shown run's runner, without
 // its service: the local blob store in the pumi directory dir and the model
-// gateway of shownGateway. The function it returns
+// gateway of shownModels. The function it returns
 // closes them.
 func shownRunner(ctx context.Context, run shownRun, dir string) (runner.Config, func(), error) {
 	blobs, err := blobstore.OpenLocal(dir)
 	if err != nil {
 		return runner.Config{}, nil, err
 	}
-	gw, err := serveGateway(ctx, &config{file: &configv1.Config{Gateway: shownGateway()}}, os.Stderr)
+	models, err := shownModels(run.Adapter)
+	if err != nil {
+		_ = blobs.Close()
+		return runner.Config{}, nil, err
+	}
+	file := &config{file: &configv1.Config{Models: models}}
+	gw, err := serveGateway(ctx, file, os.Stderr)
 	if err != nil {
 		_ = blobs.Close()
 		return runner.Config{}, nil, err
 	}
 	cfg := runner.Config{
-		Adapter: run.Adapter, Repository: run.Repository, WorkDir: run.WorkDir,
+		Adapters: file.adapters(), Roles: file.roleAdapters(), CheckAdapter: shownAdapter,
+		Repository: run.Repository, WorkDir: run.WorkDir,
 		Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: gw,
 	}
 	closeAll := func() {

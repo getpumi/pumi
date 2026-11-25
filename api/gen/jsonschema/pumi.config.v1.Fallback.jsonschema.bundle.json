@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "pumi.config.v1.Fallback.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Fallback is the adapter and model that a model role falls back to\n (decision 0246).",
+      "properties": {
+        "adapter": {
+          "default": "",
+          "description": "The adapter.",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "description": "The model.",
+          "type": "string"
+        }
+      },
+      "title": "Fallback",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.config.v1.Fallback.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.config.v1.Fallback.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

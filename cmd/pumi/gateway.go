@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	"getpumi.dev/pumi/internal/gateway"
 	"getpumi.dev/pumi/internal/kernel/workflow"
 	"getpumi.dev/pumi/internal/runner"
@@ -53,16 +56,22 @@ func (m *modelGateway) shutdown(ctx context.Context) {
 }
 
 // serveGateway serves the model gateway of embedded mode on 127.0.0.1, at
-// a port the system picks, in front of providerURL (decision 0231). With
-// the API key of the environment variable that the configuration file
-// names, the gateway sends that key on every call; with none, the harness
-// keeps its own sign-in (decision 0225). The gateway logs its refusals and
-// the calls it could not pass to log, which never holds a key or a token.
+// a port the system picks, in front of providerURL (decision 0231). For an
+// adapter in the API key mode, the gateway sends the key of the
+// environment variable that its entry names on every call of its
+// invocations; for an adapter in the sign-in mode, the harness keeps its
+// own sign-in (decisions 0225, 0240 and 0245). The gateway logs its
+// refusals and the calls it could not pass to log, which never holds a key
+// or a token.
 func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGateway, error) {
-	var key string
-	if name := cfg.file.GetGateway().GetApiKeyEnv(); name != "" {
-		if key = os.Getenv(name); key == "" {
-			return nil, fmt.Errorf("the environment variable %s, which gateway.api_key_env of the configuration file names, is not set or is empty", name)
+	keys := map[string]string{}
+	for _, name := range slices.Sorted(maps.Keys(cfg.file.GetModels().GetAdapters())) {
+		a := cfg.file.GetModels().GetAdapters()[name]
+		if a.GetCredentialMode() != configv1.Adapter_CREDENTIAL_MODE_API_KEY {
+			continue
+		}
+		if keys[name] = os.Getenv(a.GetApiKeyEnv()); keys[name] == "" {
+			return nil, fmt.Errorf("the environment variable %s, which the api_key_env of the adapter %q names, is not set or is empty", a.GetApiKeyEnv(), name)
 		}
 	}
 	upstream, err := url.Parse(providerURL)
@@ -70,7 +79,7 @@ func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGatewa
 		return nil, fmt.Errorf("the provider's URL %q: %w", providerURL, err)
 	}
 	g, err := gateway.New(gateway.Config{
-		Upstream: upstream, APIKey: key, Roles: modelRoles(cfg),
+		Upstream: upstream, APIKeys: keys, Roles: modelRoles(cfg),
 		Log: slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelInfo})),
 	})
 	if err != nil {
@@ -83,12 +92,18 @@ func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGatewa
 	return &modelGateway{Gateway: g, server: server}, nil
 }
 
-// modelRoles returns the model roles of the configuration file (decision
-// 0233).
+// modelRoles returns the model roles of the model configuration as the
+// gateway maps them (decision 0233): each role's model, and its fallback's
+// model when the fallback is on the same adapter. A fallback on another
+// adapter is not a fallback within a run (decision 0246).
 func modelRoles(cfg *config) map[string]gateway.Role {
 	roles := map[string]gateway.Role{}
-	for name, r := range cfg.file.GetGateway().GetModelRoles() {
-		roles[name] = gateway.Role{Model: r.GetModel(), Fallback: r.GetFallback()}
+	for name, r := range cfg.file.GetModels().GetRoles() {
+		role := gateway.Role{Model: r.GetModel()}
+		if f := r.GetFallback(); f.GetAdapter() == r.GetAdapter() {
+			role.Fallback = f.GetModel()
+		}
+		roles[name] = role
 	}
 	return roles
 }
@@ -96,7 +111,7 @@ func modelRoles(cfg *config) map[string]gateway.Role {
 // checkModelRoles refuses a workflow that names a model role which the
 // configuration file does not map (decision 0233).
 func checkModelRoles(cfg *config, wf *workflow.Workflow) error {
-	roles := cfg.file.GetGateway().GetModelRoles()
+	roles := cfg.file.GetModels().GetRoles()
 	var missing []string
 	for _, r := range wf.ModelRoles() {
 		if _, ok := roles[r]; !ok {
@@ -104,16 +119,22 @@ func checkModelRoles(cfg *config, wf *workflow.Workflow) error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("the workflow names the model roles %s, which gateway.model_roles of the configuration file does not map", strings.Join(missing, ", "))
+		return fmt.Errorf("the workflow names the model roles %s, which models.roles of the configuration file does not map", strings.Join(missing, ", "))
 	}
 	return nil
 }
 
 // describe says where the gateway serves and which credential reaches the
-// provider.
+// provider for each adapter.
 func (m *modelGateway) describe(cfg *config) string {
-	if m.KeepsSignIn() {
-		return fmt.Sprintf("The model gateway serves at %s; the harness keeps its own sign-in.", m.URL())
+	adapters := cfg.file.GetModels().GetAdapters()
+	var each []string
+	for _, name := range slices.Sorted(maps.Keys(adapters)) {
+		if m.KeepsSignIn(name) {
+			each = append(each, fmt.Sprintf("the harness of %s keeps its own sign-in", name))
+		} else {
+			each = append(each, fmt.Sprintf("for %s it sends the API key of %s", name, adapters[name].GetApiKeyEnv()))
+		}
 	}
-	return fmt.Sprintf("The model gateway serves at %s; it sends the API key of %s.", m.URL(), cfg.file.GetGateway().GetApiKeyEnv())
+	return fmt.Sprintf("The model gateway serves at %s; %s.", m.URL(), strings.Join(each, "; "))
 }

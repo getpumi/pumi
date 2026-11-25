@@ -50,17 +50,17 @@ type execution struct {
 	ended error
 }
 
-// execute starts the adapter in the workspace with the harness invocation
+// execute starts the adapter at path in the workspace with the harness invocation
 // inv as one line on its standard input and supervises it until it exits.
 // Its standard error is the log.
-func (r *run) execute(ctx context.Context, inv *harnessv1.Invocation) (*execution, error) {
+func (r *run) execute(ctx context.Context, path string, inv *harnessv1.Invocation) (*execution, error) {
 	line, err := protojson.Marshal(inv)
 	if err != nil {
 		return nil, fmt.Errorf("the harness invocation could not be written: %w", err)
 	}
 	stdout := &stdoutReader{usage: r.logUsage}
 	cmd := &exec.Cmd{
-		Path: r.cfg.Adapter, Args: []string{r.cfg.Adapter}, Dir: inv.GetWorkspace(), Env: os.Environ(),
+		Path: path, Args: []string{path}, Dir: inv.GetWorkspace(), Env: os.Environ(),
 		Stdout: stdout, Stderr: r.log,
 		// After the adapter exits, Wait waits this long for the copies of
 		// its output to end, which a process it started can hold open.

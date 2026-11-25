@@ -208,7 +208,6 @@ func TestACallThatNamesAModelGoesToThatModel(t *testing.T) {
 func TestNewRefusesARoleItCannotUse(t *testing.T) {
 	for name, r := range map[string]gateway.Role{
 		"no model":                       {Fallback: fallback},
-		"no fallback":                    {Model: model},
 		"a model the table lacks":        {Model: "claude-unknown", Fallback: fallback},
 		"a fallback the table lacks":     {Model: model, Fallback: "gpt-unknown"},
 		"the fallback is the same model": {Model: model, Fallback: model},
@@ -494,5 +493,24 @@ func waitFor(t *testing.T, cond func() bool) {
 			t.Fatal("the condition did not hold within five seconds")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestALimitOnARoleWithoutAFallbackIsPassedBack: a model role whose
+// fallback is on another adapter has no fallback model in the gateway, so
+// the gateway passes the limit back after one call (decisions 0233 and
+// 0246).
+func TestALimitOnARoleWithoutAFallbackIsPassedBack(t *testing.T) {
+	f := newFixtureWith(t, gateway.Config{Roles: map[string]gateway.Role{role: {Model: model}}})
+	f.respondInTurn(response{http.StatusTooManyRequests, rateLimited})
+	token := f.open(t, nil)
+
+	status, _, body := f.call(t, "/v1/messages", signInHeader(token), messages(role, false))
+
+	if status != http.StatusTooManyRequests || body != rateLimited {
+		t.Errorf("response = %d %q, want the limit", status, body)
+	}
+	if got := f.models(t); !equalStrings(got, []string{model}) {
+		t.Errorf("the provider received calls to %q, want one to %s", got, model)
 	}
 }

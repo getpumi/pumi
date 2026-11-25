@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "pumi.config.v1.Adapter.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Adapter is a harness adapter (decision 0245).",
+      "patternProperties": {
+        "^(api_key_env)$": {
+          "default": "",
+          "description": "The name of the environment variable that holds the provider's API\n key, such as ANTHROPIC_API_KEY: required in the API key mode, and\n refused in the sign-in mode. pumi run reads the key from it, which\n must not be empty.",
+          "type": "string"
+        },
+        "^(credential_mode)$": {
+          "anyOf": [
+            {
+              "pattern": "^CREDENTIAL_MODE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "CREDENTIAL_MODE_API_KEY",
+                "CREDENTIAL_MODE_SIGN_IN"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The credential mode.",
+          "title": "Credential Mode"
+        }
+      },
+      "properties": {
+        "apiKeyEnv": {
+          "default": "",
+          "description": "The name of the environment variable that holds the provider's API\n key, such as ANTHROPIC_API_KEY: required in the API key mode, and\n refused in the sign-in mode. pumi run reads the key from it, which\n must not be empty.",
+          "type": "string"
+        },
+        "credentialMode": {
+          "anyOf": [
+            {
+              "pattern": "^CREDENTIAL_MODE_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "CREDENTIAL_MODE_API_KEY",
+                "CREDENTIAL_MODE_SIGN_IN"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The credential mode.",
+          "title": "Credential Mode"
+        },
+        "executable": {
+          "default": "",
+          "description": "The executable, relative to the directory of the configuration file\n or absolute (decision 0158).",
+          "type": "string"
+        },
+        "sha256": {
+          "default": "",
+          "description": "The SHA-256 of the executable, in lowercase hexadecimal. The runner\n refuses to start an executable whose SHA-256 differs.",
+          "type": "string"
+        }
+      },
+      "title": "Adapter",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.config.v1.Adapter.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.config.v1.Adapter.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

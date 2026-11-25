@@ -33,7 +33,12 @@ const (
 type fakeGateway struct {
 	mu          sync.Mutex
 	keepsSignIn bool
-	totals      GatewayTotals
+	// signIn are the adapters whose harness keeps its sign-in, beside
+	// every adapter when keepsSignIn is set.
+	signIn map[string]bool
+	// opener are the adapters of the invocations opened.
+	opener []string
+	totals GatewayTotals
 	// openErr is the error of every Open when set.
 	openErr error
 	// opened are the invocations opened, with their budgets, and open the
@@ -52,14 +57,15 @@ type fakeGateway struct {
 
 func (g *fakeGateway) URL() string { return fakeGatewayURL }
 
-func (g *fakeGateway) KeepsSignIn() bool { return g.keepsSignIn }
+func (g *fakeGateway) KeepsSignIn(adapter string) bool { return g.keepsSignIn || g.signIn[adapter] }
 
-func (g *fakeGateway) Open(invocation string, budget *harnessv1.Usage, log io.Writer) (string, error) {
+func (g *fakeGateway) Open(invocation, adapter string, budget *harnessv1.Usage, log io.Writer) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.openErr != nil {
 		return "", g.openErr
 	}
+	g.opener = append(g.opener, adapter)
 	g.log = log
 	g.opened = append(g.opened, invocation)
 	g.budgets = append(g.budgets, proto.CloneOf(budget))
@@ -99,6 +105,13 @@ func (g *fakeGateway) state() (opened []string, stillOpen bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return slices.Clone(g.opened), len(g.open) > 0
+}
+
+// adapters returns the adapters of the invocations opened.
+func (g *fakeGateway) adapters() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return slices.Clone(g.opener)
 }
 
 // checkNotStarted fails the test when the fake adapter started.

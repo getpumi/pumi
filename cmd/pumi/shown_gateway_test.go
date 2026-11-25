@@ -4,6 +4,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,7 +28,7 @@ import (
 //
 // claude keeps its own sign-in, unless PUMI_SHOWN_API_KEY_ENV names the
 // environment variable that holds the provider's API key: then the
-// configuration file's gateway.api_key_env names it, and the gateway sends
+// model configuration's adapter entry names it, and the gateway sends
 // the key (decision 0225).
 const envProviderVariable = "PUMI_SHOWN_API_KEY_ENV"
 
@@ -38,12 +40,47 @@ const (
 	shownFallback = "claude-sonnet-5-5"
 )
 
-// shownGateway is the gateway block of the shown runs' configuration.
-func shownGateway() *configv1.Gateway {
-	return &configv1.Gateway{
-		ApiKeyEnv:  os.Getenv(envProviderVariable),
-		ModelRoles: map[string]*configv1.ModelRole{shownRole: {Model: shownModel, Fallback: shownFallback}},
+// shownAdapter is the name of the Claude Code adapter in the model
+// configuration of the shown runs.
+const shownAdapter = "claude-code"
+
+// shownModels is the model configuration of the shown runs, with the
+// Claude Code adapter at path (decision 0245): in the API key mode when
+// PUMI_SHOWN_API_KEY_ENV names the key's variable, and in the sign-in mode
+// otherwise, running the model role and the checks.
+func shownModels(path string) (*configv1.Models, error) {
+	hash, err := hashOf(path)
+	if err != nil {
+		return nil, err
 	}
+	a := &configv1.Adapter{Executable: path, Sha256: hash, CredentialMode: configv1.Adapter_CREDENTIAL_MODE_SIGN_IN}
+	if key := os.Getenv(envProviderVariable); key != "" {
+		a.CredentialMode, a.ApiKeyEnv = configv1.Adapter_CREDENTIAL_MODE_API_KEY, key
+	}
+	return &configv1.Models{
+		Adapters: map[string]*configv1.Adapter{shownAdapter: a},
+		Roles: map[string]*configv1.Role{shownRole: {
+			Adapter: shownAdapter, Model: shownModel,
+			Fallback: &configv1.Fallback{Adapter: shownAdapter, Model: shownFallback},
+		}},
+		CheckAdapter: shownAdapter,
+	}, nil
+}
+
+// hashOf returns the SHA-256 of the file at path, an absolute path, in
+// lowercase hexadecimal, read through a root of its directory (gosec G304).
+func hashOf(path string) (string, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = root.Close() }()
+	b, err := root.ReadFile(filepath.Base(path))
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // The plans of the shown runs through the gateway. Both implement the

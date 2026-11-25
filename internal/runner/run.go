@@ -6,11 +6,15 @@ package runner
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"getpumi.dev/pumi/api"
@@ -46,9 +50,20 @@ type Config struct {
 	// Service is the client of RunnerService, through which the runner
 	// claims invocations and reports their results (decision 0152).
 	Service runnerv1connect.RunnerServiceClient
-	// Adapter is the absolute path of the harness adapter's executable,
-	// which the runner starts once for each invocation (decision 0158).
-	Adapter string
+	// Adapters are the harness adapters by name (decision 0245). The
+	// runner starts one of them once for each invocation (decision 0158):
+	// the adapter of the model role of an agent run, and CheckAdapter for
+	// a check or an external action.
+	Adapters map[string]Adapter
+	// Roles maps each model role, such as "frontier", to the name of its
+	// adapter (decision 0245).
+	Roles map[string]string
+	// CheckAdapter is the name of the adapter that runs the checks and
+	// external actions, which name no model role (decision 0253).
+	CheckAdapter string
+	// Remote is set when the runner runs in remote mode, which refuses an
+	// adapter in the sign-in mode (decision 0240).
+	Remote bool
 	// Repository is a directory in the git repository that holds the
 	// invocations' input trees and receives their resulting trees.
 	Repository string
@@ -76,19 +91,33 @@ type Config struct {
 	Gateway Gateway
 }
 
+// Adapter is a harness adapter's executable and how its harness reaches
+// the provider (decisions 0240 and 0245).
+type Adapter struct {
+	// Path is the absolute path of the executable.
+	Path string
+	// SHA256 is the executable's SHA-256 in lowercase hexadecimal. The
+	// runner refuses to start an executable whose SHA-256 differs.
+	SHA256 string
+	// SignIn is set when the harness uses the person's own sign-in, and
+	// not an API key that the gateway holds.
+	SignIn bool
+}
+
 // Gateway is the model gateway as the runner sees it (decisions 0225,
 // 0230 and 0231).
 type Gateway interface {
 	// URL is the base URL that a harness is given.
 	URL() string
-	// KeepsSignIn reports whether the harness keeps its own sign-in, which
-	// is when the gateway holds no API key (decision 0225).
-	KeepsSignIn() bool
-	// Open opens the invocation with its budget and returns a random token
-	// that is valid for it until Close. The gateway writes each fallback
-	// and retry of the invocation's calls to log, the invocation's log
-	// (decision 0233).
-	Open(invocation string, budget *harnessv1.Usage, log io.Writer) (string, error)
+	// KeepsSignIn reports whether the harness of the adapter, by name,
+	// keeps its own sign-in, which is when the gateway holds no API key
+	// for it (decisions 0225 and 0240).
+	KeepsSignIn(adapter string) bool
+	// Open opens the invocation, which the adapter runs, with its budget
+	// and returns a random token that is valid for it until Close. The
+	// gateway writes each fallback and retry of the invocation's calls to
+	// log, the invocation's log (decision 0233).
+	Open(invocation, adapter string, budget *harnessv1.Usage, log io.Writer) (string, error)
 	// Totals returns the usage that the gateway counted for the token's
 	// invocation.
 	Totals(token string) (GatewayTotals, error)
@@ -122,14 +151,15 @@ func (c *Config) check() error {
 	switch {
 	case c.Service == nil:
 		return errors.New("runner: no RunnerService client")
-	case !filepath.IsAbs(c.Adapter):
-		return fmt.Errorf("runner: the adapter %q is not an absolute path", c.Adapter)
 	case c.Repository == "":
 		return errors.New("runner: no repository")
 	case c.WorkDir == "":
 		return errors.New("runner: no work directory")
 	case c.Blobs == nil:
 		return errors.New("runner: no blob store")
+	}
+	if err := c.checkAdapters(); err != nil {
+		return err
 	}
 	if c.Grace <= 0 {
 		c.Grace = DefaultGrace
@@ -138,6 +168,50 @@ func (c *Config) check() error {
 		c.LogInterval = DefaultLogInterval
 	}
 	return nil
+}
+
+// checkAdapters refuses a configuration with no adapter, with an adapter
+// whose path is not absolute or that has no SHA-256, with a check adapter
+// or a model role whose adapter it does not list, and, in remote mode,
+// with an adapter in the sign-in mode (decisions 0240, 0245 and 0253).
+func (c *Config) checkAdapters() error {
+	if len(c.Adapters) == 0 {
+		return errors.New("runner: no adapter")
+	}
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(c.Adapters)) {
+		a := c.Adapters[name]
+		switch {
+		case !filepath.IsAbs(a.Path):
+			errs = append(errs, fmt.Errorf("runner: the adapter %q has the path %q, which is not absolute", name, a.Path))
+		case !validSHA256(a.SHA256):
+			errs = append(errs, fmt.Errorf("runner: the adapter %q has the SHA-256 %q, which is not 64 lowercase hexadecimal digits", name, a.SHA256))
+		case c.Remote && a.SignIn:
+			errs = append(errs, fmt.Errorf("runner: remote mode refuses the adapter %q, which is in the sign-in mode; remote mode uses API keys only (decision 0240)", name))
+		}
+	}
+	if _, ok := c.Adapters[c.CheckAdapter]; !ok {
+		errs = append(errs, fmt.Errorf("runner: the check adapter %q is not one of the adapters (decision 0253)", c.CheckAdapter))
+	}
+	for _, role := range slices.Sorted(maps.Keys(c.Roles)) {
+		if _, ok := c.Adapters[c.Roles[role]]; !ok {
+			errs = append(errs, fmt.Errorf("runner: the model role %q names the adapter %q, which is not one of the adapters", role, c.Roles[role]))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// validSHA256 reports whether s is a SHA-256 in lowercase hexadecimal.
+func validSHA256(s string) bool {
+	if len(s) != sha256.Size*2 {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // Run claims and runs invocations, one at a time, until ctx is done or a
@@ -241,6 +315,9 @@ type run struct {
 	log     *logBuffer
 	// token is the invocation's gateway token while it is open.
 	token string
+	// adapter is the name of the adapter that runs the invocation, once
+	// the runner picked it.
+	adapter string
 }
 
 // do runs the invocation in a new directory, which it removes after, and
@@ -288,13 +365,13 @@ func (r *run) openGateway() (*harnessv1.Gateway, error) {
 	if r.doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN {
 		return nil, nil
 	}
-	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.doc.GetBudget(), r.log)
+	token, err := r.cfg.Gateway.Open(r.doc.GetInvocation(), r.adapter, r.doc.GetBudget(), r.log)
 	if err != nil {
 		return nil, fmt.Errorf("the model gateway could not open the invocation: %w", err)
 	}
 	r.token = token
 	r.log.mask(token)
-	return &harnessv1.Gateway{BaseUrl: r.cfg.Gateway.URL(), Token: token, KeepsSignIn: r.cfg.Gateway.KeepsSignIn()}, nil
+	return &harnessv1.Gateway{BaseUrl: r.cfg.Gateway.URL(), Token: token, KeepsSignIn: r.cfg.Gateway.KeepsSignIn(r.adapter)}, nil
 }
 
 // closeGateway reads the totals of the open token and closes it. It
@@ -319,6 +396,10 @@ func (r *run) closeGateway() (GatewayTotals, error) {
 // its JSON Schema, and runs the adapter. An error fails the invocation
 // before the adapter starts.
 func (r *run) start(ctx context.Context, work, index string) (*execution, protoreflect.MessageType, error) {
+	adapter, err := r.pickAdapter()
+	if err != nil {
+		return nil, nil, err
+	}
 	gateway, err := r.openGateway()
 	if err != nil {
 		return nil, nil, err
@@ -338,8 +419,60 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	if err != nil {
 		return nil, nil, err
 	}
-	ex, err := r.execute(ctx, inv)
+	ex, err := r.execute(ctx, adapter.Path, inv)
 	return ex, mt, err
+}
+
+// pickAdapter picks the adapter of the invocation: the adapter of the
+// model role of an agent run, or the check adapter for a check or an
+// external action (decisions 0245 and 0253). It checks the executable's
+// SHA-256 and refuses one that does not match, and writes the adapter's
+// name, path and SHA-256 to the log (decision 0245).
+func (r *run) pickAdapter() (Adapter, error) {
+	name := r.cfg.CheckAdapter
+	if r.doc.GetComponent().GetKind() == harnessv1.Component_KIND_AGENT_RUN {
+		var ok bool
+		if name, ok = r.cfg.Roles[r.doc.GetModelRole()]; !ok {
+			return Adapter{}, fmt.Errorf("the model role %q of the agent run has no adapter (decision 0245)", r.doc.GetModelRole())
+		}
+	}
+	a := r.cfg.Adapters[name]
+	got, err := hashFile(a.Path)
+	if err != nil {
+		return Adapter{}, fmt.Errorf("the SHA-256 of the adapter %s (%s) could not be computed: %w", name, a.Path, err)
+	}
+	if got != a.SHA256 {
+		return Adapter{}, fmt.Errorf("the adapter %s (%s) has the SHA-256 %s, but the configuration pins %s; the runner does not start it (decision 0245)", name, a.Path, got, a.SHA256)
+	}
+	r.adapter = name
+	r.log.note("the adapter %s (%s, SHA-256 %s) runs the invocation %s", name, a.Path, got, r.doc.GetInvocation())
+	return a, nil
+}
+
+// hashFile returns the SHA-256 of the file at path, in lowercase
+// hexadecimal, after following its links, as starting it does. The file is
+// read through a root of its directory, because gosec reports a path built
+// from a variable (G304).
+func hashFile(path string) (string, error) {
+	path, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", err
+	}
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = root.Close() }()
+	f, err := root.Open(filepath.Base(path))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // report adds the reason the invocation failed to the log when problem is

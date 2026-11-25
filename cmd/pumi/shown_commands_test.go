@@ -127,16 +127,20 @@ func shownConfig(t *testing.T, run shownRun) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	models, err := shownModels(run.Adapter)
+	if err != nil {
+		t.Fatal(err)
+	}
 	base := shownBase(run)
 	base.Input.Tree = ""
 	cfg := &configv1.Config{
-		Workflow: wf, Adapter: run.Adapter, Trunk: "main", Base: base,
+		Workflow: wf, Trunk: "main", Base: base,
 		Project: &configv1.Project{Name: "scale-wholesale"},
 		Settings: &configv1.Settings{
 			Parallelism: 1,
 			MaxAttempts: map[string]int64{"in-doubt": 1},
 		},
-		Gateway: shownGateway(),
+		Models: models,
 	}
 	b, err := prototext.MarshalOptions{Multiline: true}.Marshal(cfg)
 	if err != nil {

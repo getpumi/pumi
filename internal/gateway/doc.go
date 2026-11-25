@@ -7,8 +7,10 @@
 // In embedded mode pumi run serves it on 127.0.0.1 (decision 0231). It
 // passes calls of Anthropic's Messages API through unchanged, streaming
 // included, with the adopter's API key or the harness's own sign-in
-// (decision 0225). It counts every token of every call (decision 0227),
-// prices each call from the list-price table built into the binary
+// (decision 0225), and calls of OpenAI's Responses API with the adopter's
+// OpenAI key (decision 0243), each to the provider of the API of the
+// invocation's adapter. It counts every token of every call (decision
+// 0227), prices each call from the list-price table built into the binary
 // (decisions 0229 and 0239), keeps each open invocation's totals (decision
 // 0230) and refuses an invocation's next call once its tokens or cost reach
 // its budget (decision 0228).

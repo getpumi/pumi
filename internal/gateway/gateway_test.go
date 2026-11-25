@@ -73,7 +73,7 @@ type request struct {
 	body         []byte
 }
 
-// provider is a fake of Anthropic's API.
+// provider is a fake of a provider's API.
 type provider struct {
 	mu       sync.Mutex
 	requests []request
@@ -118,7 +118,9 @@ type fixture struct {
 	gw       *gateway.Gateway
 	url      string
 	provider *provider
-	log      *bytes.Buffer
+	// openai is the fake of OpenAI's Responses API.
+	openai *provider
+	log    *bytes.Buffer
 	// invocationLog is the log of the invocation that open opens.
 	invocationLog *syncBuffer
 }
@@ -145,14 +147,24 @@ func newFixture(t *testing.T, apiKey string) *fixture {
 func newFixtureWith(t *testing.T, cfg gateway.Config) *fixture {
 	t.Helper()
 	p := &provider{respond: answer}
-	upstream := httptest.NewServer(p)
-	t.Cleanup(upstream.Close)
-	u, err := url.Parse(upstream.URL)
-	if err != nil {
-		t.Fatal(err)
+	o := &provider{respond: answerResponses}
+	cfg.Upstreams = map[gateway.API]*url.URL{}
+	for api, fake := range map[gateway.API]*provider{gateway.MessagesAPI: p, gateway.ResponsesAPI: o} {
+		upstream := httptest.NewServer(fake)
+		t.Cleanup(upstream.Close)
+		u, err := url.Parse(upstream.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg.Upstreams[api] = u
+	}
+	if cfg.AdapterAPIs == nil {
+		cfg.AdapterAPIs = map[string]gateway.API{
+			testAdapter: gateway.MessagesAPI, "keyed": gateway.MessagesAPI, "signed-in": gateway.MessagesAPI,
+			"other-adapter": gateway.MessagesAPI, codexAdapter: gateway.ResponsesAPI,
+		}
 	}
 	var logged bytes.Buffer
-	cfg.Upstream = u
 	cfg.Log = slog.New(slog.NewTextHandler(&syncWriter{w: &logged}, nil))
 	gw, err := gateway.New(cfg)
 	if err != nil {
@@ -169,7 +181,7 @@ func newFixtureWith(t *testing.T, cfg gateway.Config) *fixture {
 			t.Errorf("Shutdown() error = %v", err)
 		}
 	})
-	return &fixture{gw: gw, url: srv.URL(), provider: p, log: &logged, invocationLog: &syncBuffer{}}
+	return &fixture{gw: gw, url: srv.URL(), provider: p, openai: o, log: &logged, invocationLog: &syncBuffer{}}
 }
 
 // syncWriter serializes writes to a buffer that several goroutines log to.

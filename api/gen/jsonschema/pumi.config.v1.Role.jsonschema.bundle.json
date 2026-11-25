@@ -1,0 +1,49 @@
+{
+  "$defs": {
+    "pumi.config.v1.Fallback.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Fallback is the adapter and model that a model role falls back to\n (decision 0246).",
+      "properties": {
+        "adapter": {
+          "default": "",
+          "description": "The adapter.",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "description": "The model.",
+          "type": "string"
+        }
+      },
+      "title": "Fallback",
+      "type": "object"
+    },
+    "pumi.config.v1.Role.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Role is the adapter and model of a model role, and its fallback\n (decisions 0233, 0245 and 0246).",
+      "properties": {
+        "adapter": {
+          "default": "",
+          "description": "The adapter that runs the role's agent runs.",
+          "type": "string"
+        },
+        "fallback": {
+          "$ref": "#/$defs/pumi.config.v1.Fallback.jsonschema.json",
+          "description": "The fallback, which may be on another adapter; none when not set.\n When it is on the same adapter, the model gateway also sends a call\n once to its model when the provider answers with a usage or rate limit\n (decision 0233)."
+        },
+        "model": {
+          "default": "",
+          "description": "The model, such as claude-opus-5-5.",
+          "type": "string"
+        }
+      },
+      "title": "Role",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.config.v1.Role.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.config.v1.Role.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -163,19 +163,62 @@ type commandClone struct {
 // configuration of the user or the system, so the clone's is the only one.
 func newCommandClone(t *testing.T, workflow, mode string) *commandClone {
 	t.Helper()
-	return newCommandCloneWith(t, workflow, mode, testGateway)
+	return newCommandCloneWith(t, workflow, mode, testModels(t, signInMode))
 }
 
-// testGateway is the gateway block of the configuration file of a test
-// clone: the model role of the workflows of internal/kernel/testdata,
-// frontier, goes to testModel and falls back to testFallback (decision
-// 0233).
-const testGateway = `model_roles { key: "frontier" value { model: "` + testModel + `" fallback: "` + testFallback + `" } }`
+// The credential modes of the test adapter's entry, in text format
+// (decision 0240).
+const (
+	signInMode = `credential_mode: CREDENTIAL_MODE_SIGN_IN`
+	apiKeyMode = `credential_mode: CREDENTIAL_MODE_API_KEY api_key_env: "` + testKeyEnv + `"`
+)
 
-// newCommandCloneWith returns the clone of newCommandClone with gateway,
-// text format, as the gateway block of its configuration file, and serves
-// the fake provider that the gateway of its pumi run sends calls to.
-func newCommandCloneWith(t *testing.T, workflow, mode, gateway string) *commandClone {
+// testAdapterName is the name of the test adapter in the model
+// configuration of a test clone.
+const testAdapterName = "test"
+
+// testAdapterHash returns the SHA-256 of the test binary, which is the
+// test adapter.
+func testAdapterHash(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile("/proc/self/exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// adapterEntry returns the entry of the adapters of a model configuration,
+// in text format, that names the executable path with the SHA-256 of the
+// test binary, in the credential mode mode.
+func adapterEntry(t *testing.T, name, path, mode string) string {
+	t.Helper()
+	return fmt.Sprintf(`adapters { key: %q value { executable: %q sha256: %q %s } }`, name, path, testAdapterHash(t), mode)
+}
+
+// testModels returns the model configuration of a test clone, in text
+// format: the test adapter in the credential mode mode runs the model role
+// of the workflows of internal/kernel/testdata, frontier, on testModel,
+// which falls back to testFallback on the same adapter, and the checks
+// (decisions 0233, 0245 and 0253).
+func testModels(t *testing.T, mode string) string {
+	t.Helper()
+	return adapterEntry(t, testAdapterName, "/proc/self/exe", mode) + ` ` + testRole(testAdapterName) + ` check_adapter: "` + testAdapterName + `"`
+}
+
+// testRole returns the role entry of a model configuration, in text
+// format, that runs frontier on testModel of adapter, falling back to
+// testFallback on the same adapter.
+func testRole(adapter string) string {
+	return fmt.Sprintf(`roles { key: "frontier" value { adapter: %q model: %q fallback { adapter: %q model: %q } } }`, adapter, testModel, adapter, testFallback)
+}
+
+// newCommandCloneWith returns the clone of newCommandClone with models,
+// text format, as the model configuration of its configuration file, and
+// serves the fake provider that the gateway of its pumi run sends calls
+// to.
+func newCommandCloneWith(t *testing.T, workflow, mode, models string) *commandClone {
 	t.Helper()
 	p := fakeProvider(t)
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
@@ -190,7 +233,6 @@ func newCommandCloneWith(t *testing.T, workflow, mode, gateway string) *commandC
 	config := filepath.Join(t.TempDir(), "pumi.txtpb")
 	writeFile(t, filepath.Dir(config), filepath.Base(config), fmt.Sprintf(`# The configuration of the test clone.
 workflow: %q
-adapter: "/proc/self/exe"
 trunk: "main"
 base {
   component { name: "test-adapter" version: "1" }
@@ -203,8 +245,8 @@ settings {
   parallelism: 1
   max_attempts { key: "in-doubt" value: 1 }
 }
-gateway { %s }
-`, wf, gateway))
+models { %s }
+`, wf, models))
 	return &commandClone{t: t, dir: dir, config: config, provider: p}
 }
 

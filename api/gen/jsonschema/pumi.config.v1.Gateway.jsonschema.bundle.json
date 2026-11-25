@@ -3,7 +3,7 @@
     "pumi.config.v1.Gateway.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "description": "Gateway configures the model gateway that pumi run serves.",
+      "description": "Gateway was the model gateway section, replaced by models (decision\n 0245).",
       "patternProperties": {
         "^(api_key_env)$": {
           "default": "",

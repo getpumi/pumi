@@ -78,6 +78,8 @@ func fakeAdapter(mode string) int {
 		return 9
 	}
 	fmt.Fprintf(os.Stderr, "%spid %d\n", fakeAdapterPrefix, os.Getpid())
+	fmt.Fprintf(os.Stderr, "%sstarted as %s\n", fakeAdapterPrefix, os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s%s\n", fakeAdapterPrefix, fakeHarnessVersion)
 	if err := writePID(); err != nil {
 		fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"the process id could not be written:", err)
 		return 9
@@ -480,6 +482,7 @@ func newFixture(t *testing.T, mode string) *fixture {
 		Budget:            &harnessv1.Usage{Tokens: 50_000, CostMicrodollars: 70_000},
 		OutputMessage:     "pumi.workflow.v1.ImplementationOutput",
 		CredentialHandles: []string{"handle-never-sent"},
+		ModelRole:         "frontier",
 	}
 	service := &fakeService{claim: &runnerv1.ClaimResponse{
 		ProtocolVersion: &runnerv1.ProtocolVersion{Major: 1},
@@ -490,12 +493,16 @@ func newFixture(t *testing.T, mode string) *fixture {
 	blobs := &fakeBlobs{}
 	gateway := &fakeGateway{totals: GatewayTotals{Tokens: gatewayTokens, CostMicrodollars: gatewayCost}}
 	return &fixture{repo: repo, service: service, blobs: blobs, gateway: gateway, doc: doc, pidDir: pidDir, cfg: Config{
-		Service:    service,
-		Blobs:      blobs,
-		Gateway:    gateway,
-		Adapter:    "/proc/self/exe",
-		Repository: repo.dir,
-		WorkDir:    t.TempDir(),
+		Service: service,
+		Blobs:   blobs,
+		Gateway: gateway,
+		Adapters: map[string]Adapter{
+			fakeAdapterName: {Path: "/proc/self/exe", SHA256: fakeAdapterHash(t)},
+		},
+		Roles:        map[string]string{"frontier": fakeAdapterName},
+		CheckAdapter: fakeAdapterName,
+		Repository:   repo.dir,
+		WorkDir:      t.TempDir(),
 		// Long enough for an adapter that stops on its own to start, which
 		// takes a while with the race detector.
 		Grace:       10 * time.Second,
@@ -1090,11 +1097,18 @@ func TestRunRunsInvocationsUntilStopped(t *testing.T) {
 
 func TestABadConfigIsRefused(t *testing.T) {
 	for name, change := range map[string]func(*Config){
-		"no service":         func(c *Config) { c.Service = nil },
-		"a relative adapter": func(c *Config) { c.Adapter = "adapter" },
-		"no repository":      func(c *Config) { c.Repository = "" },
-		"no work directory":  func(c *Config) { c.WorkDir = "" },
-		"no blob store":      func(c *Config) { c.Blobs = nil },
+		"no service": func(c *Config) { c.Service = nil },
+		"a relative adapter": func(c *Config) {
+			c.Adapters[fakeAdapterName] = Adapter{Path: "adapter", SHA256: c.Adapters[fakeAdapterName].SHA256}
+		},
+		"no adapters":                  func(c *Config) { c.Adapters = nil },
+		"an adapter with no SHA-256":   func(c *Config) { c.Adapters[fakeAdapterName] = Adapter{Path: "/proc/self/exe"} },
+		"no check adapter":             func(c *Config) { c.CheckAdapter = "" },
+		"an unknown check adapter":     func(c *Config) { c.CheckAdapter = "unknown" },
+		"a role on an unknown adapter": func(c *Config) { c.Roles["frontier"] = "unknown" },
+		"no repository":                func(c *Config) { c.Repository = "" },
+		"no work directory":            func(c *Config) { c.WorkDir = "" },
+		"no blob store":                func(c *Config) { c.Blobs = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t, "success")

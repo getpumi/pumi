@@ -25,22 +25,27 @@ const gatewayPrefix = "pumi gateway: "
 // before it closes it and sends the call again.
 const maxDiscard = 1 << 20
 
-// checkRoles refuses a model role without a model or a fallback model, with
-// a model that the price table does not list, or with a fallback that is
-// its own model (decision 0233). The price table lists only models of
-// Anthropic's Messages API, so a role's two models use the same API.
+// checkRoles refuses a model role without a model, with a model that the
+// price table does not list, or with a fallback that is its own model
+// (decision 0233). The price table lists only models of Anthropic's
+// Messages API, so a role's two models use the same API. A role may have
+// no fallback model, when its fallback is on another adapter (decision
+// 0246).
 func checkRoles(roles map[string]Role) error {
 	var errs []error
 	for name, r := range roles {
 		switch {
 		case name == "":
 			errs = append(errs, errors.New("gateway: a model role has no name"))
-		case r.Model == "" || r.Fallback == "":
-			errs = append(errs, fmt.Errorf("gateway: the model role %q needs a model and a fallback model", name))
+		case r.Model == "":
+			errs = append(errs, fmt.Errorf("gateway: the model role %q needs a model", name))
 		case r.Model == r.Fallback:
 			errs = append(errs, fmt.Errorf("gateway: the model role %q has %s as its model and as its fallback model", name, r.Model))
 		default:
 			for _, m := range []string{r.Model, r.Fallback} {
+				if m == "" {
+					continue
+				}
 				if _, ok := Price(m); !ok {
 					errs = append(errs, fmt.Errorf("gateway: the model role %q names the model %q, which the price table (version %s) does not list", name, m, PricesVersion))
 				}

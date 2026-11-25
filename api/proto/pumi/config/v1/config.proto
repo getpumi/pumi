@@ -17,10 +17,8 @@ message Config {
   // The workflow file that the plans run on, relative to the directory of
   // the configuration file or absolute (decision 0167).
   string workflow = 1;
-  // The executable of the harness adapter that the in-process runner
-  // starts, relative to the directory of the configuration file or
-  // absolute (decision 0158).
-  string adapter = 2;
+  // Replaced by models (decision 0245). pumi refuses a file that sets it.
+  string adapter = 2 [deprecated = true];
   // The trunk branch, such as main. Each plan starts from its tree at the
   // time the plan starts (decision 0209).
   string trunk = 3;
@@ -35,11 +33,82 @@ message Config {
   pumi.harness.v1.Usage hard_caps = 6;
   // The profile settings.
   Settings settings = 7;
-  // The model gateway that pumi run serves (decisions 0225 and 0231).
-  Gateway gateway = 8;
+  // Replaced by models (decision 0245): the API key variables are on the
+  // adapters, and the model roles are models.roles. pumi refuses a file
+  // that sets it.
+  Gateway gateway = 8 [deprecated = true];
+  // The model configuration: the adapters, the model roles and the adapter
+  // of the checks and external actions (decisions 0245 and 0253). It is
+  // apart from the profile settings.
+  Models models = 9;
 }
 
-// Gateway configures the model gateway that pumi run serves.
+// Models is the model configuration (decision 0245): which adapter and
+// model serve each model role, and their fallbacks.
+message Models {
+  // The adapters by name, such as "claude-code" and "codex".
+  map<string, Adapter> adapters = 1;
+  // The model roles by name, such as "frontier". Each model role that the
+  // workflow names must be here (decision 0233).
+  map<string, Role> roles = 2;
+  // The adapter that runs every check and external action, which name no
+  // model role (decision 0253).
+  string check_adapter = 3;
+}
+
+// Adapter is a harness adapter (decision 0245).
+message Adapter {
+  // CredentialMode is how the adapter's harness reaches its provider
+  // (decision 0240).
+  enum CredentialMode {
+    CREDENTIAL_MODE_UNSPECIFIED = 0;
+    // The provider's API key, which the model gateway holds and sends.
+    CREDENTIAL_MODE_API_KEY = 1;
+    // The person's own sign-in of the harness. Only embedded mode allows
+    // it.
+    CREDENTIAL_MODE_SIGN_IN = 2;
+  }
+
+  // The executable, relative to the directory of the configuration file
+  // or absolute (decision 0158).
+  string executable = 1;
+  // The SHA-256 of the executable, in lowercase hexadecimal. The runner
+  // refuses to start an executable whose SHA-256 differs.
+  string sha256 = 2;
+  // The credential mode.
+  CredentialMode credential_mode = 3;
+  // The name of the environment variable that holds the provider's API
+  // key, such as ANTHROPIC_API_KEY: required in the API key mode, and
+  // refused in the sign-in mode. pumi run reads the key from it, which
+  // must not be empty.
+  string api_key_env = 4;
+}
+
+// Role is the adapter and model of a model role, and its fallback
+// (decisions 0233, 0245 and 0246).
+message Role {
+  // The adapter that runs the role's agent runs.
+  string adapter = 1;
+  // The model, such as claude-opus-5-5.
+  string model = 2;
+  // The fallback, which may be on another adapter; none when not set.
+  // When it is on the same adapter, the model gateway also sends a call
+  // once to its model when the provider answers with a usage or rate limit
+  // (decision 0233).
+  Fallback fallback = 3;
+}
+
+// Fallback is the adapter and model that a model role falls back to
+// (decision 0246).
+message Fallback {
+  // The adapter.
+  string adapter = 1;
+  // The model.
+  string model = 2;
+}
+
+// Gateway was the model gateway section, replaced by models (decision
+// 0245).
 message Gateway {
   // The name of the environment variable that holds the provider's API
   // key, such as ANTHROPIC_API_KEY. When it is set, pumi run reads the key

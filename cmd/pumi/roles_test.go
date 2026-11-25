@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -64,17 +66,18 @@ func TestALimitedCallFallsBackAndTheLogSaysSo(t *testing.T) {
 }
 
 // TestRunRefusesAModelRoleTheConfigurationDoesNotMap: pumi run does not
-// start when the workflow names a model role that the configuration file
-// does not map, or when the file maps a role to a model that the price
-// table does not list (decision 0233).
+// start when the workflow names a model role that the model configuration
+// does not map, or when it maps a role to a model that the price table
+// does not list (decision 0233).
 func TestRunRefusesAModelRoleTheConfigurationDoesNotMap(t *testing.T) {
-	for name, tc := range map[string]struct{ gateway, want string }{
-		"no roles":       {"", `"frontier"`},
-		"another role":   {`model_roles { key: "fast" value { model: "claude-haiku-5-5" fallback: "claude-sonnet-5-5" } }`, `"frontier"`},
-		"unlisted model": {`model_roles { key: "frontier" value { model: "claude-unknown" fallback: "claude-sonnet-5-5" } }`, `"claude-unknown"`},
+	adapter := adapterEntry(t, testAdapterName, "/proc/self/exe", signInMode) + ` check_adapter: "` + testAdapterName + `"`
+	for name, tc := range map[string]struct{ models, want string }{
+		"no roles":       {adapter, `"frontier"`},
+		"another role":   {adapter + ` roles { key: "fast" value { adapter: "test" model: "claude-haiku-5-5" } }`, `"frontier"`},
+		"unlisted model": {adapter + ` roles { key: "frontier" value { adapter: "test" model: "claude-unknown" } }`, `"claude-unknown"`},
 	} {
 		t.Run(name, func(t *testing.T) {
-			c := newCommandCloneWith(t, "tracks", adapterSucceeds, tc.gateway)
+			c := newCommandCloneWith(t, "tracks", adapterSucceeds, tc.models)
 			ctx, cancel := context.WithTimeout(t.Context(), commandWait)
 			defer cancel()
 			var out bytes.Buffer
@@ -83,5 +86,49 @@ func TestRunRefusesAModelRoleTheConfigurationDoesNotMap(t *testing.T) {
 				t.Errorf("pumi run = %v; want an error that names %s; its output:\n%s", err, tc.want, out.String())
 			}
 		})
+	}
+}
+
+// TestTheModelRolePicksTheAdapterOfItsAgentRun: the model role of the
+// workflow's agent run, frontier, is on a second adapter, and the checks
+// are on the test adapter; the invocation's log says that the second
+// adapter ran it, with its SHA-256 (decision 0245).
+func TestTheModelRolePicksTheAdapterOfItsAgentRun(t *testing.T) {
+	second := filepath.Join(t.TempDir(), "second-adapter")
+	if err := os.Symlink("/proc/self/exe", second); err != nil {
+		t.Fatal(err)
+	}
+	models := adapterEntry(t, testAdapterName, "/proc/self/exe", signInMode) + ` ` +
+		adapterEntry(t, "second", second, signInMode) + ` ` + testRole("second") + ` check_adapter: "` + testAdapterName + `"`
+	c := newCommandCloneWith(t, "tracks", adapterSucceeds, models)
+	r := c.start()
+	c.must("add", "--track", "a", "a1")
+	c.waitState(r, "a1", "merged")
+	r.stop(t)
+	log := c.must("log", "--config", c.config, "a1/1")
+	if want := "the adapter second (" + second + ", SHA-256 " + testAdapterHash(t) + ")"; !strings.Contains(log, want) {
+		t.Errorf("the log of a1/1 does not hold %q; it is\n%s", want, log)
+	}
+}
+
+// TestAnAdapterWhoseHashDiffersFailsItsInvocation: the configuration pins
+// another SHA-256 for the adapter, so the runner does not start it, and
+// the invocation's log names the adapter and both hashes (decision 0245).
+func TestAnAdapterWhoseHashDiffersFailsItsInvocation(t *testing.T) {
+	pinned := strings.Repeat("ab", 32)
+	models := strings.Replace(testModels(t, signInMode), testAdapterHash(t), pinned, 1)
+	c := newCommandCloneWith(t, "tracks", adapterSucceeds, models)
+	r := c.start()
+	c.must("add", "--track", "a", "a1")
+	c.waitState(r, "a1", "implementing-escalated")
+	r.stop(t)
+	log := c.must("log", "--config", c.config, "a1/1")
+	for _, want := range []string{"the adapter " + testAdapterName, pinned, testAdapterHash(t)} {
+		if !strings.Contains(log, want) {
+			t.Errorf("the log of a1/1 does not hold %q; it is\n%s", want, log)
+		}
+	}
+	if strings.Contains(log, testAdapterPrefix) {
+		t.Errorf("the adapter started; the log is\n%s", log)
 	}
 }

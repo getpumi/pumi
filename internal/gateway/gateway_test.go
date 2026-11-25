@@ -123,9 +123,21 @@ type fixture struct {
 	invocationLog *syncBuffer
 }
 
+// testAdapter is the adapter of the invocation that open opens.
+const testAdapter = "claude-code"
+
+// apiKeys returns the API keys of a gateway that sends key for testAdapter,
+// or none when key is empty.
+func apiKeys(key string) map[string]string {
+	if key == "" {
+		return nil
+	}
+	return map[string]string{testAdapter: key}
+}
+
 func newFixture(t *testing.T, apiKey string) *fixture {
 	t.Helper()
-	return newFixtureWith(t, gateway.Config{APIKey: apiKey})
+	return newFixtureWith(t, gateway.Config{APIKeys: apiKeys(apiKey)})
 }
 
 // newFixtureWith returns a fixture whose gateway has cfg, with the fake
@@ -193,7 +205,7 @@ func (s *syncBuffer) String() string {
 
 func (f *fixture) open(t *testing.T, budget *harnessv1.Usage) string {
 	t.Helper()
-	token, err := f.gw.Open("inv-1", budget, f.invocationLog)
+	token, err := f.gw.Open("inv-1", testAdapter, budget, f.invocationLog)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -363,7 +375,7 @@ func TestGzipRequestBodyIsReadAndPassedThrough(t *testing.T) {
 
 func TestSignInIsForwardedAndTheInvocationHeaderIsNot(t *testing.T) {
 	f := newFixture(t, "")
-	if !f.gw.KeepsSignIn() {
+	if !f.gw.KeepsSignIn(testAdapter) {
 		t.Error("KeepsSignIn() = false with no API key, want true")
 	}
 	token := f.open(t, nil)
@@ -412,7 +424,7 @@ func TestAPIKeyIsSentInPlaceOfTheHarnessCredential(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t, providerKey)
-			if f.gw.KeepsSignIn() {
+			if f.gw.KeepsSignIn(testAdapter) {
 				t.Error("KeepsSignIn() = true with an API key, want false")
 			}
 			token := f.open(t, nil)
@@ -482,18 +494,18 @@ func TestACallWithNoValidTokenIsRefused(t *testing.T) {
 
 func TestOpenGivesEachInvocationItsOwnToken(t *testing.T) {
 	f := newFixture(t, "")
-	a, err := f.gw.Open("inv-a", nil, nil)
+	a, err := f.gw.Open("inv-a", testAdapter, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := f.gw.Open("inv-b", nil, nil)
+	b, err := f.gw.Open("inv-b", testAdapter, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a == b || len(a) < 32 {
 		t.Errorf("Open() = %q and %q, want two different random tokens", a, b)
 	}
-	if _, err := f.gw.Open("inv-a", nil, nil); err == nil {
+	if _, err := f.gw.Open("inv-a", testAdapter, nil, nil); err == nil {
 		t.Error("Open() of an invocation that is open succeeded, want an error")
 	}
 
@@ -710,5 +722,41 @@ func TestTheProviderKeyIsNeverLogged(t *testing.T) {
 	}
 	if strings.Contains(logged, token) {
 		t.Errorf("the log holds the invocation token:\n%s", logged)
+	}
+}
+
+// TestEachAdapterHasItsOwnCredential: the gateway sends the API key of an
+// invocation's adapter, and forwards the sign-in of an invocation whose
+// adapter has no key, whose token must come in the invocation header
+// (decisions 0225, 0240 and 0245).
+func TestEachAdapterHasItsOwnCredential(t *testing.T) {
+	f := newFixtureWith(t, gateway.Config{APIKeys: map[string]string{"keyed": providerKey}})
+	if f.gw.KeepsSignIn("keyed") || !f.gw.KeepsSignIn("signed-in") {
+		t.Errorf("KeepsSignIn(keyed), KeepsSignIn(signed-in) = %v, %v; want false, true", f.gw.KeepsSignIn("keyed"), f.gw.KeepsSignIn("signed-in"))
+	}
+	keyed, err := f.gw.Open("inv-keyed", "keyed", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signed, err := f.gw.Open("inv-signed", "signed-in", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status, _, body := f.call(t, "/v1/messages", keyHeader(keyed), messages("claude-sonnet-5-5", false)); status != http.StatusOK {
+		t.Fatalf("the keyed call = %d %q, want 200", status, body)
+	}
+	assertOnlyTheKeyReachedTheProvider(t, f.provider)
+	if status, _, _ := f.call(t, "/v1/messages", keyHeader(signed), messages("claude-sonnet-5-5", false)); status != http.StatusUnauthorized {
+		t.Errorf("the signed-in token sent as the API key = %d, want %d", status, http.StatusUnauthorized)
+	}
+	if status, _, body := f.call(t, "/v1/messages", signInHeader(signed), messages("claude-sonnet-5-5", false)); status != http.StatusOK {
+		t.Fatalf("the signed-in call = %d %q, want 200", status, body)
+	}
+	reqs := f.provider.received()
+	if len(reqs) != 2 {
+		t.Fatalf("the provider received %d requests, want 2", len(reqs))
+	}
+	if h := reqs[1].header; h.Get("Authorization") != "Bearer "+signIn || h.Get("X-Api-Key") != "" {
+		t.Errorf("the signed-in call reached the provider with Authorization %q and X-Api-Key %q, want the sign-in and no key", h.Get("Authorization"), h.Get("X-Api-Key"))
 	}
 }

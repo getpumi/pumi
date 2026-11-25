@@ -44,11 +44,13 @@ type Config struct {
 	// Upstream is the provider's base URL, such as
 	// https://api.anthropic.com.
 	Upstream *url.URL
-	// APIKey, when set, is the adopter's provider API key. The gateway sends
-	// it on every call in place of any credential the harness sends. When
-	// it is empty, the harness keeps its own sign-in and the gateway
-	// forwards the credential the harness sends (decision 0225).
-	APIKey string
+	// APIKeys are the adopter's provider API keys by adapter name, for the
+	// adapters in the API key mode (decisions 0240 and 0245). The gateway
+	// sends the key of an invocation's adapter on every call of the
+	// invocation in place of any credential the harness sends. For an
+	// adapter with no key, the harness keeps its own sign-in and the
+	// gateway forwards the credential the harness sends (decision 0225).
+	APIKeys map[string]string
 	// Transport sends the calls to the provider; nil is
 	// http.DefaultTransport.
 	Transport http.RoundTripper
@@ -70,12 +72,13 @@ const DefaultRetryWait = 30 * time.Second
 
 // Role is the model and the fallback model of a model role (decision
 // 0233). Both must be in the price table, so both use Anthropic's Messages
-// API, and they must differ.
+// API, and they must differ. A role whose fallback is on another adapter
+// has no fallback model here (decision 0246).
 type Role struct {
 	// Model is the model that a call naming the role goes to.
 	Model string
-	// Fallback is the model that the call goes to once when the provider
-	// answers it with a usage or rate limit.
+	// Fallback, when set, is the model that the call goes to once when the
+	// provider answers it with a usage or rate limit.
 	Fallback string
 }
 
@@ -96,6 +99,9 @@ type Totals struct {
 // session is an open invocation.
 type session struct {
 	invocation string
+	// key is the API key of the invocation's adapter, empty when its
+	// harness keeps its own sign-in.
+	key string
 	// budgetTokens and budgetPicodollars are the caps; zero sets none.
 	budgetTokens      int64
 	budgetPicodollars int64
@@ -166,17 +172,19 @@ func New(cfg Config) (*Gateway, error) {
 	return g, nil
 }
 
-// KeepsSignIn reports whether the harness keeps its own sign-in, which is
-// when no API key is configured. The harness then sends the token in
-// InvocationHeader (decision 0225).
-func (g *Gateway) KeepsSignIn() bool { return g.cfg.APIKey == "" }
+// KeepsSignIn reports whether the harness of the adapter, by name, keeps
+// its own sign-in, which is when the configuration has no API key for the
+// adapter. The harness then sends the token in InvocationHeader (decisions
+// 0225 and 0240).
+func (g *Gateway) KeepsSignIn(adapter string) bool { return g.cfg.APIKeys[adapter] == "" }
 
-// Open opens an invocation with its budget and returns a random token
+// Open opens an invocation, which the adapter runs, with its budget and
+// returns a random token
 // that is valid for it until Close (decision 0231). A budget's zero tokens
 // or zero cost sets no cap of that kind; its seconds are the runner's.
 // The gateway writes each fallback and retry of the invocation's calls to
 // log, the invocation's log, when it is not nil (decision 0233).
-func (g *Gateway) Open(invocation string, budget *harnessv1.Usage, log io.Writer) (string, error) {
+func (g *Gateway) Open(invocation, adapter string, budget *harnessv1.Usage, log io.Writer) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("gateway: making a token: %w", err)
@@ -190,6 +198,7 @@ func (g *Gateway) Open(invocation string, budget *harnessv1.Usage, log io.Writer
 	g.open[invocation] = true
 	g.sessions[token] = &session{
 		invocation:        invocation,
+		key:               g.cfg.APIKeys[adapter],
 		budgetTokens:      budget.GetTokens(),
 		budgetPicodollars: budget.GetCostMicrodollars() * 1_000_000,
 		log:               log,
@@ -245,7 +254,7 @@ type callKey struct{}
 // call of the Messages API is counted: its model must be in the price
 // table, and its invocation must not have reached a cap.
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s := g.session(g.token(r))
+	s := g.callSession(r)
 	if s == nil {
 		g.log.Info("gateway refused a call with no valid invocation token", "path", r.URL.Path)
 		refuse(w, http.StatusUnauthorized, "authentication_error", "the call has no valid Pumi invocation token")
@@ -300,22 +309,22 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // capMessage is the message of a call refused at the invocation's cap.
 const capMessage = "the invocation has reached its token or cost cap"
 
-// token finds the invocation token of a call.
-func (g *Gateway) token(r *http.Request) string {
+// callSession finds the session of a call by its invocation token: in
+// InvocationHeader, or, for an invocation whose adapter has an API key, as
+// the harness's API key or bearer token. A harness that keeps its own
+// sign-in sends its sign-in there, not a token (decision 0225).
+func (g *Gateway) callSession(r *http.Request) *session {
 	if t := r.Header.Get(InvocationHeader); t != "" {
-		return t
+		return g.session(t)
 	}
-	if g.KeepsSignIn() {
-		// The credential is the harness's own sign-in, not a token.
-		return ""
+	t := r.Header.Get("X-Api-Key")
+	if t == "" {
+		t, _ = strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
-	if t := r.Header.Get("X-Api-Key"); t != "" {
-		return t
+	if s := g.session(t); s != nil && s.key != "" {
+		return s
 	}
-	if t, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
-		return t
-	}
-	return ""
+	return nil
 }
 
 func (g *Gateway) session(token string) *session {
@@ -400,9 +409,9 @@ func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
 	h := pr.Out.Header
 	h.Del(InvocationHeader)
 	h.Del("Accept-Encoding")
-	if !g.KeepsSignIn() {
+	if s := g.callSession(pr.In); s != nil && s.key != "" {
 		h.Del("Authorization")
-		h.Set("X-Api-Key", g.cfg.APIKey)
+		h.Set("X-Api-Key", s.key)
 	}
 }
 

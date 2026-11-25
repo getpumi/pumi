@@ -243,7 +243,7 @@ const testKeyEnv = "PUMI_TEST_PROVIDER_KEY"
 // its API key, and the token never reaches the provider (decision 0225).
 func TestRunSendsTheAPIKeyOfTheNamedVariable(t *testing.T) {
 	t.Setenv(testKeyEnv, "sk-ant-the-adopters-key")
-	c := newCommandCloneWith(t, "tracks", adapterSucceeds, testGateway+fmt.Sprintf(" api_key_env: %q", testKeyEnv))
+	c := newCommandCloneWith(t, "tracks", adapterSucceeds, testModels(t, apiKeyMode))
 	r := c.start()
 	c.must("add", "--track", "a", "a1")
 	c.waitState(r, "a1", "merged")
@@ -266,7 +266,7 @@ func TestRunSendsTheAPIKeyOfTheNamedVariable(t *testing.T) {
 // the variable that the configuration file names is not set.
 func TestRunRefusesAnAPIKeyVariableThatIsNotSet(t *testing.T) {
 	t.Setenv(testKeyEnv, "")
-	c := newCommandCloneWith(t, "tracks", adapterSucceeds, testGateway+fmt.Sprintf(" api_key_env: %q", testKeyEnv))
+	c := newCommandCloneWith(t, "tracks", adapterSucceeds, testModels(t, apiKeyMode))
 	ctx, cancel := context.WithTimeout(t.Context(), commandWait)
 	defer cancel()
 	var out bytes.Buffer
@@ -338,7 +338,7 @@ func TestRunServesTheGatewayUntilItStops(t *testing.T) {
 	if m == nil {
 		t.Fatalf("the output of pumi run does not say where the gateway serves; it is\n%s", r.out.String())
 	}
-	if !strings.Contains(r.out.String(), "the harness keeps its own sign-in") {
+	if !strings.Contains(r.out.String(), "the harness of "+testAdapterName+" keeps its own sign-in") {
 		t.Errorf("the output of pumi run does not say that the harness keeps its sign-in; it is\n%s", r.out.String())
 	}
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, m[1]+"/v1/messages", strings.NewReader("{}"))

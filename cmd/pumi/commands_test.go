@@ -119,9 +119,9 @@ func testAdapter(mode string) int {
 		fmt.Fprintln(os.Stderr, testAdapterPrefix+"no mode", mode)
 		return 9
 	}
-	out, err := protojson.Marshal(&harnessv1.Result{
+	out, err := protojson.Marshal(&harnessv1.Line{Kind: &harnessv1.Line_Result{Result: &harnessv1.Result{
 		Status: harnessv1.Result_STATUS_COMPLETED, Output: `{"summary":"Implemented the plan."}`, Usage: usage, OutputFiles: files,
-	})
+	}}})
 	if err != nil {
 		panic(err)
 	}

@@ -10,6 +10,7 @@
 package eventsv1
 
 import (
+	v1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -257,7 +258,10 @@ type InvocationResult struct {
 	// The structured output, as the protojson of the message that the
 	// invocation document names, as the runner parsed it (decisions 0160 and
 	// 0162).
-	Output        string `protobuf:"bytes,6,opt,name=output,proto3" json:"output,omitempty"`
+	Output string `protobuf:"bytes,6,opt,name=output,proto3" json:"output,omitempty"`
+	// The refusals that the harness reported, from the adapter's result
+	// (decision 0249).
+	Refusals      []*v1.Refusal `protobuf:"bytes,7,rep,name=refusals,proto3" json:"refusals,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,6 +336,13 @@ func (x *InvocationResult) GetOutput() string {
 		return x.Output
 	}
 	return ""
+}
+
+func (x *InvocationResult) GetRefusals() []*v1.Refusal {
+	if x != nil {
+		return x.Refusals
+	}
+	return nil
 }
 
 // InvocationFinished is the data of dev.getpumi.invocation.finished: the
@@ -589,7 +600,7 @@ var File_pumi_events_v1_invocations_proto protoreflect.FileDescriptor
 
 const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"\n" +
-	" pumi/events/v1/invocations.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\"\xb3\x01\n" +
+	" pumi/events/v1/invocations.proto\x12\x0epumi.events.v1\x1a\x1apumi/events/v1/basis.proto\x1a\x1dpumi/harness/v1/harness.proto\"\xb3\x01\n" +
 	"\x13InvocationRequested\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +
@@ -603,7 +614,7 @@ const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"invocation\x18\x01 \x01(\tR\n" +
 	"invocation\x12\x16\n" +
 	"\x06runner\x18\x02 \x01(\tR\x06runner\x12!\n" +
-	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\"\xb7\x03\n" +
+	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\"\xed\x03\n" +
 	"\x10InvocationResult\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +
@@ -612,7 +623,8 @@ const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"\rlog_blob_hash\x18\x03 \x01(\tR\vlogBlobHash\x12<\n" +
 	"\x05usage\x18\x04 \x01(\v2&.pumi.events.v1.InvocationResult.UsageR\x05usage\x12\x12\n" +
 	"\x04tree\x18\x05 \x01(\tR\x04tree\x12\x16\n" +
-	"\x06output\x18\x06 \x01(\tR\x06output\x1a=\n" +
+	"\x06output\x18\x06 \x01(\tR\x06output\x124\n" +
+	"\brefusals\x18\a \x03(\v2\x18.pumi.harness.v1.RefusalR\brefusals\x1a=\n" +
 	"\n" +
 	"OutputFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1b\n" +
@@ -665,18 +677,20 @@ var file_pumi_events_v1_invocations_proto_goTypes = []any{
 	(*CancelRequested)(nil),             // 5: pumi.events.v1.CancelRequested
 	(*InvocationResult_OutputFile)(nil), // 6: pumi.events.v1.InvocationResult.OutputFile
 	(*InvocationResult_Usage)(nil),      // 7: pumi.events.v1.InvocationResult.Usage
-	(*Basis)(nil),                       // 8: pumi.events.v1.Basis
+	(*v1.Refusal)(nil),                  // 8: pumi.harness.v1.Refusal
+	(*Basis)(nil),                       // 9: pumi.events.v1.Basis
 }
 var file_pumi_events_v1_invocations_proto_depIdxs = []int32{
 	6, // 0: pumi.events.v1.InvocationResult.output_files:type_name -> pumi.events.v1.InvocationResult.OutputFile
 	7, // 1: pumi.events.v1.InvocationResult.usage:type_name -> pumi.events.v1.InvocationResult.Usage
-	0, // 2: pumi.events.v1.InvocationFinished.outcome:type_name -> pumi.events.v1.InvocationFinished.Outcome
-	8, // 3: pumi.events.v1.CancelRequested.basis:type_name -> pumi.events.v1.Basis
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	8, // 2: pumi.events.v1.InvocationResult.refusals:type_name -> pumi.harness.v1.Refusal
+	0, // 3: pumi.events.v1.InvocationFinished.outcome:type_name -> pumi.events.v1.InvocationFinished.Outcome
+	9, // 4: pumi.events.v1.CancelRequested.basis:type_name -> pumi.events.v1.Basis
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_pumi_events_v1_invocations_proto_init() }

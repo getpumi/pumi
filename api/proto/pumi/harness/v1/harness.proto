@@ -6,9 +6,11 @@ syntax = "proto3";
 // The messages between the runner and a harness adapter (decisions 0152 and
 // 0158 to 0160). There is no service: the runner starts the adapter as one
 // process per invocation, writes an Invocation as one line of protojson to
-// its standard input, and reads a Result as protojson from its standard
-// output. Standard error is the log. The runner closes standard input to ask
-// the adapter to stop.
+// its standard input, and reads the adapter's standard output as lines,
+// each the protojson of a Line: a usage figure, which the adapter may pass
+// at any time while the run goes on, or the result, which is the last line
+// (decisions 0241 and 0252). Standard error is the log. The runner closes
+// standard input to ask the adapter to stop.
 package pumi.harness.v1;
 
 // Invocation is what the runner gives a harness adapter. The runner derives
@@ -136,7 +138,12 @@ message Capabilities {
   // The paths the run may write, as globs relative to the workspace. A file
   // written outside them fails the invocation.
   repeated string write_paths = 1;
-  // The commands the run may run, as prefixes such as "go test".
+  // The commands the run may run, as prefixes such as "go test". An entry
+  // may begin with one or more NAME=value assignments, such as
+  // "GOWORK=off go test", and then allows that command with exactly those
+  // assignments: the entry "go test" does not allow "GOWORK=off go test",
+  // and no entry allows an assignment it does not name. Each adapter
+  // translates an entry as written (decision 0248).
   repeated string commands = 2;
   // The network access.
   Network network = 3;
@@ -197,6 +204,10 @@ message Result {
     // The run stopped because the runner closed standard input. The result
     // holds what the run had.
     STATUS_STOPPED = 3;
+    // The provider's usage or rate limit stopped the run. The adapter
+    // turns off any setting of its harness that would wait out a limit
+    // instead of stopping (decision 0249).
+    STATUS_LIMITED = 4;
   }
 
   // The status.
@@ -213,4 +224,73 @@ message Result {
   // the model gateway's totals with the wall time the runner measured
   // (decision 0230).
   Usage usage = 4;
+  // The refusals that the harness reported: what the run asked to do that
+  // its settings refused. The runner puts them in invocation.result, and
+  // the question of an escalation names them. An adapter reports what its
+  // harness tells it, so a harness that reports no refusals gives none
+  // (decision 0249).
+  repeated Refusal refusals = 5;
+}
+
+// Refusal is one thing that the run asked to do and its harness refused
+// (decision 0249).
+message Refusal {
+  // The kind of tool that asked.
+  Capabilities.ToolKind tool = 1;
+  // What was asked.
+  oneof asked {
+    // The path, relative to the workspace or absolute, that the run asked
+    // to read or write.
+    string path = 2;
+    // The command that the run asked to run, as the harness reported it.
+    string command = 3;
+    // The host that the run asked to reach.
+    string host = 4;
+  }
+}
+
+// Line is one line of the adapter's standard output (decisions 0241 and
+// 0252). The adapter may write any number of usage figures, each as soon as
+// its harness reports it, and then exactly one result, which is the last
+// line. A line that does not parse, a line with neither, a line after the
+// result and a missing result fail the invocation.
+message Line {
+  // What the line holds.
+  oneof kind {
+    // The usage of one model call, or of one turn for a harness that
+    // reports usage per turn, as the harness reported it.
+    UsageFigure usage = 1;
+    // The result.
+    Result result = 2;
+  }
+}
+
+// UsageFigure is the usage that the harness reported for one model call,
+// or for one turn, with every kind of token that the list-price table
+// prices (decisions 0239 and 0241). On the sign-in path the runner counts
+// these figures; on the gateway path it writes them to the invocation's
+// log, and the gateway's count is the one that counts (decision 0230).
+message UsageFigure {
+  // The model that answered, as the harness reported it.
+  string model = 1;
+  // The input tokens that were not read from or written to the prompt
+  // cache.
+  int64 input_tokens = 2;
+  // The tokens written to the 5-minute cache. A cache write that the
+  // harness does not split by duration is a 5-minute write.
+  int64 five_minute_cache_write_tokens = 3;
+  // The tokens written to the 1-hour cache.
+  int64 one_hour_cache_write_tokens = 4;
+  // The tokens read from the cache.
+  int64 cache_read_tokens = 5;
+  // The output tokens, thinking and reasoning included.
+  int64 output_tokens = 6;
+  // The number of web searches that the call made.
+  int64 web_searches = 7;
+  // The speed of the call as the provider reported it, such as "fast";
+  // empty when not reported.
+  string speed = 8;
+  // The inference geography of the call as the provider reported it, such
+  // as "us"; empty when not reported.
+  string inference_geo = 9;
 }

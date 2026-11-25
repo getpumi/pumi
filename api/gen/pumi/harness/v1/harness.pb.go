@@ -10,9 +10,11 @@
 // The messages between the runner and a harness adapter (decisions 0152 and
 // 0158 to 0160). There is no service: the runner starts the adapter as one
 // process per invocation, writes an Invocation as one line of protojson to
-// its standard input, and reads a Result as protojson from its standard
-// output. Standard error is the log. The runner closes standard input to ask
-// the adapter to stop.
+// its standard input, and reads the adapter's standard output as lines,
+// each the protojson of a Line: a usage figure, which the adapter may pass
+// at any time while the run goes on, or the result, which is the last line
+// (decisions 0241 and 0252). Standard error is the log. The runner closes
+// standard input to ask the adapter to stop.
 
 package harnessv1
 
@@ -270,6 +272,10 @@ const (
 	// The run stopped because the runner closed standard input. The result
 	// holds what the run had.
 	Result_STATUS_STOPPED Result_Status = 3
+	// The provider's usage or rate limit stopped the run. The adapter
+	// turns off any setting of its harness that would wait out a limit
+	// instead of stopping (decision 0249).
+	Result_STATUS_LIMITED Result_Status = 4
 )
 
 // Enum value maps for Result_Status.
@@ -279,12 +285,14 @@ var (
 		1: "STATUS_COMPLETED",
 		2: "STATUS_FAILED",
 		3: "STATUS_STOPPED",
+		4: "STATUS_LIMITED",
 	}
 	Result_Status_value = map[string]int32{
 		"STATUS_UNSPECIFIED": 0,
 		"STATUS_COMPLETED":   1,
 		"STATUS_FAILED":      2,
 		"STATUS_STOPPED":     3,
+		"STATUS_LIMITED":     4,
 	}
 )
 
@@ -604,7 +612,12 @@ type Capabilities struct {
 	// The paths the run may write, as globs relative to the workspace. A file
 	// written outside them fails the invocation.
 	WritePaths []string `protobuf:"bytes,1,rep,name=write_paths,json=writePaths,proto3" json:"write_paths,omitempty"`
-	// The commands the run may run, as prefixes such as "go test".
+	// The commands the run may run, as prefixes such as "go test". An entry
+	// may begin with one or more NAME=value assignments, such as
+	// "GOWORK=off go test", and then allows that command with exactly those
+	// assignments: the entry "go test" does not allow "GOWORK=off go test",
+	// and no entry allows an assignment it does not name. Each adapter
+	// translates an entry as written (decision 0248).
 	Commands []string `protobuf:"bytes,2,rep,name=commands,proto3" json:"commands,omitempty"`
 	// The network access.
 	Network *Capabilities_Network `protobuf:"bytes,3,opt,name=network,proto3" json:"network,omitempty"`
@@ -884,7 +897,13 @@ type Result struct {
 	// writes them to the invocation's log; the usage of invocation.result is
 	// the model gateway's totals with the wall time the runner measured
 	// (decision 0230).
-	Usage         *Usage `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
+	Usage *Usage `protobuf:"bytes,4,opt,name=usage,proto3" json:"usage,omitempty"`
+	// The refusals that the harness reported: what the run asked to do that
+	// its settings refused. The runner puts them in invocation.result, and
+	// the question of an escalation names them. An adapter reports what its
+	// harness tells it, so a harness that reports no refusals gives none
+	// (decision 0249).
+	Refusals      []*Refusal `protobuf:"bytes,5,rep,name=refusals,proto3" json:"refusals,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -947,6 +966,346 @@ func (x *Result) GetUsage() *Usage {
 	return nil
 }
 
+func (x *Result) GetRefusals() []*Refusal {
+	if x != nil {
+		return x.Refusals
+	}
+	return nil
+}
+
+// Refusal is one thing that the run asked to do and its harness refused
+// (decision 0249).
+type Refusal struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The kind of tool that asked.
+	Tool Capabilities_ToolKind `protobuf:"varint,1,opt,name=tool,proto3,enum=pumi.harness.v1.Capabilities_ToolKind" json:"tool,omitempty"`
+	// What was asked.
+	//
+	// Types that are valid to be assigned to Asked:
+	//
+	//	*Refusal_Path
+	//	*Refusal_Command
+	//	*Refusal_Host
+	Asked         isRefusal_Asked `protobuf_oneof:"asked"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Refusal) Reset() {
+	*x = Refusal{}
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Refusal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Refusal) ProtoMessage() {}
+
+func (x *Refusal) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Refusal.ProtoReflect.Descriptor instead.
+func (*Refusal) Descriptor() ([]byte, []int) {
+	return file_pumi_harness_v1_harness_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *Refusal) GetTool() Capabilities_ToolKind {
+	if x != nil {
+		return x.Tool
+	}
+	return Capabilities_TOOL_KIND_UNSPECIFIED
+}
+
+func (x *Refusal) GetAsked() isRefusal_Asked {
+	if x != nil {
+		return x.Asked
+	}
+	return nil
+}
+
+func (x *Refusal) GetPath() string {
+	if x != nil {
+		if x, ok := x.Asked.(*Refusal_Path); ok {
+			return x.Path
+		}
+	}
+	return ""
+}
+
+func (x *Refusal) GetCommand() string {
+	if x != nil {
+		if x, ok := x.Asked.(*Refusal_Command); ok {
+			return x.Command
+		}
+	}
+	return ""
+}
+
+func (x *Refusal) GetHost() string {
+	if x != nil {
+		if x, ok := x.Asked.(*Refusal_Host); ok {
+			return x.Host
+		}
+	}
+	return ""
+}
+
+type isRefusal_Asked interface {
+	isRefusal_Asked()
+}
+
+type Refusal_Path struct {
+	// The path, relative to the workspace or absolute, that the run asked
+	// to read or write.
+	Path string `protobuf:"bytes,2,opt,name=path,proto3,oneof"`
+}
+
+type Refusal_Command struct {
+	// The command that the run asked to run, as the harness reported it.
+	Command string `protobuf:"bytes,3,opt,name=command,proto3,oneof"`
+}
+
+type Refusal_Host struct {
+	// The host that the run asked to reach.
+	Host string `protobuf:"bytes,4,opt,name=host,proto3,oneof"`
+}
+
+func (*Refusal_Path) isRefusal_Asked() {}
+
+func (*Refusal_Command) isRefusal_Asked() {}
+
+func (*Refusal_Host) isRefusal_Asked() {}
+
+// Line is one line of the adapter's standard output (decisions 0241 and
+// 0252). The adapter may write any number of usage figures, each as soon as
+// its harness reports it, and then exactly one result, which is the last
+// line. A line that does not parse, a line with neither, a line after the
+// result and a missing result fail the invocation.
+type Line struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// What the line holds.
+	//
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*Line_Usage
+	//	*Line_Result
+	Kind          isLine_Kind `protobuf_oneof:"kind"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Line) Reset() {
+	*x = Line{}
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Line) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Line) ProtoMessage() {}
+
+func (x *Line) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Line.ProtoReflect.Descriptor instead.
+func (*Line) Descriptor() ([]byte, []int) {
+	return file_pumi_harness_v1_harness_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *Line) GetKind() isLine_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
+func (x *Line) GetUsage() *UsageFigure {
+	if x != nil {
+		if x, ok := x.Kind.(*Line_Usage); ok {
+			return x.Usage
+		}
+	}
+	return nil
+}
+
+func (x *Line) GetResult() *Result {
+	if x != nil {
+		if x, ok := x.Kind.(*Line_Result); ok {
+			return x.Result
+		}
+	}
+	return nil
+}
+
+type isLine_Kind interface {
+	isLine_Kind()
+}
+
+type Line_Usage struct {
+	// The usage of one model call, or of one turn for a harness that
+	// reports usage per turn, as the harness reported it.
+	Usage *UsageFigure `protobuf:"bytes,1,opt,name=usage,proto3,oneof"`
+}
+
+type Line_Result struct {
+	// The result.
+	Result *Result `protobuf:"bytes,2,opt,name=result,proto3,oneof"`
+}
+
+func (*Line_Usage) isLine_Kind() {}
+
+func (*Line_Result) isLine_Kind() {}
+
+// UsageFigure is the usage that the harness reported for one model call,
+// or for one turn, with every kind of token that the list-price table
+// prices (decisions 0239 and 0241). On the sign-in path the runner counts
+// these figures; on the gateway path it writes them to the invocation's
+// log, and the gateway's count is the one that counts (decision 0230).
+type UsageFigure struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The model that answered, as the harness reported it.
+	Model string `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	// The input tokens that were not read from or written to the prompt
+	// cache.
+	InputTokens int64 `protobuf:"varint,2,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	// The tokens written to the 5-minute cache. A cache write that the
+	// harness does not split by duration is a 5-minute write.
+	FiveMinuteCacheWriteTokens int64 `protobuf:"varint,3,opt,name=five_minute_cache_write_tokens,json=fiveMinuteCacheWriteTokens,proto3" json:"five_minute_cache_write_tokens,omitempty"`
+	// The tokens written to the 1-hour cache.
+	OneHourCacheWriteTokens int64 `protobuf:"varint,4,opt,name=one_hour_cache_write_tokens,json=oneHourCacheWriteTokens,proto3" json:"one_hour_cache_write_tokens,omitempty"`
+	// The tokens read from the cache.
+	CacheReadTokens int64 `protobuf:"varint,5,opt,name=cache_read_tokens,json=cacheReadTokens,proto3" json:"cache_read_tokens,omitempty"`
+	// The output tokens, thinking and reasoning included.
+	OutputTokens int64 `protobuf:"varint,6,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	// The number of web searches that the call made.
+	WebSearches int64 `protobuf:"varint,7,opt,name=web_searches,json=webSearches,proto3" json:"web_searches,omitempty"`
+	// The speed of the call as the provider reported it, such as "fast";
+	// empty when not reported.
+	Speed string `protobuf:"bytes,8,opt,name=speed,proto3" json:"speed,omitempty"`
+	// The inference geography of the call as the provider reported it, such
+	// as "us"; empty when not reported.
+	InferenceGeo  string `protobuf:"bytes,9,opt,name=inference_geo,json=inferenceGeo,proto3" json:"inference_geo,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UsageFigure) Reset() {
+	*x = UsageFigure{}
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageFigure) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageFigure) ProtoMessage() {}
+
+func (x *UsageFigure) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageFigure.ProtoReflect.Descriptor instead.
+func (*UsageFigure) Descriptor() ([]byte, []int) {
+	return file_pumi_harness_v1_harness_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UsageFigure) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *UsageFigure) GetInputTokens() int64 {
+	if x != nil {
+		return x.InputTokens
+	}
+	return 0
+}
+
+func (x *UsageFigure) GetFiveMinuteCacheWriteTokens() int64 {
+	if x != nil {
+		return x.FiveMinuteCacheWriteTokens
+	}
+	return 0
+}
+
+func (x *UsageFigure) GetOneHourCacheWriteTokens() int64 {
+	if x != nil {
+		return x.OneHourCacheWriteTokens
+	}
+	return 0
+}
+
+func (x *UsageFigure) GetCacheReadTokens() int64 {
+	if x != nil {
+		return x.CacheReadTokens
+	}
+	return 0
+}
+
+func (x *UsageFigure) GetOutputTokens() int64 {
+	if x != nil {
+		return x.OutputTokens
+	}
+	return 0
+}
+
+func (x *UsageFigure) GetWebSearches() int64 {
+	if x != nil {
+		return x.WebSearches
+	}
+	return 0
+}
+
+func (x *UsageFigure) GetSpeed() string {
+	if x != nil {
+		return x.Speed
+	}
+	return ""
+}
+
+func (x *UsageFigure) GetInferenceGeo() string {
+	if x != nil {
+		return x.InferenceGeo
+	}
+	return ""
+}
+
 // Network is the network access of a run.
 type Capabilities_Network struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -960,7 +1319,7 @@ type Capabilities_Network struct {
 
 func (x *Capabilities_Network) Reset() {
 	*x = Capabilities_Network{}
-	mi := &file_pumi_harness_v1_harness_proto_msgTypes[8]
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -972,7 +1331,7 @@ func (x *Capabilities_Network) String() string {
 func (*Capabilities_Network) ProtoMessage() {}
 
 func (x *Capabilities_Network) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_harness_v1_harness_proto_msgTypes[8]
+	mi := &file_pumi_harness_v1_harness_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1069,17 +1428,39 @@ const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\fOutputSchema\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x1f\n" +
 	"\vjson_schema\x18\x02 \x01(\tR\n" +
-	"jsonSchema\"\x88\x02\n" +
+	"jsonSchema\"\xd2\x02\n" +
 	"\x06Result\x126\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1e.pumi.harness.v1.Result.StatusR\x06status\x12\x16\n" +
 	"\x06output\x18\x02 \x01(\tR\x06output\x12!\n" +
 	"\foutput_files\x18\x03 \x03(\tR\voutputFiles\x12,\n" +
-	"\x05usage\x18\x04 \x01(\v2\x16.pumi.harness.v1.UsageR\x05usage\"]\n" +
+	"\x05usage\x18\x04 \x01(\v2\x16.pumi.harness.v1.UsageR\x05usage\x124\n" +
+	"\brefusals\x18\x05 \x03(\v2\x18.pumi.harness.v1.RefusalR\brefusals\"q\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10STATUS_COMPLETED\x10\x01\x12\x11\n" +
 	"\rSTATUS_FAILED\x10\x02\x12\x12\n" +
-	"\x0eSTATUS_STOPPED\x10\x03*;\n" +
+	"\x0eSTATUS_STOPPED\x10\x03\x12\x12\n" +
+	"\x0eSTATUS_LIMITED\x10\x04\"\x96\x01\n" +
+	"\aRefusal\x12:\n" +
+	"\x04tool\x18\x01 \x01(\x0e2&.pumi.harness.v1.Capabilities.ToolKindR\x04tool\x12\x14\n" +
+	"\x04path\x18\x02 \x01(\tH\x00R\x04path\x12\x1a\n" +
+	"\acommand\x18\x03 \x01(\tH\x00R\acommand\x12\x14\n" +
+	"\x04host\x18\x04 \x01(\tH\x00R\x04hostB\a\n" +
+	"\x05asked\"w\n" +
+	"\x04Line\x124\n" +
+	"\x05usage\x18\x01 \x01(\v2\x1c.pumi.harness.v1.UsageFigureH\x00R\x05usage\x121\n" +
+	"\x06result\x18\x02 \x01(\v2\x17.pumi.harness.v1.ResultH\x00R\x06resultB\x06\n" +
+	"\x04kind\"\xf7\x02\n" +
+	"\vUsageFigure\x12\x14\n" +
+	"\x05model\x18\x01 \x01(\tR\x05model\x12!\n" +
+	"\finput_tokens\x18\x02 \x01(\x03R\vinputTokens\x12B\n" +
+	"\x1efive_minute_cache_write_tokens\x18\x03 \x01(\x03R\x1afiveMinuteCacheWriteTokens\x12<\n" +
+	"\x1bone_hour_cache_write_tokens\x18\x04 \x01(\x03R\x17oneHourCacheWriteTokens\x12*\n" +
+	"\x11cache_read_tokens\x18\x05 \x01(\x03R\x0fcacheReadTokens\x12#\n" +
+	"\routput_tokens\x18\x06 \x01(\x03R\foutputTokens\x12!\n" +
+	"\fweb_searches\x18\a \x01(\x03R\vwebSearches\x12\x14\n" +
+	"\x05speed\x18\b \x01(\tR\x05speed\x12#\n" +
+	"\rinference_geo\x18\t \x01(\tR\finferenceGeo*;\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tROLE_GATE\x10\x01\x12\x0e\n" +
@@ -1100,7 +1481,7 @@ func file_pumi_harness_v1_harness_proto_rawDescGZIP() []byte {
 }
 
 var file_pumi_harness_v1_harness_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_pumi_harness_v1_harness_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pumi_harness_v1_harness_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_pumi_harness_v1_harness_proto_goTypes = []any{
 	(Role)(0),                        // 0: pumi.harness.v1.Role
 	(Component_Kind)(0),              // 1: pumi.harness.v1.Component.Kind
@@ -1115,7 +1496,10 @@ var file_pumi_harness_v1_harness_proto_goTypes = []any{
 	(*Gateway)(nil),                  // 10: pumi.harness.v1.Gateway
 	(*OutputSchema)(nil),             // 11: pumi.harness.v1.OutputSchema
 	(*Result)(nil),                   // 12: pumi.harness.v1.Result
-	(*Capabilities_Network)(nil),     // 13: pumi.harness.v1.Capabilities.Network
+	(*Refusal)(nil),                  // 13: pumi.harness.v1.Refusal
+	(*Line)(nil),                     // 14: pumi.harness.v1.Line
+	(*UsageFigure)(nil),              // 15: pumi.harness.v1.UsageFigure
+	(*Capabilities_Network)(nil),     // 16: pumi.harness.v1.Capabilities.Network
 }
 var file_pumi_harness_v1_harness_proto_depIdxs = []int32{
 	6,  // 0: pumi.harness.v1.Invocation.component:type_name -> pumi.harness.v1.Component
@@ -1126,16 +1510,20 @@ var file_pumi_harness_v1_harness_proto_depIdxs = []int32{
 	10, // 5: pumi.harness.v1.Invocation.gateway:type_name -> pumi.harness.v1.Gateway
 	11, // 6: pumi.harness.v1.Invocation.output_schema:type_name -> pumi.harness.v1.OutputSchema
 	1,  // 7: pumi.harness.v1.Component.kind:type_name -> pumi.harness.v1.Component.Kind
-	13, // 8: pumi.harness.v1.Capabilities.network:type_name -> pumi.harness.v1.Capabilities.Network
+	16, // 8: pumi.harness.v1.Capabilities.network:type_name -> pumi.harness.v1.Capabilities.Network
 	2,  // 9: pumi.harness.v1.Capabilities.tools:type_name -> pumi.harness.v1.Capabilities.ToolKind
 	4,  // 10: pumi.harness.v1.Result.status:type_name -> pumi.harness.v1.Result.Status
 	9,  // 11: pumi.harness.v1.Result.usage:type_name -> pumi.harness.v1.Usage
-	3,  // 12: pumi.harness.v1.Capabilities.Network.access:type_name -> pumi.harness.v1.Capabilities.Network.Access
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	13, // 12: pumi.harness.v1.Result.refusals:type_name -> pumi.harness.v1.Refusal
+	2,  // 13: pumi.harness.v1.Refusal.tool:type_name -> pumi.harness.v1.Capabilities.ToolKind
+	15, // 14: pumi.harness.v1.Line.usage:type_name -> pumi.harness.v1.UsageFigure
+	12, // 15: pumi.harness.v1.Line.result:type_name -> pumi.harness.v1.Result
+	3,  // 16: pumi.harness.v1.Capabilities.Network.access:type_name -> pumi.harness.v1.Capabilities.Network.Access
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_pumi_harness_v1_harness_proto_init() }
@@ -1143,13 +1531,22 @@ func file_pumi_harness_v1_harness_proto_init() {
 	if File_pumi_harness_v1_harness_proto != nil {
 		return
 	}
+	file_pumi_harness_v1_harness_proto_msgTypes[8].OneofWrappers = []any{
+		(*Refusal_Path)(nil),
+		(*Refusal_Command)(nil),
+		(*Refusal_Host)(nil),
+	}
+	file_pumi_harness_v1_harness_proto_msgTypes[9].OneofWrappers = []any{
+		(*Line_Usage)(nil),
+		(*Line_Result)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_harness_v1_harness_proto_rawDesc), len(file_pumi_harness_v1_harness_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   9,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

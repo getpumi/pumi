@@ -130,6 +130,13 @@
           },
           "type": "array"
         },
+        "refusals": {
+          "description": "The refusals that the harness reported, from the adapter's result\n (decision 0249).",
+          "items": {
+            "$ref": "#/$defs/pumi.harness.v1.Refusal.jsonschema.json"
+          },
+          "type": "array"
+        },
         "tree": {
           "default": "",
           "description": "The tree that the runner computed from the workspace after the adapter\n exited; empty when the invocation changes no code (decisions 0160 and\n 0162).",
@@ -141,6 +148,52 @@
         }
       },
       "title": "Invocation Result",
+      "type": "object"
+    },
+    "pumi.harness.v1.Refusal.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Refusal is one thing that the run asked to do and its harness refused\n (decision 0249).",
+      "properties": {
+        "command": {
+          "description": "The command that the run asked to run, as the harness reported it.",
+          "type": "string"
+        },
+        "host": {
+          "description": "The host that the run asked to reach.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The path, relative to the workspace or absolute, that the run asked\n to read or write.",
+          "type": "string"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "pattern": "^TOOL_KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TOOL_KIND_READ",
+                "TOOL_KIND_EDIT",
+                "TOOL_KIND_RUN_COMMANDS",
+                "TOOL_KIND_WEB"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The kind of tool that asked.",
+          "title": "Tool Kind"
+        }
+      },
+      "title": "Refusal",
       "type": "object"
     }
   },

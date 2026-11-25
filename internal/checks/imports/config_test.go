@@ -14,6 +14,9 @@ const goodConfig = `{
   "api": {"path": "api", "modules": [
     {"module": "example.com/proto", "reason": "The api module needs it."}
   ]},
+  "conformance": {"path": "conformance", "modules": [
+    {"module": "example.com/proto", "reason": "The conformance module needs it."}
+  ]},
   "components": [
     {"name": "kernel", "path": "internal/kernel", "modules": [
       {"module": "example.com/lib", "reason": "The kernel needs it."}
@@ -31,7 +34,8 @@ func TestParseConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := &Config{
-		API: Group{Path: "api", Modules: []Module{{Module: "example.com/proto", Reason: "The api module needs it."}}},
+		API:         Group{Path: "api", Modules: []Module{{Module: "example.com/proto", Reason: "The api module needs it."}}},
+		Conformance: Group{Path: "conformance", Modules: []Module{{Module: "example.com/proto", Reason: "The conformance module needs it."}}},
 		Components: []Component{
 			{Name: "kernel", Path: "internal/kernel", Modules: []Module{{Module: "example.com/lib", Reason: "The kernel needs it."}}},
 			{Name: "runner", Path: "internal/runner", Modules: []Module{}},
@@ -68,7 +72,7 @@ func TestParseConfigReadsTheRepositoryFile(t *testing.T) {
 }
 
 func TestParseConfigRejectsNoComponents(t *testing.T) {
-	data := `{"api": {"path": "api", "modules": []}, "components": [], "shared": {"path": "s"}, "checks": {"path": "c", "modules": []}, "commands": {"path": "cmd", "modules": []}}`
+	data := `{"api": {"path": "api", "modules": []}, "conformance": {"path": "conformance", "modules": []}, "components": [], "shared": {"path": "s"}, "checks": {"path": "c", "modules": []}, "commands": {"path": "cmd", "modules": []}}`
 	_, err := ParseConfig([]byte(data))
 	if err == nil || !strings.Contains(err.Error(), `"components" is empty`) {
 		t.Errorf("ParseConfig() error = %v, want one about empty components", err)
@@ -90,6 +94,14 @@ func TestParseConfigRejectsBadFiles(t *testing.T) {
     {"module": "example.com/proto", "reason": "The api module needs it."}
   ]}`, `{"path": "api"}`, `"api.modules" is missing`},
 		{"empty api reason", `"reason": "The api module needs it."`, `"reason": ""`, `api: module 1: "reason" is empty`},
+		{"missing conformance", `"conformance": {"path": "conformance", "modules": [
+    {"module": "example.com/proto", "reason": "The conformance module needs it."}
+  ]},`, ``, `"conformance.path" is empty`},
+		{"missing conformance modules", `{"path": "conformance", "modules": [
+    {"module": "example.com/proto", "reason": "The conformance module needs it."}
+  ]}`, `{"path": "conformance"}`, `"conformance.modules" is missing`},
+		{"empty conformance reason", `"reason": "The conformance module needs it."`, `"reason": ""`, `conformance: module 1: "reason" is empty`},
+		{"conformance inside api", `"path": "conformance"`, `"path": "api/conformance"`, `"api/conformance" is inside "api"`},
 		{"missing shared", `"shared": {"path": "internal/shared"},`, ``, `"shared.path" is empty`},
 		{"missing checks", `"checks": {"path": "internal/checks", "modules": []},`, ``, `"checks.path" is empty`},
 		{"missing commands", `,

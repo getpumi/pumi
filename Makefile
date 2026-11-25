@@ -11,9 +11,10 @@
 SHUFFLE ?= on
 TEST_FLAGS := -race -shuffle=$(SHUFFLE) -count=1
 
-# GO_OLDER is the older supported Go release, on which the api module is also
-# tested (decisions 0085 and 0117). The devcontainer image sets PUMI_GO_OLDER
-# and has that toolchain in its module cache.
+# GO_OLDER is the older supported Go release, on which the api and
+# conformance modules are also tested (decisions 0085, 0117 and 0244). The
+# devcontainer image sets PUMI_GO_OLDER and has that toolchain in its module
+# cache.
 GO_OLDER ?= $(PUMI_GO_OLDER)
 
 # IMAGE is the repository in the GitHub container registry that holds the
@@ -39,30 +40,35 @@ BUF := go tool -modfile=tools/buf.mod buf
 
 .PHONY: build test lint dco spdx imports license notices pins image generate buf cedar
 
-# build compiles every package in both modules and writes the five binaries
-# to bin/.
+# build compiles every package in the three modules and writes the five
+# binaries to bin/.
 build:
 	go build ./...
 	go build -o bin/ ./cmd/...
 	cd api && go build ./...
+	cd conformance && go build ./...
 
-# test runs the tests of both modules (decision 0117), runs those of the api
-# module again on the older Go release, and writes a coverage profile for each
-# run to coverage/.
+# test runs the tests of the three modules (decisions 0117 and 0244), runs
+# those of the api and conformance modules again on the older Go release, which
+# adapters may build with, and writes a coverage profile for each run to
+# coverage/.
 test:
 	@test -n "$(GO_OLDER)" || { echo "make test: GO_OLDER is not set; run make test in the devcontainer" >&2; exit 1; }
 	mkdir -p coverage
 	go test $(TEST_FLAGS) -coverprofile=coverage/core.out ./...
 	cd api && go test $(TEST_FLAGS) -coverprofile=../coverage/api.out ./...
 	cd api && GOTOOLCHAIN=$(GO_OLDER) go test $(TEST_FLAGS) -coverprofile=../coverage/api-$(GO_OLDER).out ./...
+	cd conformance && go test $(TEST_FLAGS) -coverprofile=../coverage/conformance.out ./...
+	cd conformance && GOTOOLCHAIN=$(GO_OLDER) go test $(TEST_FLAGS) -coverprofile=../coverage/conformance-$(GO_OLDER).out ./...
 
 # lint runs the nolint check on the whole repository (decision 0110), first
-# because it is fast, and then golangci-lint with .golangci.yml on both modules
-# (decision 0109).
+# because it is fast, and then golangci-lint with .golangci.yml on the three
+# modules (decision 0109).
 lint:
 	go run ./internal/checks/cmd/nolint
 	golangci-lint run ./...
 	cd api && golangci-lint run --config ../.golangci.yml ./...
+	cd conformance && golangci-lint run --config ../.golangci.yml ./...
 
 # dco runs the DCO check (decisions 0070 and 0081) on the commits in RANGE,
 # merge commits included.

@@ -27,10 +27,11 @@ const cedarStage = "FROM rust:1.100.0-trixie@sha256:223c AS cedar\nARG CEDAR_VER
 // current when the data was recorded.
 func currentFiles() map[string]string {
 	return map[string]string{
-		InstallScript: "#!/bin/sh\nset -eu\n\nGOLANGCI_LINT_VERSION=2.15.0\nGOLANGCI_LINT_SHA256_AMD64=abc\n\nTRIVY_VERSION=0.76.2\n",
-		Dockerfile:    "FROM rust:1.100.0-trixie@sha256:223c AS cedar\nARG CEDAR_VERSION=4.15.0\n\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\nRUN true\n",
-		CoreModFile:   "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.4\n",
-		APIModFile:    "module getpumi.dev/pumi/api\n\ngo 1.26.0\n\ntoolchain go1.27.4\n",
+		InstallScript:      "#!/bin/sh\nset -eu\n\nGOLANGCI_LINT_VERSION=2.15.0\nGOLANGCI_LINT_SHA256_AMD64=abc\n\nTRIVY_VERSION=0.76.2\n",
+		Dockerfile:         "FROM rust:1.100.0-trixie@sha256:223c AS cedar\nARG CEDAR_VERSION=4.15.0\n\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\nRUN true\n",
+		CoreModFile:        "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.4\n",
+		APIModFile:         "module getpumi.dev/pumi/api\n\ngo 1.26.0\n\ntoolchain go1.27.4\n",
+		ConformanceModFile: "module getpumi.dev/pumi/conformance\n\ngo 1.26.0\n\ntoolchain go1.27.4\n",
 	}
 }
 
@@ -88,6 +89,8 @@ func TestRunAllCurrent(t *testing.T) {
 		"toolchain go1.27.4 in go.mod: current",
 		"go line 1.26.0 in api/go.mod: current",
 		"toolchain go1.27.4 in api/go.mod: current",
+		"go line 1.26.0 in conformance/go.mod: current",
+		"toolchain go1.27.4 in conformance/go.mod: current",
 		"golang base image 1.27.4 in .devcontainer/Dockerfile: current",
 		"PUMI_GO_OLDER go1.26.11 in .devcontainer/Dockerfile: current",
 	}
@@ -174,9 +177,10 @@ func TestRunNewerGoPatch(t *testing.T) {
 // on126 are the changes that put the repository on Go 1.26, with 1.25 as the
 // older release, on the newest patch releases of both.
 var on126 = map[string]string{
-	Dockerfile:  cedarStage + "FROM golang:1.26.11-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.25.14\n",
-	CoreModFile: "module getpumi.dev/pumi\n\ngo 1.26.0\n\ntoolchain go1.26.11\n",
-	APIModFile:  "module getpumi.dev/pumi/api\n\ngo 1.25.0\n\ntoolchain go1.26.11\n",
+	Dockerfile:         cedarStage + "FROM golang:1.26.11-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.25.14\n",
+	CoreModFile:        "module getpumi.dev/pumi\n\ngo 1.26.0\n\ntoolchain go1.26.11\n",
+	APIModFile:         "module getpumi.dev/pumi/api\n\ngo 1.25.0\n\ntoolchain go1.26.11\n",
+	ConformanceModFile: "module getpumi.dev/pumi/conformance\n\ngo 1.25.0\n\ntoolchain go1.26.11\n",
 }
 
 // The pins of Go 1.26 that a move to 1.27 changes, with their newest values.
@@ -185,6 +189,8 @@ var moveTo127 = []struct{ name, file, newest string }{
 	{"toolchain", CoreModFile, "go1.27.4"},
 	{"go line", APIModFile, "1.26.0"},
 	{"toolchain", APIModFile, "go1.27.4"},
+	{"go line", ConformanceModFile, "1.26.0"},
+	{"toolchain", ConformanceModFile, "go1.27.4"},
 	{"golang base image", Dockerfile, "1.27.4"},
 	{"PUMI_GO_OLDER", Dockerfile, "go1.26.11"},
 }
@@ -243,6 +249,18 @@ func TestRunOlderGoTooOld(t *testing.T) {
 	}
 }
 
+func TestRunOlderGoTooOldInTheConformanceModule(t *testing.T) {
+	pins := runAt(t, map[string]string{
+		ConformanceModFile: "module getpumi.dev/pumi/conformance\n\ngo 1.25.0\n\ntoolchain go1.27.3\n",
+	}, nil, recorded)
+	for _, c := range []struct{ name, newest string }{{"go line", "1.26.0"}, {"toolchain", "go1.27.4"}} {
+		p := find(t, pins, c.name, ConformanceModFile)
+		if !p.OutOfDate || p.Newest != c.newest {
+			t.Errorf("%s in conformance/go.mod = %+v, want out of date with newest %s", c.name, p, c.newest)
+		}
+	}
+}
+
 func TestRunGoAheadOfOlder(t *testing.T) {
 	// The api module may require the newest release; that is not out of date.
 	pins := runAt(t, map[string]string{
@@ -271,8 +289,8 @@ require github.com/spf13/cobra v1.10.1 // indirect
 	if !p.OutOfDate || p.Newest != "v1.75.0" {
 		t.Errorf("buf = %+v, want out of date with newest v1.75.0", p)
 	}
-	if len(pins) != 10 {
-		t.Errorf("Run() = %v, want the 9 pins and buf", pins)
+	if len(pins) != 12 {
+		t.Errorf("Run() = %v, want the 11 pins and buf", pins)
 	}
 }
 
@@ -287,18 +305,20 @@ func TestRunToolWithoutModule(t *testing.T) {
 
 func TestRunMissingPins(t *testing.T) {
 	for name, changes := range map[string]map[string]string{
-		"no Trivy":         {InstallScript: "GOLANGCI_LINT_VERSION=2.15.0\n"},
-		"two Trivy":        {InstallScript: "GOLANGCI_LINT_VERSION=2.15.0\nTRIVY_VERSION=0.76.2\nTRIVY_VERSION=0.76.1\n"},
-		"no base image":    {Dockerfile: cedarStage + "FROM debian\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
-		"no older Go":      {Dockerfile: cedarStage + "FROM golang:1.27.4-trixie@sha256:f18c\n"},
-		"no toolchain":     {CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n"},
-		"no api module":    {APIModFile: ""},
-		"unknown release":  {CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.9\n"},
-		"bad Go version":   {Dockerfile: cedarStage + "FROM golang:1.27-trixie\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
-		"bad tool version": {InstallScript: "GOLANGCI_LINT_VERSION=latest\nTRIVY_VERSION=0.76.2\n"},
-		"no Cedar":         {Dockerfile: "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
-		"two Cedar":        {Dockerfile: "ARG CEDAR_VERSION=4.15.0\nARG CEDAR_VERSION=4.14.0\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
-		"bad Cedar":        {Dockerfile: "ARG CEDAR_VERSION=4\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"no Trivy":                 {InstallScript: "GOLANGCI_LINT_VERSION=2.15.0\n"},
+		"two Trivy":                {InstallScript: "GOLANGCI_LINT_VERSION=2.15.0\nTRIVY_VERSION=0.76.2\nTRIVY_VERSION=0.76.1\n"},
+		"no base image":            {Dockerfile: cedarStage + "FROM debian\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"no older Go":              {Dockerfile: cedarStage + "FROM golang:1.27.4-trixie@sha256:f18c\n"},
+		"no toolchain":             {CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n"},
+		"no api module":            {APIModFile: ""},
+		"no conformance module":    {ConformanceModFile: ""},
+		"no conformance toolchain": {ConformanceModFile: "module getpumi.dev/pumi/conformance\n\ngo 1.26.0\n"},
+		"unknown release":          {CoreModFile: "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.9\n"},
+		"bad Go version":           {Dockerfile: cedarStage + "FROM golang:1.27-trixie\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"bad tool version":         {InstallScript: "GOLANGCI_LINT_VERSION=latest\nTRIVY_VERSION=0.76.2\n"},
+		"no Cedar":                 {Dockerfile: "FROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"two Cedar":                {Dockerfile: "ARG CEDAR_VERSION=4.15.0\nARG CEDAR_VERSION=4.14.0\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
+		"bad Cedar":                {Dockerfile: "ARG CEDAR_VERSION=4\nFROM golang:1.27.4-trixie@sha256:f18c\n\nENV PUMI_GO_OLDER=go1.26.11\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := Run(t.Context(), newRepo(t, currentFiles(), changes), sources(t, nil), recorded); err == nil {

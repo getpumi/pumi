@@ -12,9 +12,10 @@
 //     .devcontainer/Dockerfile at the version of its CEDAR_VERSION build
 //     argument (decision 0146). crates.io reports its newest stable
 //     release.
-//   - Go: the go and toolchain lines of the core and api go.mod files, the
-//     golang base image in .devcontainer/Dockerfile and the older release in
-//     its PUMI_GO_OLDER (decision 0085). The proxy lists the Go releases as
+//   - Go: the go and toolchain lines of the go.mod files of the core, api
+//     and conformance modules, the golang base image in
+//     .devcontainer/Dockerfile and the older release in its PUMI_GO_OLDER
+//     (decision 0085). The proxy lists the Go releases as
 //     versions of the module golang.org/toolchain.
 //   - Each tool module file tools/*.mod: the modules that provide its tool
 //     lines (decision 0086).

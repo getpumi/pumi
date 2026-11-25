@@ -68,6 +68,15 @@ type Config struct {
 	// the plan's invocations, in place of Base's (decision 0209). After a
 	// restart a plan keeps the tree of its first invocation.requested.
 	Trunk func(ctx context.Context) (string, error)
+	// Project is the project section of the configuration, which the
+	// kernel adds to the task of every agent run (decision 0250).
+	Project Project
+	// HasFile reports whether the tree holds a file at path, relative to
+	// the root of the repository. The kernel asks it about each convention
+	// file of Project in the input tree of an agent run, so that it can
+	// name a missing one as missing. It is required when Project lists
+	// convention files.
+	HasFile func(ctx context.Context, tree, path string) (bool, error)
 	// Wrote, when set, is called after each write of the kernel to the log,
 	// an Append or a Decide, with the position of its last event. The
 	// golden cases restart at each of them (decision 0182).
@@ -152,6 +161,10 @@ type planRun struct {
 	// when the plan started (decision 0209), or empty when the wiring
 	// gives no trunk.
 	tree string
+	// declared are the declared paths of the plan's last planning output,
+	// and planned is whether it has one (decision 0250).
+	declared []string
+	planned  bool
 }
 
 // Run runs every plan that a plan.added of the log adds on the workflow
@@ -245,6 +258,8 @@ func newKernel(cfg Config) (*kernel, error) {
 		return nil, errors.New("the kernel has no workflow")
 	case cfg.Parallelism < 0:
 		return nil, fmt.Errorf("the parallelism setting is %d, want 0 or more", cfg.Parallelism)
+	case len(cfg.Project.Conventions) > 0 && cfg.HasFile == nil:
+		return nil, errors.New("the project lists convention files and the kernel has no HasFile to read whether the input tree holds them (decision 0250)")
 	}
 	k := &kernel{
 		cfg: cfg, states: map[string]*workflowv1.State{}, plans: map[string]*planRun{},
@@ -522,7 +537,7 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 		if len(res.GetRefusals()) > 0 {
 			k.refusals[res.GetInvocation()] = res.GetRefusals()
 		}
-		return nil
+		return k.followDeclared(&res)
 	},
 	events.TypeLeaseGranted: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
 		var g eventsv1.LeaseGranted
@@ -682,7 +697,7 @@ func (r *planRun) begin(ctx context.Context) error {
 	}
 	initial := r.k.states[r.state]
 	if inv, ok := initial.GetEntry().(*workflowv1.State_Invoke); ok && !r.k.requestedBy[r.added] {
-		req, err := r.request(r.state, inv.Invoke, r.added)
+		req, err := r.request(ctx, r.state, inv.Invoke, r.added)
 		if err != nil {
 			return err
 		}
@@ -803,7 +818,7 @@ func (r *planRun) transition(ctx context.Context, e *cloudeventsv1.CloudEvent, t
 	}
 	evs := []*cloudeventsv1.CloudEvent{tf}
 	if inv, ok := target.GetEntry().(*workflowv1.State_Invoke); ok {
-		req, err := r.request(t.Target, inv.Invoke, tf.GetId())
+		req, err := r.request(ctx, t.Target, inv.Invoke, tf.GetId())
 		if err != nil {
 			return err
 		}
@@ -893,8 +908,10 @@ func (r *planRun) reason(trigger string, denied []string) string {
 // which the state starts with inv, caused by cause (decisions 0165 and
 // 0175). The invocation is <plan>/<n> for the plan's nth invocation, and its
 // idempotency key is the invocation, both derived from the log (decision
-// 0019).
-func (r *planRun) request(state string, inv *workflowv1.Invoke, cause string) (*cloudeventsv1.CloudEvent, error) {
+// 0019). The task of an agent run is the workflow's task text followed by
+// the project section, so the text stays the same for every project
+// (decision 0250); a check or an external action gets the text alone.
+func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Invoke, cause string) (*cloudeventsv1.CloudEvent, error) {
 	task, ok := r.k.cfg.Workflow.Task(inv.GetTask())
 	if !ok {
 		return nil, fmt.Errorf("the state %s names the task %q, which the workflow does not have", state, inv.GetTask())
@@ -913,9 +930,19 @@ func (r *planRun) request(state string, inv *workflowv1.Invoke, cause string) (*
 	if doc.Input == nil {
 		doc.Input = &harnessv1.Input{}
 	}
-	doc.Input.Task = task
 	if r.tree != "" {
 		doc.Input.Tree = r.tree
+	}
+	doc.Input.Task = task
+	if inv.GetKind() == workflowv1.Invoke_KIND_HARNESS {
+		section, err := r.projectSection(ctx, doc.GetInput().GetTree())
+		if err != nil {
+			return nil, fmt.Errorf("the invocation of the state %s: %w", state, err)
+		}
+		if !strings.HasSuffix(task, "\n") {
+			task += "\n"
+		}
+		doc.Input.Task = task + "\n" + section
 	}
 	doc.OutputMessage = inv.GetOutputMessage()
 	doc.ModelRole = inv.GetModelRole()

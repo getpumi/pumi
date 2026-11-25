@@ -234,6 +234,8 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 				Client: kernelClient, Workflow: wf, Base: cfg.file.GetBase(),
 				Parallelism: cfg.plane().Settings.Parallelism,
 				Trunk:       func(ctx context.Context) (string, error) { return trunkTree(ctx, dir, cfg.file.GetTrunk()) },
+				Project:     cfg.project(),
+				HasFile:     func(ctx context.Context, tree, path string) (bool, error) { return hasFile(ctx, dir, tree, path) },
 			})
 		},
 	}
@@ -296,4 +298,25 @@ func trunkTree(ctx context.Context, dir, trunk string) (string, error) {
 		return "", fmt.Errorf("the clone has no branch %s, the trunk of the configuration file", trunk)
 	}
 	return name, nil
+}
+
+// hasFile reports whether the tree of the clone at dir holds a file at
+// path, relative to the tree's root (decision 0250): a blob, not a
+// directory or a submodule. A tree that the clone does not have is an
+// error. The git arguments are constant; the names go on standard input.
+func hasFile(ctx context.Context, dir, tree, path string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "cat-file", "--batch-check=%(objecttype)")
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(tree + "^{tree}\n" + tree + ":" + path + "\n")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git cat-file: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) != 2 || lines[0] != "tree" {
+		return false, fmt.Errorf("the clone has no tree %s", tree)
+	}
+	return lines[1] == "blob", nil
 }

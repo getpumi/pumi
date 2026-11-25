@@ -193,7 +193,7 @@ func TestShownRunsThroughTheGateway(t *testing.T) {
 	s.waitLog(first, commandWait, "invocation.started of the first plan", ofTypeFor(events.TypeInvocationStarted, shownCountedPlan+"/1"))
 	counted := s.tokenOf(first)
 	checkTokenPath(t, shownCountedPlan+"/1", counted)
-	s.waitLog(first, runTimeout, "transition of the first plan to done", s.entered(shownCountedPlan, "done"))
+	s.waitCountedDone(first)
 	s.pumi(exec.CommandContext(ctx, "pumi", "status"))
 	if err := s.stop(first, syscall.SIGINT); err != nil {
 		t.Errorf("pumi run exited with %v after SIGINT, want status 0", err)
@@ -228,6 +228,33 @@ func TestShownRunsThroughTheGateway(t *testing.T) {
 	checkCounted(t, evs)
 	checkCapped(t, evs)
 	showChange(t, s.run, evs, shownCountedPlan+"/1")
+}
+
+// waitCountedDone waits until the first plan reaches done. When the plan
+// escalates first, as it does when its agent run fails, it shows pumi
+// status and the log of each of the plan's invocations, and fails the test
+// at once. The configuration allows one more attempt, so the plan has at
+// most two. The command's arguments are constants, because gosec reports a
+// command built from variables (G204).
+func (s *shownCommands) waitCountedDone(b *background) {
+	s.t.Helper()
+	done, raised := s.entered(shownCountedPlan, "done"), ofTypeFor(events.TypeEscalationRaised, shownCountedPlan)
+	s.waitLog(b, runTimeout, "transition of the first plan to done or its escalation", func(e *cloudeventsv1.CloudEvent) bool {
+		return done(e) || raised(e)
+	})
+	evs := readLog(s.t, s.run)
+	for _, e := range evs {
+		if done(e) {
+			return
+		}
+	}
+	ctx := s.t.Context()
+	s.pumi(exec.CommandContext(ctx, "pumi", "status"))
+	s.pumi(exec.CommandContext(ctx, "pumi", "log", shownCountedPlan+"/1"))
+	if has(ofTypesFor(evs, shownCountedPlan+"/2"), events.TypeInvocationStarted) {
+		s.pumi(exec.CommandContext(ctx, "pumi", "log", shownCountedPlan+"/2"))
+	}
+	s.t.Fatalf("%s escalated before it reached done; pumi status and the logs above say why", shownCountedPlan)
 }
 
 // resultOf returns the one invocation.result of invocation in evs.

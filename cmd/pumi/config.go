@@ -6,10 +6,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -17,6 +19,7 @@ import (
 	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane"
+	"getpumi.dev/pumi/internal/kernel"
 	"getpumi.dev/pumi/internal/kernel/workflow"
 	"getpumi.dev/pumi/internal/runner"
 )
@@ -32,7 +35,8 @@ type config struct {
 // readConfig reads the configuration file at path, in protobuf text
 // format, and refuses one with an unknown field, without the workflow, the
 // trunk or the project's name, with the replaced adapter field or gateway
-// section, or with a model configuration that checkModels refuses.
+// section, with a model configuration that checkModels refuses, or with a
+// project section that checkProject refuses.
 func readConfig(path string) (*config, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -68,6 +72,7 @@ func readConfig(path string) (*config, error) {
 		}
 	}
 	missing = append(missing, checkModels(path, file.GetModels())...)
+	missing = append(missing, checkProject(path, file.GetProject())...)
 	if err := errors.Join(missing...); err != nil {
 		return nil, err
 	}
@@ -233,4 +238,31 @@ func (c *config) plane() controlplane.Config {
 		HardCaps: caps,
 		Project:  controlplane.Project{Name: c.file.GetProject().GetName(), ProtectedPaths: c.file.GetProject().GetProtectedPaths()},
 	}
+}
+
+// project returns the project section of the file for the kernel
+// (decision 0250).
+func (c *config) project() kernel.Project {
+	p := c.file.GetProject()
+	return kernel.Project{
+		Commands: p.GetCheckCommands(), Conventions: p.GetConventionFiles(), ProtectedPaths: p.GetProtectedPaths(),
+	}
+}
+
+// checkProject returns the errors of the project section p of the file at
+// path (decision 0250): an empty command, and a convention file that is
+// not a clean path inside the repository, with forward slashes.
+func checkProject(path string, p *configv1.Project) []error {
+	var errs []error
+	for i, c := range p.GetCheckCommands() {
+		if strings.TrimSpace(c) == "" {
+			errs = append(errs, fmt.Errorf("the configuration file %s: project.check_commands[%d] is empty", path, i))
+		}
+	}
+	for i, f := range p.GetConventionFiles() {
+		if f == "" || !fs.ValidPath(f) || f == "." || strings.Contains(f, `\`) {
+			errs = append(errs, fmt.Errorf("the configuration file %s: project.convention_files[%d] %q is not a clean path inside the repository, relative to its root and with forward slashes", path, i, f))
+		}
+	}
+	return errs
 }

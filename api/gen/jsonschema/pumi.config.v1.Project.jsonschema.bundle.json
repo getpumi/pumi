@@ -3,8 +3,22 @@
     "pumi.config.v1.Project.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
-      "description": "Project is the project of the Cedar resource Plan (decision 0141).",
+      "description": "Project is the project of the Cedar resource Plan (decision 0141), and the\n project section that the kernel adds to the task of every agent run\n (decision 0250). It is apart from the model configuration.",
       "patternProperties": {
+        "^(check_commands)$": {
+          "description": "The commands that run the project's checks, such as make test.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "^(convention_files)$": {
+          "description": "The files that hold the project's conventions, such as AGENTS.md,\n relative to the root of the repository. The task names a file that the\n input tree does not hold as missing.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "^(protected_paths)$": {
           "description": "The project's protected path patterns.",
           "items": {
@@ -14,6 +28,20 @@
         }
       },
       "properties": {
+        "checkCommands": {
+          "description": "The commands that run the project's checks, such as make test.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "conventionFiles": {
+          "description": "The files that hold the project's conventions, such as AGENTS.md,\n relative to the root of the repository. The task names a file that the\n input tree does not hold as missing.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "name": {
           "default": "",
           "description": "The project's name.",

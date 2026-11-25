@@ -137,12 +137,20 @@ message ModelRole {
   string fallback = 2;
 }
 
-// Project is the project of the Cedar resource Plan (decision 0141).
+// Project is the project of the Cedar resource Plan (decision 0141), and the
+// project section that the kernel adds to the task of every agent run
+// (decision 0250). It is apart from the model configuration.
 message Project {
   // The project's name.
   string name = 1;
   // The project's protected path patterns.
   repeated string protected_paths = 2;
+  // The commands that run the project's checks, such as make test.
+  repeated string check_commands = 3;
+  // The files that hold the project's conventions, such as AGENTS.md,
+  // relative to the root of the repository. The task names a file that the
+  // input tree does not hold as missing.
+  repeated string convention_files = 4;
 }
 
 // Settings are the profile settings that pumi reads from the file

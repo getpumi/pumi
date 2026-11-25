@@ -611,15 +611,23 @@ func (x *ModelRole) GetFallback() string {
 	return ""
 }
 
-// Project is the project of the Cedar resource Plan (decision 0141).
+// Project is the project of the Cedar resource Plan (decision 0141), and the
+// project section that the kernel adds to the task of every agent run
+// (decision 0250). It is apart from the model configuration.
 type Project struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The project's name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// The project's protected path patterns.
 	ProtectedPaths []string `protobuf:"bytes,2,rep,name=protected_paths,json=protectedPaths,proto3" json:"protected_paths,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The commands that run the project's checks, such as make test.
+	CheckCommands []string `protobuf:"bytes,3,rep,name=check_commands,json=checkCommands,proto3" json:"check_commands,omitempty"`
+	// The files that hold the project's conventions, such as AGENTS.md,
+	// relative to the root of the repository. The task names a file that the
+	// input tree does not hold as missing.
+	ConventionFiles []string `protobuf:"bytes,4,rep,name=convention_files,json=conventionFiles,proto3" json:"convention_files,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
@@ -662,6 +670,20 @@ func (x *Project) GetName() string {
 func (x *Project) GetProtectedPaths() []string {
 	if x != nil {
 		return x.ProtectedPaths
+	}
+	return nil
+}
+
+func (x *Project) GetCheckCommands() []string {
+	if x != nil {
+		return x.CheckCommands
+	}
+	return nil
+}
+
+func (x *Project) GetConventionFiles() []string {
+	if x != nil {
+		return x.ConventionFiles
 	}
 	return nil
 }
@@ -777,10 +799,12 @@ const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x19.pumi.config.v1.ModelRoleR\x05value:\x028\x01\"=\n" +
 	"\tModelRole\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12\x1a\n" +
-	"\bfallback\x18\x02 \x01(\tR\bfallback\"F\n" +
+	"\bfallback\x18\x02 \x01(\tR\bfallback\"\x98\x01\n" +
 	"\aProject\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
-	"\x0fprotected_paths\x18\x02 \x03(\tR\x0eprotectedPaths\"\xba\x01\n" +
+	"\x0fprotected_paths\x18\x02 \x03(\tR\x0eprotectedPaths\x12%\n" +
+	"\x0echeck_commands\x18\x03 \x03(\tR\rcheckCommands\x12)\n" +
+	"\x10convention_files\x18\x04 \x03(\tR\x0fconventionFiles\"\xba\x01\n" +
 	"\bSettings\x12 \n" +
 	"\vparallelism\x18\x01 \x01(\x05R\vparallelism\x12L\n" +
 	"\fmax_attempts\x18\x02 \x03(\v2).pumi.config.v1.Settings.MaxAttemptsEntryR\vmaxAttempts\x1a>\n" +

@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -176,6 +177,8 @@ func fakeAdapter(mode string) int {
 	case "exit 3":
 		result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
 		return 3
+	case "git":
+		return gitAdapter(done, usage)
 	case "outside":
 		write("internal/runner/b.go", "package runner\n")
 		write("README.md", "changed outside the paths\n")
@@ -306,6 +309,50 @@ func startChild() {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+}
+
+// gitAdapter checks that git status in the workspace shows no changes,
+// writes a file and checks that git diff shows it, commits it, writes a
+// hook and a nested repository, and returns the exit status.
+func gitAdapter(done string, usage *harnessv1.Usage) int {
+	ctx := context.Background()
+	run := func(cmd *exec.Cmd, dir string) string {
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Agent", "GIT_AUTHOR_EMAIL=agent@example.com",
+			"GIT_COMMITTER_NAME=Agent", "GIT_COMMITTER_EMAIL=agent@example.com")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s%q: %v\n%s", fakeAdapterPrefix, cmd.Args, err, out)
+			os.Exit(9)
+		}
+		return string(out)
+	}
+	if got := run(exec.CommandContext(ctx, "git", "status", "--porcelain", "--untracked-files=all"), "."); got != "" {
+		fmt.Fprintf(os.Stderr, "%sgit status shows %q before any change\n", fakeAdapterPrefix, got)
+		return 9
+	}
+	write("internal/runner/a.go", "package runner // changed\n")
+	if got := run(exec.CommandContext(ctx, "git", "diff", "--name-only"), "."); got != "internal/runner/a.go\n" {
+		fmt.Fprintf(os.Stderr, "%sgit diff shows %q\n", fakeAdapterPrefix, got)
+		return 9
+	}
+	run(exec.CommandContext(ctx, "git", "commit", "--quiet", "--all", "--message=agent"), ".")
+	run(exec.CommandContext(ctx, "git", "branch", "agent-branch"), ".")
+	// A hook that the runner ran would get the runner's environment.
+	write(".git/hooks/post-index-change", "#!/bin/sh\ntouch \"$"+fakeAdapterPIDDir+"/hook ran\"\n")
+	root, err := os.OpenRoot(".")
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = root.Close() }()
+	if err := root.Chmod(".git/hooks/post-index-change", 0o700); err != nil {
+		panic(err)
+	}
+	write("internal/runner/lib/x.go", "package lib\n")
+	run(exec.CommandContext(ctx, "git", "init", "--quiet"), "internal/runner/lib")
+	run(exec.CommandContext(ctx, "git", "add", "--all"), "internal/runner/lib")
+	run(exec.CommandContext(ctx, "git", "commit", "--quiet", "--message=nested"), "internal/runner/lib")
+	return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
 }
 
 // write writes content to the file name of the fake adapter's workspace.
@@ -854,6 +901,32 @@ func TestOutputFilesOfAnInvocationThatFailsAreNotUploaded(t *testing.T) {
 	}
 	if stored := f.outputBlobs(report); len(stored) != 0 {
 		t.Errorf("the runner stored %q besides the log for an invocation that failed, want nothing", stored)
+	}
+}
+
+func TestTheAgentUsesTheWorkspaceGit(t *testing.T) {
+	f := newFixture(t, "git")
+	refs := f.repo.run(exec.CommandContext(t.Context(), "git", "for-each-ref"))
+	report := f.runOne(t)
+	// The agent wrote and committed in .git, outside the allowed paths,
+	// which the confinement check ignores (decision 0247).
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
+		t.Fatalf("the outcome is %v, want succeeded; the log is\n%s", report.GetOutcome(), f.service.log())
+	}
+	tree := report.GetResult().GetTree()
+	if got, want := f.changed(t, tree), []string{"internal/runner/a.go", "internal/runner/lib/x.go"}; !slices.Equal(got, want) {
+		t.Errorf("the resulting tree changes %q, want %q", got, want)
+	}
+	g, err := openRepository(t.Context(), f.repo.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkNoGit(t, g, tree)
+	if after := f.repo.run(exec.CommandContext(t.Context(), "git", "for-each-ref")); after != refs {
+		t.Errorf("the refs of the project's repository were\n%s\nand are now\n%s", refs, after)
+	}
+	if _, err := os.Stat(filepath.Join(f.pidDir, "hook ran")); !os.IsNotExist(err) {
+		t.Errorf("the hook the agent wrote ran: %v", err)
 	}
 }
 

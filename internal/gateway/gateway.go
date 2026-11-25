@@ -41,9 +41,13 @@ const maxRequest = 64 << 20
 
 // Config configures a Gateway.
 type Config struct {
-	// Upstream is the provider's base URL, such as
-	// https://api.anthropic.com.
-	Upstream *url.URL
+	// Upstreams are the providers' base URLs by API, such as
+	// https://api.anthropic.com for the Messages API and
+	// https://api.openai.com for the Responses API (decision 0243).
+	Upstreams map[API]*url.URL
+	// AdapterAPIs are the APIs of the adapters' harnesses by adapter name.
+	// The calls of an invocation go to the provider of its adapter's API.
+	AdapterAPIs map[string]API
 	// APIKeys are the adopter's provider API keys by adapter name, for the
 	// adapters in the API key mode (decisions 0240 and 0245). The gateway
 	// sends the key of an invocation's adapter on every call of the
@@ -77,8 +81,8 @@ type Config struct {
 const DefaultRetryWait = 30 * time.Second
 
 // Role is the model and the fallback model of a model role (decision
-// 0233). Both must be in the price table, so both use Anthropic's Messages
-// API, and they must differ. A role whose fallback is on another adapter
+// 0233). Both must be in the price table, they must use the same API, and
+// they must differ. A role whose fallback is on another adapter
 // has no fallback model here (decision 0246).
 type Role struct {
 	// Model is the model that a call naming the role goes to.
@@ -105,8 +109,10 @@ type Totals struct {
 // session is an open invocation.
 type session struct {
 	invocation string
-	// adapter is the name of the adapter that runs the invocation.
+	// adapter is the name of the adapter that runs the invocation, and api
+	// the API of its harness.
 	adapter string
+	api     API
 	// key is the API key of the invocation's adapter, empty when its
 	// harness keeps its own sign-in.
 	key string
@@ -128,7 +134,8 @@ func (s *session) reached() bool {
 }
 
 // Gateway is the model gateway of embedded mode (decisions 0225 to 0231): a
-// pass-through proxy of Anthropic's Messages API that counts the tokens and
+// pass-through proxy of Anthropic's Messages API and OpenAI's Responses API
+// (decision 0243) that counts the tokens and
 // the reference cost of each open invocation and refuses its calls once a
 // cap is reached. It is an http.Handler.
 type Gateway struct {
@@ -146,8 +153,8 @@ type Gateway struct {
 
 // New returns a gateway that sends calls to cfg.Upstream.
 func New(cfg Config) (*Gateway, error) {
-	if cfg.Upstream == nil || cfg.Upstream.Scheme == "" || cfg.Upstream.Host == "" {
-		return nil, errors.New("gateway: the provider's URL is not set")
+	if err := checkUpstreams(cfg.Upstreams, cfg.AdapterAPIs); err != nil {
+		return nil, err
 	}
 	if err := checkRoles(cfg.Roles); err != nil {
 		return nil, err
@@ -183,6 +190,30 @@ func New(cfg Config) (*Gateway, error) {
 	return g, nil
 }
 
+// checkUpstreams refuses a gateway with no provider, a provider's URL
+// that is not set, and an adapter whose API the gateway does not serve or
+// has no provider for.
+func checkUpstreams(upstreams map[API]*url.URL, adapters map[string]API) error {
+	if len(upstreams) == 0 {
+		return errors.New("gateway: no provider's URL is set")
+	}
+	var errs []error
+	for api, u := range upstreams {
+		if api != MessagesAPI && api != ResponsesAPI {
+			errs = append(errs, fmt.Errorf("gateway: the gateway does not serve the API %q", api))
+		}
+		if u == nil || u.Scheme == "" || u.Host == "" {
+			errs = append(errs, fmt.Errorf("gateway: the URL of the provider of the %s API is not set", api))
+		}
+	}
+	for adapter, api := range adapters {
+		if _, ok := upstreams[api]; !ok {
+			errs = append(errs, fmt.Errorf("gateway: the adapter %q uses the %s API, for which no provider's URL is set", adapter, api))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // KeepsSignIn reports whether the harness of the adapter, by name, keeps
 // its own sign-in, which is when the configuration has no API key for the
 // adapter. The harness then sends the token in InvocationHeader (decisions
@@ -201,6 +232,10 @@ func (g *Gateway) Open(invocation, adapter string, budget *harnessv1.Usage, log 
 		return "", fmt.Errorf("gateway: making a token: %w", err)
 	}
 	token := hex.EncodeToString(b)
+	api, ok := g.cfg.AdapterAPIs[adapter]
+	if !ok {
+		return "", fmt.Errorf("gateway: the adapter %q has no API", adapter)
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.open[invocation] {
@@ -210,6 +245,7 @@ func (g *Gateway) Open(invocation, adapter string, budget *harnessv1.Usage, log 
 	g.sessions[token] = &session{
 		invocation:        invocation,
 		adapter:           adapter,
+		api:               api,
 		key:               g.cfg.APIKeys[adapter],
 		budgetTokens:      budget.GetTokens(),
 		budgetPicodollars: budget.GetCostMicrodollars() * 1_000_000,
@@ -269,64 +305,129 @@ type call struct {
 	// body is the body sent to the provider, uncompressed when the call
 	// named a role.
 	body []byte
+	// longCache is a call of the Responses API that asks for 12-hour cache
+	// writes, whose writes are all priced at the 12-hour rate.
+	longCache bool
 }
 
 type callKey struct{}
 
-// ServeHTTP passes a call of a valid token through to the provider. A
-// call of the Messages API is counted: its model must be in the price
-// table, and its invocation must not have reached a cap.
+// ServeHTTP passes a call of a valid token through to the provider of its
+// invocation's API. A call of the Messages API (POST /v1/messages) or the
+// Responses API (POST /v1/responses) is counted: its model must be in the
+// price table for that API, and its invocation must not have reached a
+// cap.
 func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s := g.callSession(r)
 	if s == nil {
 		g.log.Info("gateway refused a call with no valid invocation token", "path", r.URL.Path)
-		refuse(w, http.StatusUnauthorized, "authentication_error", "the call has no valid Pumi invocation token")
+		api := MessagesAPI
+		if r.URL.Path == "/v1/responses" || strings.HasPrefix(r.URL.Path, "/v1/responses/") {
+			api = ResponsesAPI
+		}
+		refuse(w, api, http.StatusUnauthorized, "authentication_error", "the call has no valid Pumi invocation token")
 		return
 	}
-	if r.URL.Path == "/v1/messages/batches" || strings.HasPrefix(r.URL.Path, "/v1/messages/batches/") {
-		g.log.Info("gateway refused a batch, which it cannot count", "invocation", s.invocation, "path", r.URL.Path)
-		refuse(w, http.StatusNotFound, "not_found_error", "the Pumi model gateway does not pass batches through, because it cannot count them")
+	counted, ok := g.route(w, r, s)
+	if !ok {
 		return
 	}
-	if r.Method != http.MethodPost || r.URL.Path != "/v1/messages" {
+	if !counted {
 		g.proxy.ServeHTTP(w, r)
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxRequest))
 	if err != nil {
 		g.log.Info("gateway could not read a call", "invocation", s.invocation, "error", err.Error())
-		refuse(w, http.StatusRequestEntityTooLarge, "request_too_large", "the Pumi model gateway could not read the call")
+		refuse(w, s.api, http.StatusRequestEntityTooLarge, "request_too_large", "the Pumi model gateway could not read the call")
 		return
 	}
-	c := &call{session: s, body: body}
-	plain, readable := decodeBody(body, r.Header.Get("Content-Encoding"))
-	named := requestModel(plain, readable)
-	c.model = named
-	if role, ok := g.roleOf(s, named); ok && readable {
-		// The call names a model role: it goes to the role's model, with the
-		// body sent uncompressed (decision 0233).
-		sent, err := withModel(plain, role.Model)
-		if err != nil {
-			g.log.Info("gateway could not set the model of a call", "invocation", s.invocation, "error", err.Error())
-			refuse(w, http.StatusBadRequest, "invalid_request_error", "the Pumi model gateway could not set the model of the call")
-			return
-		}
-		c.model, c.role, c.fallback, c.body = role.Model, named, role.Fallback, sent
-		r.Header.Del("Content-Encoding")
+	c := g.newCall(w, r, s, body)
+	if c == nil {
+		return
 	}
 	r.Body = io.NopCloser(bytes.NewReader(c.body))
 	r.ContentLength = int64(len(c.body))
-	if _, ok := Price(c.model); !ok {
-		g.log.Info("gateway refused a call to a model the price table does not list", "invocation", s.invocation, "model", c.model, "prices", PricesVersion)
-		refuse(w, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("the Pumi model gateway's price table (version %s) does not list the model %q", PricesVersion, c.model))
+	if m, ok := Price(c.model); !ok || m.API != s.api {
+		g.log.Info("gateway refused a call to a model the price table does not list for its API", "invocation", s.invocation, "model", c.model, "api", string(s.api), "prices", PricesVersion)
+		refuse(w, s.api, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("the Pumi model gateway's price table (version %s) does not list the model %q for the %s API", PricesVersion, c.model, s.api))
 		return
 	}
 	if g.refuseAtCap(s) {
 		g.log.Info("gateway refused a call at the invocation's cap", "invocation", s.invocation)
-		refuse(w, http.StatusForbidden, "permission_error", capMessage)
+		refuse(w, s.api, http.StatusForbidden, "permission_error", capMessage)
 		return
 	}
 	g.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), callKey{}, c)))
+}
+
+// newCall reads a counted call of the session: the model it names, the
+// role's model when it names a model role, and for the Responses API the
+// cache lifetime it asks for. It refuses a background response, and a
+// call whose model it cannot set, and then returns nil.
+func (g *Gateway) newCall(w http.ResponseWriter, r *http.Request, s *session, body []byte) *call {
+	c := &call{session: s, body: body}
+	plain, readable := decodeBody(body, r.Header.Get("Content-Encoding"))
+	if s.api == ResponsesAPI && readable {
+		if background(plain) {
+			g.log.Info("gateway refused a background response, which it cannot count", "invocation", s.invocation)
+			refuse(w, s.api, http.StatusBadRequest, "invalid_request_error", "the Pumi model gateway does not pass background responses through, because it cannot count them")
+			return nil
+		}
+		c.longCache = longCacheWrites(plain)
+	}
+	named := requestModel(plain, readable)
+	c.model = named
+	role, ok := g.roleOf(s, named)
+	if !ok || !readable {
+		return c
+	}
+	// The call names a model role: it goes to the role's model, with the
+	// body sent uncompressed (decision 0233).
+	sent, err := withModel(plain, role.Model)
+	if err != nil {
+		g.log.Info("gateway could not set the model of a call", "invocation", s.invocation, "error", err.Error())
+		refuse(w, s.api, http.StatusBadRequest, "invalid_request_error", "the Pumi model gateway could not set the model of the call")
+		return nil
+	}
+	c.model, c.role, c.fallback, c.body = role.Model, named, role.Fallback, sent
+	r.Header.Del("Content-Encoding")
+	return c
+}
+
+// route decides what the gateway does with a request of the session: it
+// counts the API's calls, passes the requests that cost nothing through
+// uncounted and refuses those it cannot count, in which case ok is false.
+// For the Messages API it refuses batches and passes every other request
+// through. For the Responses API it passes only the model list through.
+func (g *Gateway) route(w http.ResponseWriter, r *http.Request, s *session) (counted, ok bool) {
+	path := r.URL.Path
+	if s.api == MessagesAPI {
+		if path == "/v1/messages/batches" || strings.HasPrefix(path, "/v1/messages/batches/") {
+			g.log.Info("gateway refused a batch, which it cannot count", "invocation", s.invocation, "path", path)
+			refuse(w, s.api, http.StatusNotFound, "not_found_error", "the Pumi model gateway does not pass batches through, because it cannot count them")
+			return false, false
+		}
+		return r.Method == http.MethodPost && path == "/v1/messages", true
+	}
+	if r.Method == http.MethodPost && path == "/v1/responses" {
+		return true, true
+	}
+	if r.Method == http.MethodGet && (path == "/v1/models" || strings.HasPrefix(path, "/v1/models/")) {
+		return false, true
+	}
+	g.log.Info("gateway refused a request of the Responses API that it does not pass through", "invocation", s.invocation, "method", r.Method, "path", path)
+	refuse(w, s.api, http.StatusNotFound, "invalid_request_error", fmt.Sprintf("the Pumi model gateway does not pass %s %s through, because it cannot count it; it passes POST /v1/responses and GET /v1/models", r.Method, path))
+	return false, false
+}
+
+// background reports whether the uncompressed body of a call of the
+// Responses API asks for a background response.
+func background(plain []byte) bool {
+	var b struct {
+		Background bool `json:"background"`
+	}
+	return json.Unmarshal(plain, &b) == nil && b.Background
 }
 
 // capMessage is the message of a call refused at the invocation's cap.
@@ -376,8 +477,11 @@ func (g *Gateway) record(c *call, u usage) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	m, ok := Price(u.model)
-	if !ok {
+	if !ok || m.API != c.session.api {
 		m, _ = Price(c.model)
+	}
+	if c.longCache {
+		u.writeShort, u.writeLong = 0, u.writeShort+u.writeLong
 	}
 	cost := m.picodollars(u)
 	g.log.Debug("gateway counted a call", "invocation", c.session.invocation, "model", c.model, "tokens", u.tokens(), "picodollars", cost)
@@ -406,8 +510,8 @@ func decodeBody(body []byte, encoding string) ([]byte, bool) {
 	}
 }
 
-// requestModel reads the model that the uncompressed body of a call of
-// the Messages API names. It returns "" when the body cannot be read.
+// requestModel reads the model that the uncompressed body of a call
+// names. It returns "" when the body cannot be read.
 func requestModel(plain []byte, readable bool) string {
 	if !readable {
 		return ""
@@ -421,21 +525,30 @@ func requestModel(plain []byte, readable bool) string {
 	return m.Model
 }
 
-// rewrite sends a call to the provider with the credential: the API key in
-// place of any the harness sent, or the harness's own. The invocation
-// token never reaches the provider. The gateway asks for an uncompressed
+// rewrite sends a call to the provider of its invocation's API with the
+// credential: the API key in place of any the harness sent, in X-Api-Key
+// for Anthropic and as the bearer token for OpenAI, or the harness's own.
+// The invocation token never reaches the provider. The gateway asks for an uncompressed
 // response, so that it can read the usage, and Go's transport then
 // compresses the transfer itself.
 func (g *Gateway) rewrite(pr *httputil.ProxyRequest) {
-	pr.SetURL(g.cfg.Upstream)
-	pr.Out.Host = g.cfg.Upstream.Host
+	s := g.callSession(pr.In)
+	upstream := g.cfg.Upstreams[s.api]
+	pr.SetURL(upstream)
+	pr.Out.Host = upstream.Host
 	h := pr.Out.Header
 	h.Del(InvocationHeader)
 	h.Del("Accept-Encoding")
-	if s := g.callSession(pr.In); s != nil && s.key != "" {
-		h.Del("Authorization")
-		h.Set("X-Api-Key", s.key)
+	if s.key == "" {
+		return
 	}
+	if s.api == ResponsesAPI {
+		h.Del("X-Api-Key")
+		h.Set("Authorization", "Bearer "+s.key)
+		return
+	}
+	h.Del("Authorization")
+	h.Set("X-Api-Key", s.key)
 }
 
 // modifyResponse counts the usage of a successful counted call as its body
@@ -448,7 +561,7 @@ func (g *Gateway) modifyResponse(resp *http.Response) error {
 	streaming := strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream")
 	resp.Body = &countedBody{
 		body:   resp.Body,
-		reader: newUsageReader(streaming),
+		reader: newUsageReader(c.session.api, streaming),
 		done: func(u usage, found, tooLong bool) {
 			switch {
 			case found:
@@ -469,17 +582,34 @@ func (g *Gateway) proxyError(w http.ResponseWriter, r *http.Request, err error) 
 		return
 	}
 	g.log.Warn("gateway could not reach the provider", "path", r.URL.Path, "error", err.Error())
-	refuse(w, http.StatusBadGateway, "api_error", "the Pumi model gateway could not reach the provider")
+	api := MessagesAPI
+	if s := g.callSession(r); s != nil {
+		api = s.api
+	}
+	refuse(w, api, http.StatusBadGateway, "api_error", "the Pumi model gateway could not reach the provider")
 }
 
-// refuse writes an error in the form of Anthropic's API, with
-// x-should-retry false, so that the harness's client does not send the
-// call again.
-func refuse(w http.ResponseWriter, status int, kind, message string) {
-	b, err := json.Marshal(map[string]any{
+// errorBody is an error in the form of the API: Anthropic's, or OpenAI's,
+// with no param or code.
+func errorBody(api API, kind, message string) ([]byte, error) {
+	if api == ResponsesAPI {
+		return json.Marshal(map[string]any{
+			"error": map[string]any{"message": message, "type": kind, "param": nil, "code": nil},
+		})
+	}
+	return json.Marshal(map[string]any{
 		"type":  "error",
 		"error": map[string]string{"type": kind, "message": message},
 	})
+}
+
+// refuse writes an error in the form of the API, with x-should-retry
+// false, so that the harness's client does not send the call again.
+// Codex CLI 0.172.0 ignores the header: it sends a call refused with 401,
+// 403 or 404 five more times, each refused again, and then fails the turn,
+// and a call refused with 400 not again.
+func refuse(w http.ResponseWriter, api API, status int, kind, message string) {
+	b, err := errorBody(api, kind, message)
 	if err != nil {
 		http.Error(w, message, status)
 		return

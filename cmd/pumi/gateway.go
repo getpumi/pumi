@@ -23,9 +23,13 @@ import (
 	"getpumi.dev/pumi/internal/runner"
 )
 
-// providerURL is the base URL of the provider to which the gateway sends
-// the calls. The tests set it to a fake provider.
-var providerURL = "https://api.anthropic.com"
+// providerURLs are the base URLs of the providers to which the gateway
+// sends the calls, by API (decision 0243). The tests set them to fake
+// providers.
+var providerURLs = map[gateway.API]string{
+	gateway.MessagesAPI:  "https://api.anthropic.com",
+	gateway.ResponsesAPI: "https://api.openai.com",
+}
 
 // gatewayShutdown is how long pumi run waits for the gateway's calls in
 // progress when it stops.
@@ -57,7 +61,9 @@ func (m *modelGateway) shutdown(ctx context.Context) {
 }
 
 // serveGateway serves the model gateway of embedded mode on 127.0.0.1, at
-// a port the system picks, in front of providerURL (decision 0231). For an
+// a port the system picks, in front of providerURLs (decision 0231). The
+// calls of each adapter go to the provider of the API of its models
+// (adapterAPIs). For an
 // adapter in the API key mode, the gateway sends the key of the
 // environment variable that its entry names on every call of its
 // invocations (decisions 0225 and 0245). An adapter in the sign-in mode
@@ -67,6 +73,10 @@ func (m *modelGateway) shutdown(ctx context.Context) {
 // calls it could not pass to log, which never holds a key or a token.
 func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGateway, error) {
 	if err := checkPricedModels(cfg); err != nil {
+		return nil, err
+	}
+	apis, err := adapterAPIs(cfg)
+	if err != nil {
 		return nil, err
 	}
 	keys := map[string]string{}
@@ -82,12 +92,17 @@ func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGatewa
 	if len(keys) == 0 {
 		return nil, nil
 	}
-	upstream, err := url.Parse(providerURL)
-	if err != nil {
-		return nil, fmt.Errorf("the provider's URL %q: %w", providerURL, err)
+	upstreams := map[gateway.API]*url.URL{}
+	for api, raw := range providerURLs {
+		u, err := url.Parse(raw)
+		if err != nil {
+			return nil, fmt.Errorf("the provider's URL %q: %w", raw, err)
+		}
+		upstreams[api] = u
 	}
 	g, err := gateway.New(gateway.Config{
-		Upstream: upstream, APIKeys: keys, Roles: modelRoles(cfg), AdapterRoles: fallbackRoles(cfg),
+		Upstreams: upstreams, AdapterAPIs: apis,
+		APIKeys: keys, Roles: modelRoles(cfg), AdapterRoles: fallbackRoles(cfg),
 		Log: slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelInfo})),
 	})
 	if err != nil {
@@ -164,6 +179,62 @@ func checkPricedModels(cfg *config) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// adapterAPIs returns the API of each adapter that a model role or a
+// fallback names, the API that the price table lists for its models
+// (decisions 0243 and 0261), and refuses an adapter whose models use two
+// APIs, because its harness speaks one. checkPricedModels has refused a
+// model that the table does not list.
+func adapterAPIs(cfg *config) (map[string]gateway.API, error) {
+	uses := modelUses(cfg)
+	out := map[string]gateway.API{}
+	var errs []error
+	for _, adapter := range slices.Sorted(maps.Keys(uses)) {
+		byAPI := uses[adapter]
+		apis := slices.Sorted(maps.Keys(byAPI))
+		if len(apis) == 1 {
+			out[adapter] = apis[0]
+			continue
+		}
+		var each []string
+		for _, api := range apis {
+			for _, u := range byAPI[api] {
+				each = append(each, fmt.Sprintf("%s for the role %q on the %s API", u.model, u.role, api))
+			}
+		}
+		errs = append(errs, fmt.Errorf("the adapter %q is given models of two APIs, which its harness cannot both speak: %s", adapter, strings.Join(each, ", ")))
+	}
+	return out, errors.Join(errs...)
+}
+
+// modelUse is a model that a model role gives an adapter.
+type modelUse struct{ role, model string }
+
+// modelUses returns, by adapter and by API, the models that the model
+// roles and their fallbacks give each adapter, of those that the price
+// table lists.
+func modelUses(cfg *config) map[string]map[gateway.API][]modelUse {
+	uses := map[string]map[gateway.API][]modelUse{}
+	add := func(adapter, role, model string) {
+		m, ok := gateway.Price(model)
+		if !ok {
+			return
+		}
+		if uses[adapter] == nil {
+			uses[adapter] = map[gateway.API][]modelUse{}
+		}
+		uses[adapter][m.API] = append(uses[adapter][m.API], modelUse{role, model})
+	}
+	roles := cfg.file.GetModels().GetRoles()
+	for _, name := range slices.Sorted(maps.Keys(roles)) {
+		r := roles[name]
+		add(r.GetAdapter(), name, r.GetModel())
+		if f := r.GetFallback(); f.GetModel() != "" {
+			add(f.GetAdapter(), name, f.GetModel())
+		}
+	}
+	return uses
 }
 
 // roleModels returns the models of each model role for an adapter in the

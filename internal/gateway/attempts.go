@@ -26,11 +26,9 @@ const gatewayPrefix = "pumi gateway: "
 const maxDiscard = 1 << 20
 
 // checkRoles refuses a model role without a model, with a model that the
-// price table does not list, or with a fallback that is its own model
-// (decision 0233). The price table lists only models of Anthropic's
-// Messages API, so a role's two models use the same API. A role may have
-// no fallback model, when its fallback is on another adapter (decision
-// 0246).
+// price table does not list, with a fallback that is its own model or
+// that uses another API (decision 0233). A role may have no fallback
+// model, when its fallback is on another adapter (decision 0246).
 func checkRoles(roles map[string]Role) error {
 	var errs []error
 	for name, r := range roles {
@@ -42,17 +40,27 @@ func checkRoles(roles map[string]Role) error {
 		case r.Model == r.Fallback:
 			errs = append(errs, fmt.Errorf("gateway: the model role %q has %s as its model and as its fallback model", name, r.Model))
 		default:
-			for _, m := range []string{r.Model, r.Fallback} {
-				if m == "" {
-					continue
-				}
-				if _, ok := Price(m); !ok {
-					errs = append(errs, fmt.Errorf("gateway: the model role %q names the model %q, which the price table (version %s) does not list", name, m, PricesVersion))
-				}
-			}
+			errs = append(errs, roleModelErrors(name, r)...)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// roleModelErrors refuses a model of the role that the price table does
+// not list, and a fallback model of another API than the role's model.
+func roleModelErrors(name string, r Role) []error {
+	var errs []error
+	for _, m := range []string{r.Model, r.Fallback} {
+		if _, ok := Price(m); !ok && m != "" {
+			errs = append(errs, fmt.Errorf("gateway: the model role %q names the model %q, which the price table (version %s) does not list", name, m, PricesVersion))
+		}
+	}
+	model, okModel := Price(r.Model)
+	fb, okFallback := Price(r.Fallback)
+	if okModel && okFallback && model.API != fb.API {
+		errs = append(errs, fmt.Errorf("gateway: the model role %q has the model %s of the %s API and the fallback model %s of the %s API, which must use the same API", name, r.Model, model.API, r.Fallback, fb.API))
+	}
+	return errs
 }
 
 // checkAdapterRoles refuses a model role of an adapter that checkRoles
@@ -73,8 +81,8 @@ func checkAdapterRoles(byAdapter map[string]map[string]Role) error {
 	return errors.Join(errs...)
 }
 
-// withModel returns the uncompressed body of a call of the Messages API
-// with its top-level model replaced by model, and every other byte as it
+// withModel returns the uncompressed body of a call with its top-level
+// model replaced by model, and every other byte as it
 // was.
 func withModel(plain []byte, model string) ([]byte, error) {
 	dec := json.NewDecoder(bytes.NewReader(plain))
@@ -151,7 +159,7 @@ func (a *attempts) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		if a.g.refuseAtCap(c.session) {
 			a.g.note(c, "the invocation reached its token or cost cap; the further call on %s was not sent", c.model)
-			return capResponse(req), nil
+			return capResponse(req, c.session.api), nil
 		}
 		req = resend(req, c.body)
 	}
@@ -246,11 +254,8 @@ func resend(req *http.Request, body []byte) *http.Request {
 
 // capResponse is the gateway's refusal of a further call at the cap, in
 // the form that refuse writes.
-func capResponse(req *http.Request) *http.Response {
-	b, _ := json.Marshal(map[string]any{
-		"type":  "error",
-		"error": map[string]string{"type": "permission_error", "message": capMessage},
-	})
+func capResponse(req *http.Request, api API) *http.Response {
+	b, _ := errorBody(api, "permission_error", capMessage)
 	h := http.Header{}
 	h.Set("Content-Type", "application/json")
 	h.Set("X-Should-Retry", "false")

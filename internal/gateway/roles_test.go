@@ -217,7 +217,7 @@ func TestNewRefusesARoleItCannotUse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = gateway.New(gateway.Config{Upstream: upstream, Roles: map[string]gateway.Role{role: r}})
+			_, err = gateway.New(gateway.Config{Upstreams: map[gateway.API]*url.URL{gateway.MessagesAPI: upstream}, Roles: map[string]gateway.Role{role: r}})
 			if err == nil || !strings.Contains(err.Error(), `"frontier"`) {
 				t.Errorf("New() error = %v, want one that names the role", err)
 			}
@@ -558,7 +558,7 @@ func TestNewRefusesABadAdapterRole(t *testing.T) {
 		"unlisted model": {Model: "claude-unknown"},
 		"a fallback":     {Model: model, Fallback: fallback},
 	} {
-		_, err := gateway.New(gateway.Config{Upstream: u, AdapterRoles: map[string]map[string]gateway.Role{"other": {role: r}}})
+		_, err := gateway.New(gateway.Config{Upstreams: map[gateway.API]*url.URL{gateway.MessagesAPI: u}, AdapterRoles: map[string]map[string]gateway.Role{"other": {role: r}}})
 		if err == nil {
 			t.Errorf("New with an adapter role with %s succeeded, want an error", name)
 		}

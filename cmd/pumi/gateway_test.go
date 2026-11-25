@@ -217,10 +217,10 @@ func fakeProvider(t *testing.T) *provider {
 	p := &provider{}
 	srv := httptest.NewServer(p)
 	t.Cleanup(srv.Close)
-	old := providerURL
-	providerURL = srv.URL
+	old := providerURLs[gateway.MessagesAPI]
+	providerURLs[gateway.MessagesAPI] = srv.URL
 	t.Setenv(testProviderEnv, srv.URL)
-	t.Cleanup(func() { providerURL = old })
+	t.Cleanup(func() { providerURLs[gateway.MessagesAPI] = old })
 	return p
 }
 

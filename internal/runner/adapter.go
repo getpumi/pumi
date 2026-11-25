@@ -4,7 +4,6 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,21 +12,27 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
+	"getpumi.dev/pumi/internal/shared"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // execution is how one run of the adapter ended.
 type execution struct {
-	// stdout is the adapter's standard output.
-	stdout []byte
+	// result is the result that the adapter wrote as the last line of its
+	// standard output, and readErr the error that ended the reading of its
+	// standard output, or that says it wrote no result (decision 0252).
+	result  *harnessv1.Result
+	readErr error
 	// waitErr is the error of waiting for the adapter: nil when it exited
 	// with status 0.
 	waitErr error
@@ -53,10 +58,10 @@ func (r *run) execute(ctx context.Context, inv *harnessv1.Invocation) (*executio
 	if err != nil {
 		return nil, fmt.Errorf("the harness invocation could not be written: %w", err)
 	}
-	var stdout bytes.Buffer
+	stdout := &stdoutReader{usage: r.logUsage}
 	cmd := &exec.Cmd{
 		Path: r.cfg.Adapter, Args: []string{r.cfg.Adapter}, Dir: inv.GetWorkspace(), Env: os.Environ(),
-		Stdout: &stdout, Stderr: r.log,
+		Stdout: stdout, Stderr: r.log,
 		// After the adapter exits, Wait waits this long for the copies of
 		// its output to end, which a process it started can hold open.
 		WaitDelay: r.cfg.Grace,
@@ -83,7 +88,7 @@ func (r *run) execute(ctx context.Context, inv *harnessv1.Invocation) (*executio
 	s := &supervisor{run: r, process: cmd.Process, stdin: stdin, written: written, done: done}
 	ex := s.supervise(ctx)
 	ex.elapsed = time.Since(started)
-	ex.stdout = stdout.Bytes()
+	ex.result, ex.readErr = stdout.end()
 	// The processes that the adapter started and left behind end with it.
 	if err := killGroup(cmd.Process); err != nil {
 		r.log.note("the processes that the adapter started could not be killed: %v", err)
@@ -250,7 +255,8 @@ func heartbeatInterval(timeout *durationpb.Duration) time.Duration {
 // the resulting tree and the structured output. The usage is the gateway's
 // totals with the measured wall time (decision 0230). It returns the
 // outcome, with the reason when the invocation failed. A failed
-// invocation's result holds at most the usage.
+// invocation's result holds at most the usage and the refusals that the
+// harness reported (decision 0249).
 func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageType, work, index string, totals GatewayTotals, result *eventsv1.InvocationResult) (eventsv1.InvocationFinished_Outcome, error) {
 	result.Usage = &eventsv1.InvocationResult_Usage{
 		Tokens: totals.Tokens, CostMicrodollars: totals.CostMicrodollars,
@@ -268,9 +274,18 @@ func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageT
 	case capReached:
 		failed = eventsv1.InvocationFinished_OUTCOME_CAP_REACHED
 	}
-	res, err := parseResult(ex)
+	res, err := resultOf(ex)
 	if err != nil {
 		return failed, err
+	}
+	// The refusals stay in the result whatever the outcome, because they
+	// can say why the run failed (decision 0249).
+	if refusals := res.GetRefusals(); len(refusals) > 0 {
+		result.Refusals = cloneRefusals(refusals)
+		r.log.note("the harness refused: %s (decision 0249)", shared.Refusals(refusals))
+	}
+	if res.GetStatus() == harnessv1.Result_STATUS_LIMITED {
+		r.log.note("the provider's usage or rate limit stopped the run of %s (decision 0249)", r.doc.GetInvocation())
 	}
 	if u := res.GetUsage(); u != nil {
 		r.log.note("the adapter reported %d tokens, %d microdollars and %d s; the usage is the model gateway's totals (decision 0230)",
@@ -354,21 +369,43 @@ func (r *run) put(ctx context.Context, root *os.Root, name string) (string, erro
 	return hash, nil
 }
 
-// parseResult parses the adapter's result from its standard output, with
-// unknown fields refused. A non-zero exit status, a missing result and a
-// result that does not parse are errors (decision 0158).
-func parseResult(ex *execution) (*harnessv1.Result, error) {
+// resultOf returns the adapter's result, which the runner read from its
+// standard output with unknown fields refused. A non-zero exit status, a
+// missing result, a line that does not parse and a line after the result
+// are errors (decisions 0158 and 0252).
+func resultOf(ex *execution) (*harnessv1.Result, error) {
 	if ex.waitErr != nil {
 		return nil, fmt.Errorf("the adapter ended with %w", ex.waitErr)
 	}
-	if len(bytes.TrimSpace(ex.stdout)) == 0 {
-		return nil, errors.New("the adapter wrote no result")
+	if ex.readErr != nil {
+		return nil, ex.readErr
 	}
-	res := &harnessv1.Result{}
-	if err := protojson.Unmarshal(ex.stdout, res); err != nil {
-		return nil, fmt.Errorf("the adapter's result does not parse: %w", err)
+	return ex.result, nil
+}
+
+// cloneRefusals returns a copy of refusals, so that the result shares
+// nothing with the adapter's.
+func cloneRefusals(refusals []*harnessv1.Refusal) []*harnessv1.Refusal {
+	out := make([]*harnessv1.Refusal, len(refusals))
+	for i, r := range refusals {
+		out[i] = proto.CloneOf(r)
 	}
-	return res, nil
+	return out
+}
+
+// logUsage writes a usage figure that the adapter passed while it ran to
+// the log (decision 0241).
+func (r *run) logUsage(u *harnessv1.UsageFigure) {
+	var extra strings.Builder
+	if u.GetSpeed() != "" {
+		fmt.Fprintf(&extra, ", speed %s", u.GetSpeed())
+	}
+	if u.GetInferenceGeo() != "" {
+		fmt.Fprintf(&extra, ", inference geography %s", u.GetInferenceGeo())
+	}
+	r.log.note("the adapter passed the usage of a call to %s: %d input, %d five-minute cache write, %d one-hour cache write, %d cache read and %d output tokens, %d web searches%s",
+		u.GetModel(), u.GetInputTokens(), u.GetFiveMinuteCacheWriteTokens(), u.GetOneHourCacheWriteTokens(),
+		u.GetCacheReadTokens(), u.GetOutputTokens(), u.GetWebSearches(), extra.String())
 }
 
 // parseOutput parses the structured output of res strictly into a new
@@ -411,6 +448,9 @@ func outcomeOf(status harnessv1.Result_Status, stopped bool) (eventsv1.Invocatio
 	case status == harnessv1.Result_STATUS_COMPLETED:
 		return eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, nil
 	case status == harnessv1.Result_STATUS_FAILED:
+		return eventsv1.InvocationFinished_OUTCOME_FAILED, nil
+	case status == harnessv1.Result_STATUS_LIMITED:
+		// The run fails with the limit as its reason (decision 0249).
 		return eventsv1.InvocationFinished_OUTCOME_FAILED, nil
 	case status == harnessv1.Result_STATUS_STOPPED:
 		return 0, errors.New("the adapter stopped, but the runner did not ask it to")

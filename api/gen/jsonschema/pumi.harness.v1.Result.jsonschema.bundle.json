@@ -1,5 +1,51 @@
 {
   "$defs": {
+    "pumi.harness.v1.Refusal.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Refusal is one thing that the run asked to do and its harness refused\n (decision 0249).",
+      "properties": {
+        "command": {
+          "description": "The command that the run asked to run, as the harness reported it.",
+          "type": "string"
+        },
+        "host": {
+          "description": "The host that the run asked to reach.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The path, relative to the workspace or absolute, that the run asked\n to read or write.",
+          "type": "string"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "pattern": "^TOOL_KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TOOL_KIND_READ",
+                "TOOL_KIND_EDIT",
+                "TOOL_KIND_RUN_COMMANDS",
+                "TOOL_KIND_WEB"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The kind of tool that asked.",
+          "title": "Tool Kind"
+        }
+      },
+      "title": "Refusal",
+      "type": "object"
+    },
     "pumi.harness.v1.Result.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -26,6 +72,13 @@
           },
           "type": "array"
         },
+        "refusals": {
+          "description": "The refusals that the harness reported: what the run asked to do that\n its settings refused. The runner puts them in invocation.result, and\n the question of an escalation names them. An adapter reports what its\n harness tells it, so a harness that reports no refusals gives none\n (decision 0249).",
+          "items": {
+            "$ref": "#/$defs/pumi.harness.v1.Refusal.jsonschema.json"
+          },
+          "type": "array"
+        },
         "status": {
           "anyOf": [
             {
@@ -36,7 +89,8 @@
               "enum": [
                 "STATUS_COMPLETED",
                 "STATUS_FAILED",
-                "STATUS_STOPPED"
+                "STATUS_STOPPED",
+                "STATUS_LIMITED"
               ],
               "type": "string"
             },

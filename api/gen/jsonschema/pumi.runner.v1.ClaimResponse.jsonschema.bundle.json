@@ -61,7 +61,7 @@
       },
       "properties": {
         "commands": {
-          "description": "The commands the run may run, as prefixes such as \"go test\".",
+          "description": "The commands the run may run, as prefixes such as \"go test\". An entry\n may begin with one or more NAME=value assignments, such as\n \"GOWORK=off go test\", and then allows that command with exactly those\n assignments: the entry \"go test\" does not allow \"GOWORK=off go test\",\n and no entry allows an assignment it does not name. Each adapter\n translates an entry as written (decision 0248).",
           "items": {
             "type": "string"
           },

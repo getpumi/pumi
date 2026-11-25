@@ -88,11 +88,12 @@ func TestTheCapabilityListIsThatOf0159(t *testing.T) {
 
 func TestTheResultIsThatOf0160(t *testing.T) {
 	result := (&harnessv1.Result{}).ProtoReflect().Descriptor()
-	if got, want := fieldNames(result), []string{"output", "output_files", "status", "usage"}; !slices.Equal(got, want) {
-		t.Fatalf("Result has %q, want %q", got, want)
+	if got, want := fieldNames(result), []string{"output", "output_files", "refusals", "status", "usage"}; !slices.Equal(got, want) {
+		t.Fatalf("Result has %q, want %q (decisions 0160 and 0249)", got, want)
 	}
-	if got, want := valueNames(fieldOf(t, result, "status").Enum()), []string{"STATUS_UNSPECIFIED", "STATUS_COMPLETED", "STATUS_FAILED", "STATUS_STOPPED"}; !slices.Equal(got, want) {
-		t.Errorf("Result.Status is %q, want %q", got, want)
+	want := []string{"STATUS_UNSPECIFIED", "STATUS_COMPLETED", "STATUS_FAILED", "STATUS_STOPPED", "STATUS_LIMITED"}
+	if got := valueNames(fieldOf(t, result, "status").Enum()); !slices.Equal(got, want) {
+		t.Errorf("Result.Status is %q, want %q (decisions 0160 and 0249)", got, want)
 	}
 	if f := fieldOf(t, result, "output"); f.Kind() != protoreflect.StringKind {
 		t.Error("Result.output is not a string of JSON")
@@ -102,5 +103,66 @@ func TestTheResultIsThatOf0160(t *testing.T) {
 	}
 	if fieldOf(t, result, "usage").Message() != (&harnessv1.Usage{}).ProtoReflect().Descriptor() {
 		t.Error("Result.usage is not a Usage")
+	}
+}
+
+func TestARefusalHasTheKindOfToolAndWhatWasAsked(t *testing.T) {
+	result := (&harnessv1.Result{}).ProtoReflect().Descriptor()
+	refusals := fieldOf(t, result, "refusals")
+	if !refusals.IsList() || refusals.Message() != (&harnessv1.Refusal{}).ProtoReflect().Descriptor() {
+		t.Fatal("Result.refusals is not a list of Refusal (decision 0249)")
+	}
+	refusal := refusals.Message()
+	if got, want := fieldNames(refusal), []string{"command", "host", "path", "tool"}; !slices.Equal(got, want) {
+		t.Fatalf("Refusal has %q, want %q", got, want)
+	}
+	if fieldOf(t, refusal, "tool").Enum() != harnessv1.Capabilities_TOOL_KIND_UNSPECIFIED.Descriptor() {
+		t.Error("Refusal.tool is not a Capabilities.ToolKind")
+	}
+	for _, name := range []string{"path", "command", "host"} {
+		f := fieldOf(t, refusal, name)
+		if f.Kind() != protoreflect.StringKind || f.ContainingOneof() == nil || f.ContainingOneof().Name() != "asked" {
+			t.Errorf("Refusal.%s is not a string of the oneof asked", name)
+		}
+	}
+}
+
+func TestEachLineOfStandardOutputIsAUsageFigureOrTheResult(t *testing.T) {
+	line := (&harnessv1.Line{}).ProtoReflect().Descriptor()
+	if got, want := fieldNames(line), []string{"result", "usage"}; !slices.Equal(got, want) {
+		t.Fatalf("Line has %q, want %q (decision 0241)", got, want)
+	}
+	for name, md := range map[string]protoreflect.MessageDescriptor{
+		"result": (&harnessv1.Result{}).ProtoReflect().Descriptor(),
+		"usage":  (&harnessv1.UsageFigure{}).ProtoReflect().Descriptor(),
+	} {
+		f := fieldOf(t, line, name)
+		if f.Message() != md || f.ContainingOneof() == nil || f.ContainingOneof().Name() != "kind" {
+			t.Errorf("Line.%s is not a %s of the oneof kind", name, md.Name())
+		}
+	}
+}
+
+func TestAUsageFigureHasTheModelAndEveryKindOfTokenThePriceTablePrices(t *testing.T) {
+	figure := (&harnessv1.UsageFigure{}).ProtoReflect().Descriptor()
+	want := []string{
+		"cache_read_tokens", "five_minute_cache_write_tokens", "inference_geo", "input_tokens", "model",
+		"one_hour_cache_write_tokens", "output_tokens", "speed", "web_searches",
+	}
+	if got := fieldNames(figure); !slices.Equal(got, want) {
+		t.Fatalf("UsageFigure has %q, want %q (decisions 0239 and 0241)", got, want)
+	}
+	for _, name := range want {
+		f := fieldOf(t, figure, name)
+		switch name {
+		case "model", "speed", "inference_geo":
+			if f.Kind() != protoreflect.StringKind {
+				t.Errorf("UsageFigure.%s is not a string", name)
+			}
+		default:
+			if f.Kind() != protoreflect.Int64Kind {
+				t.Errorf("UsageFigure.%s is not an int64", name)
+			}
+		}
 	}
 }

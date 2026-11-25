@@ -21,6 +21,7 @@ import (
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
 	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 	"getpumi.dev/pumi/internal/kernel/workflow"
+	"getpumi.dev/pumi/internal/shared"
 )
 
 // Source is the source attribute of the events that the kernel appends
@@ -100,6 +101,9 @@ type kernel struct {
 	// and finished the invocations that finished.
 	invocations map[string]*planRun
 	finished    map[string]bool
+	// refusals holds the refusals that the harness reported in the
+	// invocation.result of each invocation that has any (decision 0249).
+	refusals map[string][]*harnessv1.Refusal
 	// documents holds the document of each invocation that the log
 	// requests, and resolved the external actions in doubt whose
 	// invocation.finished the kernel appended.
@@ -244,7 +248,7 @@ func newKernel(cfg Config) (*kernel, error) {
 	}
 	k := &kernel{
 		cfg: cfg, states: map[string]*workflowv1.State{}, plans: map[string]*planRun{},
-		invocations: map[string]*planRun{}, finished: map[string]bool{},
+		invocations: map[string]*planRun{}, finished: map[string]bool{}, refusals: map[string][]*harnessv1.Refusal{},
 		documents: map[string]*runnerv1.Invocation{}, resolved: map[string]bool{}, ended: map[string]bool{}, firedBy: map[string]fired{},
 		requestedBy: map[string]bool{}, decisions: map[string][]decision{}, positionOf: map[string]uint64{},
 	}
@@ -508,6 +512,16 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 			return err
 		}
 		k.finished[f.GetInvocation()] = true
+		return nil
+	},
+	events.TypeInvocationResult: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
+		var res eventsv1.InvocationResult
+		if err := unpack(e, &res); err != nil {
+			return err
+		}
+		if len(res.GetRefusals()) > 0 {
+			k.refusals[res.GetInvocation()] = res.GetRefusals()
+		}
 		return nil
 	},
 	events.TypeLeaseGranted: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
@@ -837,8 +851,19 @@ func requestedBy(e *cloudeventsv1.CloudEvent) string {
 }
 
 // question returns the question of the escalation of the plan from its
-// state on trigger, after the actions denied were denied.
+// state on trigger, after the actions denied were denied. When the result
+// of the plan's last invocation has refusals that the harness reported, it
+// names them (decision 0249).
 func (r *planRun) question(trigger string, denied []string) string {
+	q := r.reason(trigger, denied)
+	if refused := shared.Refusals(r.k.refusals[r.invocation]); refused != "" && trigger != InDoubt {
+		q += " The harness refused: " + refused + " (decision 0249)."
+	}
+	return q
+}
+
+// reason returns the question of the escalation without the refusals.
+func (r *planRun) reason(trigger string, denied []string) string {
 	if trigger == InDoubt {
 		if len(denied) == 0 {
 			return fmt.Sprintf("The lease of the invocation %s of the state %s ended with no result, so it may have run (decisions 0191 and 0199).",

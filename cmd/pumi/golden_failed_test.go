@@ -10,6 +10,7 @@ import (
 	"getpumi.dev/pumi/api/events"
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
+	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 )
 
 // failedSettings are the settings of the cases in which an agent run
@@ -27,6 +28,24 @@ func reportFailedOf(invocation string) step {
 			p.t.Fatalf("the seed reports %s, which the runner did not claim", invocation)
 		}
 		result := &eventsv1.InvocationResult{Invocation: invocation, Usage: underCaps}
+		p.report(result, eventsv1.InvocationFinished_OUTCOME_FAILED, c.GetLeaseNumber())
+	}
+}
+
+// reportFailedWithRefusalsOf reports the claimed invocation with the
+// outcome failed and the refusals the harness reported, as the runner does
+// when the adapter's result has refusals (decision 0249).
+func reportFailedWithRefusalsOf(invocation string) step {
+	return func(p *pumi) {
+		c, ok := p.claims[invocation]
+		if !ok {
+			p.t.Fatalf("the seed reports %s, which the runner did not claim", invocation)
+		}
+		result := &eventsv1.InvocationResult{Invocation: invocation, Usage: underCaps, Refusals: []*harnessv1.Refusal{
+			{Tool: harnessv1.Capabilities_TOOL_KIND_EDIT, Asked: &harnessv1.Refusal_Path{Path: "README.md"}},
+			{Tool: harnessv1.Capabilities_TOOL_KIND_RUN_COMMANDS, Asked: &harnessv1.Refusal_Command{Command: "GOFLAGS=-x go test ./..."}},
+			{Tool: harnessv1.Capabilities_TOOL_KIND_WEB, Asked: &harnessv1.Refusal_Host{Host: "example.com"}},
+		}}
 		p.report(result, eventsv1.InvocationFinished_OUTCOME_FAILED, c.GetLeaseNumber())
 	}
 }
@@ -82,5 +101,33 @@ func TestAFailedAgentRunWhoseRetryIsDeniedEscalates(t *testing.T) {
 	}
 	if q := dataOf(t, raised[0], &eventsv1.EscalationRaised{}).GetQuestion(); !strings.Contains(q, "plan-a/2") || !strings.Contains(q, "failed") || !strings.Contains(q, "retry denied") {
 		t.Errorf("the question %q does not say that plan-a/2 failed and that retry was denied", q)
+	}
+}
+
+// TestTheReasonOfAnEscalationNamesTheRefusals: the run again fails with
+// refusals that the harness reported, and the question of the escalation
+// names each of them (decision 0249). The refusals of the first run, which
+// is not the one that escalates, are not named.
+func TestTheReasonOfAnEscalationNamesTheRefusals(t *testing.T) {
+	p := cancelPumi(t, "spike", failedSettings)
+	p.doSteps(addPlanA, claimStep, reportFailedWithRefusalsOf("plan-a/1"), claimStep, reportFailedOf("plan-a/2"))
+	raised := kernelEvents(p.events(), events.TypeEscalationRaised, casePlan)
+	if len(raised) != 1 {
+		t.Fatalf("the kernel raised %d escalations, want 1", len(raised))
+	}
+	if q := dataOf(t, raised[0], &eventsv1.EscalationRaised{}).GetQuestion(); strings.Contains(q, "refused") {
+		t.Errorf("the question %q names refusals, but plan-a/2 had none", q)
+	}
+
+	p = cancelPumi(t, "spike", failedSettings)
+	p.doSteps(addPlanA, claimStep, reportFailedOf("plan-a/1"), claimStep, reportFailedWithRefusalsOf("plan-a/2"))
+	raised = kernelEvents(p.events(), events.TypeEscalationRaised, casePlan)
+	if len(raised) != 1 {
+		t.Fatalf("the kernel raised %d escalations, want 1", len(raised))
+	}
+	q := dataOf(t, raised[0], &eventsv1.EscalationRaised{}).GetQuestion()
+	want := "The harness refused: editing the path README.md; running the command GOFLAGS=-x go test ./...; using the web at the host example.com (decision 0249)."
+	if !strings.Contains(q, "plan-a/2") || !strings.Contains(q, want) {
+		t.Errorf("the question %q does not name the refusals of plan-a/2 as %q", q, want)
 	}
 }

@@ -1,0 +1,386 @@
+{
+  "$defs": {
+    "pumi.harness.v1.Line.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Line is one line of the adapter's standard output (decisions 0241 and\n 0252). The adapter may write any number of usage figures, each as soon as\n its harness reports it, and then exactly one result, which is the last\n line. A line that does not parse, a line with neither, a line after the\n result and a missing result fail the invocation.",
+      "properties": {
+        "result": {
+          "$ref": "#/$defs/pumi.harness.v1.Result.jsonschema.json",
+          "description": "The result."
+        },
+        "usage": {
+          "$ref": "#/$defs/pumi.harness.v1.UsageFigure.jsonschema.json",
+          "description": "The usage of one model call, or of one turn for a harness that\n reports usage per turn, as the harness reported it."
+        }
+      },
+      "title": "Line",
+      "type": "object"
+    },
+    "pumi.harness.v1.Refusal.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Refusal is one thing that the run asked to do and its harness refused\n (decision 0249).",
+      "properties": {
+        "command": {
+          "description": "The command that the run asked to run, as the harness reported it.",
+          "type": "string"
+        },
+        "host": {
+          "description": "The host that the run asked to reach.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The path, relative to the workspace or absolute, that the run asked\n to read or write.",
+          "type": "string"
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "pattern": "^TOOL_KIND_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "TOOL_KIND_READ",
+                "TOOL_KIND_EDIT",
+                "TOOL_KIND_RUN_COMMANDS",
+                "TOOL_KIND_WEB"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The kind of tool that asked.",
+          "title": "Tool Kind"
+        }
+      },
+      "title": "Refusal",
+      "type": "object"
+    },
+    "pumi.harness.v1.Result.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Result is what a harness adapter writes to its standard output when it\n exits (decisions 0158 and 0160). Exit status 0 means a result was\n written. A non-zero exit status, a missing result or a result that does\n not parse fails the invocation.",
+      "patternProperties": {
+        "^(output_files)$": {
+          "description": "The paths of the output files, relative to the workspace. The runner\n uploads them to the blob store and records them by hash (decision\n 0033).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "output": {
+          "default": "",
+          "description": "The structured output, as JSON of the message named in the invocation's\n output schema.",
+          "type": "string"
+        },
+        "outputFiles": {
+          "description": "The paths of the output files, relative to the workspace. The runner\n uploads them to the blob store and records them by hash (decision\n 0033).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "refusals": {
+          "description": "The refusals that the harness reported: what the run asked to do that\n its settings refused. The runner puts them in invocation.result, and\n the question of an escalation names them. An adapter reports what its\n harness tells it, so a harness that reports no refusals gives none\n (decision 0249).",
+          "items": {
+            "$ref": "#/$defs/pumi.harness.v1.Refusal.jsonschema.json"
+          },
+          "type": "array"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "pattern": "^STATUS_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "STATUS_COMPLETED",
+                "STATUS_FAILED",
+                "STATUS_STOPPED",
+                "STATUS_LIMITED"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "The status.",
+          "title": "Status"
+        },
+        "usage": {
+          "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
+          "description": "The adapter's own usage figures, for information only. The runner\n writes them to the invocation's log; the usage of invocation.result is\n the model gateway's totals with the wall time the runner measured\n (decision 0230)."
+        }
+      },
+      "title": "Result",
+      "type": "object"
+    },
+    "pumi.harness.v1.Usage.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Usage is an amount of usage: of a budget, or what a run used (decision\n 0136).",
+      "patternProperties": {
+        "^(cost_microdollars)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        }
+      },
+      "properties": {
+        "costMicrodollars": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The cost in microdollars."
+        },
+        "seconds": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The wall time in seconds."
+        },
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens."
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    },
+    "pumi.harness.v1.UsageFigure.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "UsageFigure is the usage that the harness reported for one model call,\n or for one turn, with every kind of token that the list-price table\n prices (decisions 0239 and 0241). On the sign-in path the runner counts\n these figures; on the gateway path it writes them to the invocation's\n log, and the gateway's count is the one that counts (decision 0230).",
+      "patternProperties": {
+        "^(cache_read_tokens)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens read from the cache."
+        },
+        "^(five_minute_cache_write_tokens)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens written to the 5-minute cache. A cache write that the\n harness does not split by duration is a 5-minute write."
+        },
+        "^(inference_geo)$": {
+          "default": "",
+          "description": "The inference geography of the call as the provider reported it, such\n as \"us\"; empty when not reported.",
+          "type": "string"
+        },
+        "^(input_tokens)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The input tokens that were not read from or written to the prompt\n cache."
+        },
+        "^(one_hour_cache_write_tokens)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens written to the 1-hour cache."
+        },
+        "^(output_tokens)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The output tokens, thinking and reasoning included."
+        },
+        "^(web_searches)$": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of web searches that the call made."
+        }
+      },
+      "properties": {
+        "cacheReadTokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens read from the cache."
+        },
+        "fiveMinuteCacheWriteTokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens written to the 5-minute cache. A cache write that the\n harness does not split by duration is a 5-minute write."
+        },
+        "inferenceGeo": {
+          "default": "",
+          "description": "The inference geography of the call as the provider reported it, such\n as \"us\"; empty when not reported.",
+          "type": "string"
+        },
+        "inputTokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The input tokens that were not read from or written to the prompt\n cache."
+        },
+        "model": {
+          "default": "",
+          "description": "The model that answered, as the harness reported it.",
+          "type": "string"
+        },
+        "oneHourCacheWriteTokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The tokens written to the 1-hour cache."
+        },
+        "outputTokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The output tokens, thinking and reasoning included."
+        },
+        "speed": {
+          "default": "",
+          "description": "The speed of the call as the provider reported it, such as \"fast\";\n empty when not reported.",
+          "type": "string"
+        },
+        "webSearches": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "pattern": "^-?[0-9]+$",
+              "type": "string"
+            }
+          ],
+          "default": 0,
+          "description": "The number of web searches that the call made."
+        }
+      },
+      "title": "Usage Figure",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.harness.v1.Line.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.harness.v1.Line.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

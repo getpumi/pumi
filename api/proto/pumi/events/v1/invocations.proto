@@ -6,6 +6,7 @@ syntax = "proto3";
 package pumi.events.v1;
 
 import "pumi/events/v1/basis.proto";
+import "pumi/harness/v1/harness.proto";
 
 // InvocationRequested is the data of dev.getpumi.invocation.requested: the
 // kernel's intent to invoke a harness.
@@ -77,6 +78,9 @@ message InvocationResult {
   // invocation document names, as the runner parsed it (decisions 0160 and
   // 0162).
   string output = 6;
+  // The refusals that the harness reported, from the adapter's result
+  // (decision 0249).
+  repeated pumi.harness.v1.Refusal refusals = 7;
 }
 
 // InvocationFinished is the data of dev.getpumi.invocation.finished: the

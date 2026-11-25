@@ -136,6 +136,35 @@ func fakeAdapter(mode string) int {
 		time.Sleep(200 * time.Millisecond)
 		fmt.Fprintf(os.Stderr, "%s end\n", token[half:])
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
+	case "limited":
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_LIMITED, Refusals: testRefusals(), Usage: usage})
+	case "refusals":
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Refusals: testRefusals(), Usage: usage})
+	case "usage then stop":
+		// Pass a usage figure, then wait until standard input closes, so
+		// that the runner can have read the figure only before the result.
+		writeLine(&harnessv1.Line{Kind: &harnessv1.Line_Usage{Usage: testFigure()}})
+		_, _ = in.ReadString(0)
+		fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"standard input closed")
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_STOPPED, Output: `{"summary":"partial"}`, Usage: usage})
+	case "usage after the result":
+		result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
+		writeLine(&harnessv1.Line{Kind: &harnessv1.Line_Usage{Usage: testFigure()}})
+		return 0
+	case "two results":
+		result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
+	case "bare result":
+		// The result without a Line around it, as before decision 0252.
+		out, err := protojson.Marshal(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(string(out))
+		return 0
+	case "empty line":
+		writeLine(&harnessv1.Line{})
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
 	case "not json":
 		fmt.Println("this is not a result")
 		return 0
@@ -222,14 +251,38 @@ func write(name, content string) {
 	}
 }
 
-// result writes r to standard output and returns exit status 0.
+// result writes r to standard output as the last line and returns exit
+// status 0.
 func result(r *harnessv1.Result) int {
-	out, err := protojson.Marshal(r)
+	writeLine(&harnessv1.Line{Kind: &harnessv1.Line_Result{Result: r}})
+	return 0
+}
+
+// writeLine writes l to standard output as one line of protojson.
+func writeLine(l *harnessv1.Line) {
+	out, err := protojson.Marshal(l)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(string(out))
-	return 0
+}
+
+// testRefusals are the refusals the fake adapter reports: one of each
+// kind of what was asked.
+func testRefusals() []*harnessv1.Refusal {
+	return []*harnessv1.Refusal{
+		{Tool: harnessv1.Capabilities_TOOL_KIND_EDIT, Asked: &harnessv1.Refusal_Path{Path: "README.md"}},
+		{Tool: harnessv1.Capabilities_TOOL_KIND_RUN_COMMANDS, Asked: &harnessv1.Refusal_Command{Command: "GOFLAGS=-x go test ./..."}},
+		{Tool: harnessv1.Capabilities_TOOL_KIND_WEB, Asked: &harnessv1.Refusal_Host{Host: "example.com"}},
+	}
+}
+
+// testFigure is the usage figure the fake adapter passes during the run.
+func testFigure() *harnessv1.UsageFigure {
+	return &harnessv1.UsageFigure{
+		Model: "claude-sonnet-5-5", InputTokens: 3, FiveMinuteCacheWriteTokens: 5, OneHourCacheWriteTokens: 7,
+		CacheReadTokens: 11, OutputTokens: 13, WebSearches: 2, Speed: "fast", InferenceGeo: "us",
+	}
 }
 
 // fakeService is a RunnerService that hands out one invocation and records
@@ -633,7 +686,10 @@ func TestAFailedRun(t *testing.T) {
 }
 
 func TestAnInvalidResultFailsTheInvocation(t *testing.T) {
-	for _, mode := range []string{"not json", "no result", "exit 3", "unknown field", "no output", "stopped unasked"} {
+	for _, mode := range []string{
+		"not json", "no result", "exit 3", "unknown field", "no output", "stopped unasked",
+		"usage after the result", "two results", "bare result", "empty line",
+	} {
 		t.Run(mode, func(t *testing.T) {
 			f := newFixture(t, mode)
 			report := f.runOne(t)

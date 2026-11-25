@@ -136,6 +136,14 @@ func TestReportCarriesTheLeaseNumberAndTheResult(t *testing.T) {
 	}
 }
 
+func TestTheInvocationResultCarriesTheRefusals(t *testing.T) {
+	result := (&eventsv1.InvocationResult{}).ProtoReflect().Descriptor()
+	f := fieldOf(t, result, "refusals")
+	if !f.IsList() || f.Message() != (&harnessv1.Refusal{}).ProtoReflect().Descriptor() {
+		t.Error("InvocationResult.refusals is not a list of pumi.harness.v1.Refusal (decision 0249)")
+	}
+}
+
 func TestSendLogCarriesTheLeaseNumberAndTheOutput(t *testing.T) {
 	m := runnerService(t).Methods().ByName("SendLog")
 	if m == nil {

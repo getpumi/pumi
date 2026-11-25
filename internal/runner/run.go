@@ -161,8 +161,12 @@ func Run(ctx context.Context, cfg Config) error {
 // The runner checks the input tree out into a new workspace, starts the
 // adapter there with the harness invocation as one line on its standard
 // input, sends heartbeats while it runs and batches of its standard error
-// as the log, and reads its result from its standard output (decision
-// 0158). It parses the structured output strictly into the message that
+// as the log, and reads its standard output as lines: the usage figures
+// that the adapter passes while it runs, which the runner writes to the log
+// as they arrive, and the result as the last line (decisions 0158, 0241
+// and 0252). The refusals of the result go into invocation.result, and a
+// result with the status limited fails the invocation with the limit as
+// its reason in the log (decision 0249). It parses the structured output strictly into the message that
 // the document names, computes the resulting tree from the workspace and
 // fails the invocation when a file was written outside the allowed paths,
 // before the result is appended (decisions 0159, 0160 and 0162). It then

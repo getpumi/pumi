@@ -130,7 +130,9 @@ func (h *runnerHandler) Claim(ctx context.Context, req *runnerv1.ClaimRequest) (
 }
 
 // claim claims the first open invocation in one of id's roles that a
-// runner may claim, and returns nil when there is none.
+// runner may claim, and returns nil when there is none. The response says
+// whether the model role of an agent run is on its fallback (decision
+// 0246).
 func (s *Service) claim(id Identity) (*runnerv1.ClaimResponse, error) {
 	open, err := s.openInvocations()
 	if err != nil {
@@ -141,9 +143,16 @@ func (s *Service) claim(id Identity) (*runnerv1.ClaimResponse, error) {
 			continue
 		}
 		res, err := s.claimOne(doc, id.Principal)
-		if err != nil || res != nil {
-			return res, err
+		if err != nil || res == nil {
+			if err != nil {
+				return nil, err
+			}
+			continue
 		}
+		if res.ModelRoleSwitched, err = s.roleSwitched(doc); err != nil {
+			return nil, logError(err)
+		}
+		return res, nil
 	}
 	return nil, nil
 }
@@ -293,7 +302,7 @@ func (h *runnerHandler) Report(ctx context.Context, req *runnerv1.ReportRequest)
 		return nil, logError(err)
 	}
 	appender, role := reportOf(doc)
-	evs, err := h.reported(req, appender, st)
+	evs, err := h.reported(req, doc, appender, st)
 	if err != nil {
 		return nil, err
 	}
@@ -315,14 +324,14 @@ func (h *runnerHandler) Report(ctx context.Context, req *runnerv1.ReportRequest)
 	}
 }
 
-// reported checks the report req of an invocation at the state st and
+// reported checks the report req of doc's invocation at the state st and
 // returns the events to write: the result, the reported events, the end
 // and the release of the lease. It refuses a report with an outcome that a
-// runner does not report, a result of another invocation and an event that
-// is not a valid Pumi event or that names another invocation, with invalid
-// argument, and an event that appender may not append, with permission
-// denied.
-func (h *runnerHandler) reported(req *runnerv1.ReportRequest, appender events.Appender, st invocationState) ([]*cloudeventsv1.CloudEvent, error) {
+// runner does not report, a result of another invocation, an event that
+// is not a valid Pumi event or that names another invocation and a switch
+// of a model role that checkSwitch refuses, with invalid argument, and an
+// event that appender may not append, with permission denied.
+func (h *runnerHandler) reported(req *runnerv1.ReportRequest, doc *runnerv1.Invocation, appender events.Appender, st invocationState) ([]*cloudeventsv1.CloudEvent, error) {
 	inv := req.GetInvocation()
 	if !slices.Contains(reportedOutcomes, req.GetOutcome()) {
 		return nil, connect.Errorf(connect.CodeInvalidArgument, "the report has the outcome %v, which a runner does not report", req.GetOutcome())
@@ -343,6 +352,9 @@ func (h *runnerHandler) reported(req *runnerv1.ReportRequest, appender events.Ap
 	for i, original := range req.GetEvents() {
 		e, err := h.reportedEvent(i, original, appender, inv)
 		if err != nil {
+			return nil, err
+		}
+		if err := checkSwitch(i, e, doc); err != nil {
 			return nil, err
 		}
 		evs = append(evs, e)

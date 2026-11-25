@@ -87,7 +87,7 @@ func serveGateway(ctx context.Context, cfg *config, log io.Writer) (*modelGatewa
 		return nil, fmt.Errorf("the provider's URL %q: %w", providerURL, err)
 	}
 	g, err := gateway.New(gateway.Config{
-		Upstream: upstream, APIKeys: keys, Roles: modelRoles(cfg),
+		Upstream: upstream, APIKeys: keys, Roles: modelRoles(cfg), AdapterRoles: fallbackRoles(cfg),
 		Log: slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelInfo})),
 	})
 	if err != nil {
@@ -116,18 +116,45 @@ func modelRoles(cfg *config) map[string]gateway.Role {
 	return roles
 }
 
+// fallbacks returns the model roles whose fallback is on another adapter,
+// with that adapter and model (decision 0246).
+func fallbacks(cfg *config) map[string]runner.Fallback {
+	out := map[string]runner.Fallback{}
+	for name, r := range cfg.file.GetModels().GetRoles() {
+		if f := r.GetFallback(); f != nil && f.GetAdapter() != r.GetAdapter() {
+			out[name] = runner.Fallback{Adapter: f.GetAdapter(), Model: f.GetModel()}
+		}
+	}
+	return out
+}
+
+// fallbackRoles returns, by adapter, the model roles whose fallback is on
+// that adapter and not on the role's own, as the gateway maps them for the
+// invocations of that adapter: to the fallback's model, with no fallback
+// of its own (decision 0246).
+func fallbackRoles(cfg *config) map[string]map[string]gateway.Role {
+	out := map[string]map[string]gateway.Role{}
+	for name, f := range fallbacks(cfg) {
+		if out[f.Adapter] == nil {
+			out[f.Adapter] = map[string]gateway.Role{}
+		}
+		out[f.Adapter][name] = gateway.Role{Model: f.Model}
+	}
+	return out
+}
+
 // checkPricedModels refuses a model configuration whose role names a model,
-// or a fallback model on the same adapter, that the list-price table does
-// not list, whichever path its adapter takes: the gateway refuses the calls
-// of such a model, and the runner cannot price its usage figures on the
-// sign-in path (decisions 0229 and 0241).
+// or a fallback model, that the list-price table does not list, whichever
+// path its adapter takes: the gateway refuses the calls of such a model,
+// and the runner cannot price its usage figures on the sign-in path
+// (decisions 0229, 0241 and 0246).
 func checkPricedModels(cfg *config) error {
 	roles := cfg.file.GetModels().GetRoles()
 	var errs []error
 	for _, name := range slices.Sorted(maps.Keys(roles)) {
 		r := roles[name]
 		models := []string{r.GetModel()}
-		if f := r.GetFallback(); f.GetAdapter() == r.GetAdapter() && f.GetModel() != "" {
+		if f := r.GetFallback(); f.GetModel() != "" {
 			models = append(models, f.GetModel())
 		}
 		for _, m := range models {

@@ -51,7 +51,8 @@ const usage = `Usage: pumi <command> [flags] [arguments]
 
 Commands:
   run --config <file>                  run the clone's plans until stopped
-  status [--config <file>]             show each plan's track, state and open escalation
+  status [--config <file>]             show each plan's track, state and open escalation,
+                                       and each model role on its fallback
   add [--config <file>] --track <track> [--depends-on <plan>]... <plan>
                                        add a plan to a track
   cancel [--config <file>] <plan>      cancel a plan
@@ -59,6 +60,7 @@ Commands:
                                        answer a plan's open escalation
   log [--config <file>] <invocation>   show an invocation's log: its stored log,
                                        or the recent output of a running one
+  role reset [--config <file>] <role>  switch a model role back from its fallback
   version                              show pumi's version
 
 Every command but run and version reaches the control plane of the pumi run
@@ -111,6 +113,13 @@ var commands = map[string]func(ctx context.Context, name string, args []string, 
 	},
 	"cancel": personCommand(1, nil, cancelPlan),
 	"answer": personCommand(-2, nil, answer),
+	"role": func(ctx context.Context, name string, args []string, env Env) error {
+		if len(args) == 0 || args[0] != "reset" {
+			_, _ = io.WriteString(env.Stderr, usage)
+			return fmt.Errorf("pumi %s takes the command reset: %w", name, errUsage)
+		}
+		return personCommand(1, nil, resetRole)(ctx, name+" reset", args[1:], env)
+	},
 	"log": func(ctx context.Context, name string, args []string, env Env) error {
 		return personCommand(1, nil, func(ctx context.Context, s *Session, args []string, w io.Writer) error {
 			return printLog(ctx, s, args[0], w, env.Stderr)

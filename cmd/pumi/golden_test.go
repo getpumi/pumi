@@ -392,12 +392,13 @@ func (p *pumi) claim() {
 	p.wrote(p.head())
 }
 
-// report reports the result of its invocation with the outcome, under the
-// lease number of the lease the log granted last for it.
-func (p *pumi) report(result *eventsv1.InvocationResult, outcome eventsv1.InvocationFinished_Outcome, number int64) {
+// report reports the result of its invocation with the outcome and the
+// events evs, under the lease number of the lease the log granted last
+// for it.
+func (p *pumi) report(result *eventsv1.InvocationResult, outcome eventsv1.InvocationFinished_Outcome, number int64, evs ...*cloudeventsv1.CloudEvent) {
 	p.t.Helper()
 	res, err := p.runner.Report(p.t.Context(), &runnerv1.ReportRequest{
-		Invocation: result.GetInvocation(), LeaseNumber: number, Result: result, Outcome: outcome,
+		Invocation: result.GetInvocation(), LeaseNumber: number, Result: result, Outcome: outcome, Events: evs,
 	})
 	if err != nil {
 		p.t.Fatalf("the scripted runner's Report of %s: %v", result.GetInvocation(), err)

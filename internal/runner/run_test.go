@@ -140,6 +140,7 @@ func fakeAdapter(mode string) int {
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
 	case "limited":
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_LIMITED, Refusals: testRefusals(), Usage: usage})
+
 	case "refusals":
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Refusals: testRefusals(), Usage: usage})
 	case "usage then stop":
@@ -204,6 +205,9 @@ func fakeAdapter(mode string) int {
 	if status, ok := figureModes(mode, in, done, usage); ok {
 		return status
 	}
+	if mode == "limited but the fallback" {
+		return limitedButTheFallback(done, usage)
+	}
 	fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"no mode", mode)
 	return 9
 }
@@ -246,6 +250,19 @@ func figureModes(mode string, in *bufio.Reader, done string, usage *harnessv1.Us
 		return resultOK(&harnessv1.Result{Status: harnessv1.Result_STATUS_STOPPED, Usage: usage})
 	}
 	return 0, false
+}
+
+// limitedButTheFallback acts in the mode "limited but the fallback": the
+// provider's limit stops the run of every adapter but the fallback
+// adapter, after it wrote a file, and the fallback adapter completes
+// (decision 0246).
+func limitedButTheFallback(done string, usage *harnessv1.Usage) int {
+	if filepath.Base(os.Args[0]) != fallbackAdapterFile {
+		write("internal/runner/primary.go", "package runner\n")
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_LIMITED, Usage: usage})
+	}
+	write("internal/runner/b.go", "package runner\n")
+	return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: done, Usage: usage})
 }
 
 // resultOK writes r as result does and returns its status and true.

@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: The Pumi Authors
+
+syntax = "proto3";
+
+package pumi.events.v1;
+
+// ModelRoleSwitched is the data of dev.getpumi.model_role.switched: a model
+// role switched to its fallback on another adapter, because the provider's
+// usage or rate limit stopped a run of the role, or a person switched it
+// back (decision 0246). The role stays where its last switch put it, for
+// every later invocation of every plan, until the next switch. A switch to
+// the fallback names the invocation and the limit, and a switch back names
+// the person; exactly one of invocation and switched_by is set.
+message ModelRoleSwitched {
+  // Limit is the run that the provider's usage or rate limit stopped: its
+  // adapter and model.
+  message Limit {
+    // The adapter.
+    string adapter = 1;
+    // The model.
+    string model = 2;
+  }
+
+  // The model role, such as frontier.
+  string role = 1;
+  // The adapter that the role switched to.
+  string adapter = 2;
+  // The model that the role switched to.
+  string model = 3;
+  // The invocation whose run the limit stopped, for a switch to the
+  // fallback.
+  string invocation = 4;
+  // The limit that caused the switch to the fallback, or, for a switch
+  // back, the limit of the switch that it undoes.
+  Limit limit = 5;
+  // The person who switched the role back.
+  string switched_by = 6;
+}

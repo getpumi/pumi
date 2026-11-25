@@ -24,7 +24,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// v1Types are the 21 event types of decision 0135.
+// v1Types are the 21 event types of decision 0135 and the 22nd of
+// decision 0246.
 var v1Types = []string{
 	"plan.added", "transition.fired", "decision.made",
 	"lease.granted", "lease.released", "lease.expired",
@@ -32,6 +33,7 @@ var v1Types = []string{
 	"verdict.recorded", "warning.raised", "warning.reviewed",
 	"approval.recorded", "escalation.raised", "escalation.resolved", "override.recorded",
 	"merge.performed", "trunk.unattested", "check.ingested",
+	"model_role.switched",
 }
 
 func TestTypesAreTheV1Types(t *testing.T) {

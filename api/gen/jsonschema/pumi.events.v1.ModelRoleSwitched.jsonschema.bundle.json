@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "pumi.events.v1.ModelRoleSwitched.Limit.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Limit is the run that the provider's usage or rate limit stopped: its\n adapter and model.",
+      "properties": {
+        "adapter": {
+          "default": "",
+          "description": "The adapter.",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "description": "The model.",
+          "type": "string"
+        }
+      },
+      "title": "Limit",
+      "type": "object"
+    },
+    "pumi.events.v1.ModelRoleSwitched.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "ModelRoleSwitched is the data of dev.getpumi.model_role.switched: a model\n role switched to its fallback on another adapter, because the provider's\n usage or rate limit stopped a run of the role, or a person switched it\n back (decision 0246). The role stays where its last switch put it, for\n every later invocation of every plan, until the next switch. A switch to\n the fallback names the invocation and the limit, and a switch back names\n the person; exactly one of invocation and switched_by is set.",
+      "patternProperties": {
+        "^(switched_by)$": {
+          "default": "",
+          "description": "The person who switched the role back.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "adapter": {
+          "default": "",
+          "description": "The adapter that the role switched to.",
+          "type": "string"
+        },
+        "invocation": {
+          "default": "",
+          "description": "The invocation whose run the limit stopped, for a switch to the\n fallback.",
+          "type": "string"
+        },
+        "limit": {
+          "$ref": "#/$defs/pumi.events.v1.ModelRoleSwitched.Limit.jsonschema.json",
+          "description": "The limit that caused the switch to the fallback, or, for a switch\n back, the limit of the switch that it undoes."
+        },
+        "model": {
+          "default": "",
+          "description": "The model that the role switched to.",
+          "type": "string"
+        },
+        "role": {
+          "default": "",
+          "description": "The model role, such as frontier.",
+          "type": "string"
+        },
+        "switchedBy": {
+          "default": "",
+          "description": "The person who switched the role back.",
+          "type": "string"
+        }
+      },
+      "title": "Model Role Switched",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.events.v1.ModelRoleSwitched.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.events.v1.ModelRoleSwitched.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

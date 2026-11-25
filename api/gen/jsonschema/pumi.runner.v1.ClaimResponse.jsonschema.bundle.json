@@ -258,6 +258,11 @@
           "$ref": "#/$defs/google.protobuf.Duration.jsonschema.json",
           "description": "How long the lease lasts unless a heartbeat renews it."
         },
+        "^(model_role_switched)$": {
+          "default": false,
+          "description": "Whether the model role of the invocation is on its fallback: the last\n dev.getpumi.model_role.switched of the role in the log switched it to\n its fallback. The runner then starts the role's fallback adapter, and\n does not fall back again (decision 0246).",
+          "type": "boolean"
+        },
         "^(protocol_version)$": {
           "$ref": "#/$defs/pumi.runner.v1.ProtocolVersion.jsonschema.json",
           "description": "The protocol version that the server chose from the request's, for the\n rest of the invocation."
@@ -284,6 +289,11 @@
         "leaseTimeout": {
           "$ref": "#/$defs/google.protobuf.Duration.jsonschema.json",
           "description": "How long the lease lasts unless a heartbeat renews it."
+        },
+        "modelRoleSwitched": {
+          "default": false,
+          "description": "Whether the model role of the invocation is on its fallback: the last\n dev.getpumi.model_role.switched of the role in the log switched it to\n its fallback. The runner then starts the role's fallback adapter, and\n does not fall back again (decision 0246).",
+          "type": "boolean"
         },
         "protocolVersion": {
           "$ref": "#/$defs/pumi.runner.v1.ProtocolVersion.jsonschema.json",

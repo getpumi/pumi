@@ -368,7 +368,7 @@
       },
       "properties": {
         "events": {
-          "description": "The other events the invocation produced, written between\n invocation.result and invocation.finished. The invocation decides which\n types are allowed: a gate-role invocation may report verdict.recorded\n and warning.raised, an external-action invocation merge.performed,\n check.ingested and trunk.unattested, and an agent-role invocation\n nothing more (decision 0156).",
+          "description": "The other events the invocation produced, written between\n invocation.result and invocation.finished. The invocation decides which\n types are allowed: a gate-role invocation may report verdict.recorded\n and warning.raised, an external-action invocation merge.performed,\n check.ingested and trunk.unattested, and an agent-role invocation\n only dev.getpumi.model_role.switched, when a limit switched its model\n role to its fallback (decisions 0156 and 0246).",
           "items": {
             "$ref": "#/$defs/io.cloudevents.v1.CloudEvent.jsonschema.json"
           },

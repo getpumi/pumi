@@ -53,6 +53,10 @@ var decision0156 = map[string][]Appender{
 	TypeLeaseGranted:       {AppenderControlPlane},
 	TypeLeaseReleased:      {AppenderControlPlane},
 	TypeLeaseExpired:       {AppenderControlPlane},
+	// The runner switches a model role to its fallback in the Report of
+	// the agent run that a limit stopped, and a person switches it back
+	// (decision 0246).
+	TypeModelRoleSwitched: {AppenderRunnerReportAgentRole, AppenderPerson},
 }
 
 func TestAppendTableListsEveryTypeAndNoOther(t *testing.T) {
@@ -107,6 +111,9 @@ func TestMayAppend(t *testing.T) {
 	}
 }
 
+// TestAnAgentRoleReportWritesOnlyItsResult: an agent-role Report writes
+// its result and its end, and, when the provider's limit switched the
+// model role to its fallback, the switch (decisions 0156 and 0246).
 func TestAnAgentRoleReportWritesOnlyItsResult(t *testing.T) {
 	got := []string{}
 	for _, typ := range Types() {
@@ -114,7 +121,7 @@ func TestAnAgentRoleReportWritesOnlyItsResult(t *testing.T) {
 			got = append(got, typ)
 		}
 	}
-	want := []string{TypeInvocationFinished, TypeInvocationResult}
+	want := []string{TypeInvocationFinished, TypeInvocationResult, TypeModelRoleSwitched}
 	if !slices.Equal(got, want) {
 		t.Errorf("an agent-role Report may append %q, want only %q", got, want)
 	}

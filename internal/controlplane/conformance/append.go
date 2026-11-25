@@ -315,6 +315,11 @@ func ofType(t *testing.T, typ string) *cloudeventsv1.CloudEvent {
 		o.Reason = "the conformance suite"
 		o.Plan = "plan-of-" + typ
 	}
+	if s, ok := data.(*eventsv1.ModelRoleSwitched); ok {
+		// A person switches a model role back (decision 0246).
+		s.Role, s.Adapter, s.Model, s.SwitchedBy = "frontier", "claude-code", "claude-fable-5-2", "the conformance suite"
+		s.Limit = &eventsv1.ModelRoleSwitched_Limit{Adapter: "claude-code", Model: "claude-fable-5-2"}
+	}
 	if typ == events.TypeInvocationRequested {
 		// A request carries a valid document (decision 0165).
 		if data, err = events.InvocationRequested("plan-of-"+typ, document("invocation-of-"+typ, Gate)); err != nil {

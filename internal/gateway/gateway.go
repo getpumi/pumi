@@ -61,6 +61,12 @@ type Config struct {
 	// fallback model (decision 0233). A call that names a role goes to the
 	// role's model; a call that names anything else goes to what it names.
 	Roles map[string]Role
+	// AdapterRoles maps, by adapter name, the model roles whose fallback is
+	// on that adapter and not on the role's own: a call of an invocation of
+	// the adapter that names such a role goes to the fallback's model, with
+	// no fallback of its own (decision 0246). For the invocations of any
+	// other adapter, Roles maps the role.
+	AdapterRoles map[string]map[string]Role
 	// RetryWait is how long the gateway waits before it sends a call once
 	// more after a server error; DefaultRetryWait when zero.
 	RetryWait time.Duration
@@ -99,6 +105,8 @@ type Totals struct {
 // session is an open invocation.
 type session struct {
 	invocation string
+	// adapter is the name of the adapter that runs the invocation.
+	adapter string
 	// key is the API key of the invocation's adapter, empty when its
 	// harness keeps its own sign-in.
 	key string
@@ -142,6 +150,9 @@ func New(cfg Config) (*Gateway, error) {
 		return nil, errors.New("gateway: the provider's URL is not set")
 	}
 	if err := checkRoles(cfg.Roles); err != nil {
+		return nil, err
+	}
+	if err := checkAdapterRoles(cfg.AdapterRoles); err != nil {
 		return nil, err
 	}
 	if cfg.RetryWait == 0 {
@@ -198,6 +209,7 @@ func (g *Gateway) Open(invocation, adapter string, budget *harnessv1.Usage, log 
 	g.open[invocation] = true
 	g.sessions[token] = &session{
 		invocation:        invocation,
+		adapter:           adapter,
 		key:               g.cfg.APIKeys[adapter],
 		budgetTokens:      budget.GetTokens(),
 		budgetPicodollars: budget.GetCostMicrodollars() * 1_000_000,
@@ -233,6 +245,17 @@ func (g *Gateway) Close(token string) error {
 	delete(g.sessions, token)
 	delete(g.open, s.invocation)
 	return nil
+}
+
+// roleOf returns the model role named of the session's invocation: from
+// AdapterRoles when its adapter is the fallback of the role, and from
+// Roles otherwise (decision 0246).
+func (g *Gateway) roleOf(s *session, named string) (Role, bool) {
+	if r, ok := g.cfg.AdapterRoles[s.adapter][named]; ok {
+		return r, true
+	}
+	r, ok := g.cfg.Roles[named]
+	return r, ok
 }
 
 // call is what ServeHTTP passes to the proxy about a counted call.
@@ -279,7 +302,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	plain, readable := decodeBody(body, r.Header.Get("Content-Encoding"))
 	named := requestModel(plain, readable)
 	c.model = named
-	if role, ok := g.cfg.Roles[named]; ok && readable {
+	if role, ok := g.roleOf(s, named); ok && readable {
 		// The call names a model role: it goes to the role's model, with the
 		// body sent uncompressed (decision 0233).
 		sent, err := withModel(plain, role.Model)

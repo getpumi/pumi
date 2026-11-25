@@ -514,3 +514,53 @@ func TestALimitOnARoleWithoutAFallbackIsPassedBack(t *testing.T) {
 		t.Errorf("the provider received calls to %q, want one to %s", got, model)
 	}
 }
+
+// TestACallOfTheFallbacksAdapterGoesToTheFallbacksModel: a model role's
+// fallback on another adapter maps the role, for the invocations of that
+// adapter, to the fallback's model, with no fallback of its own; the
+// invocations of the role's own adapter still go to the role's model
+// (decision 0246).
+func TestACallOfTheFallbacksAdapterGoesToTheFallbacksModel(t *testing.T) {
+	const other = "other-adapter"
+	f := newFixtureWith(t, gateway.Config{
+		Roles:        map[string]gateway.Role{role: {Model: model}},
+		AdapterRoles: map[string]map[string]gateway.Role{other: {role: {Model: fallback}}},
+		RetryWait:    retryWait,
+	})
+	f.respondInTurn(response{http.StatusTooManyRequests, rateLimited})
+	token, err := f.gw.Open("inv-2", other, nil, f.invocationLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, _, _ := f.call(t, "/v1/messages", signInHeader(token), messages(role, false))
+	if status != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want the provider's 429 with no fallback", status)
+	}
+	own := f.open(t, nil)
+	f.respondInTurn(ok)
+	if status, _, _ := f.call(t, "/v1/messages", signInHeader(own), messages(role, false)); status != http.StatusOK {
+		t.Errorf("status of the call of the role's own adapter = %d, want 200", status)
+	}
+	if got := f.models(t); !equalStrings(got, []string{fallback, model}) {
+		t.Errorf("the provider received calls to %q, want one to %s and one to %s", got, fallback, model)
+	}
+}
+
+// TestNewRefusesABadAdapterRole: an adapter's model role needs a model in
+// the price table and has no fallback model (decision 0246).
+func TestNewRefusesABadAdapterRole(t *testing.T) {
+	u, err := url.Parse("https://api.anthropic.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, r := range map[string]gateway.Role{
+		"no model":       {},
+		"unlisted model": {Model: "claude-unknown"},
+		"a fallback":     {Model: model, Fallback: fallback},
+	} {
+		_, err := gateway.New(gateway.Config{Upstream: u, AdapterRoles: map[string]map[string]gateway.Role{"other": {role: r}}})
+		if err == nil {
+			t.Errorf("New with an adapter role with %s succeeded, want an error", name)
+		}
+	}
+}

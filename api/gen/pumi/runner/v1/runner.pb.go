@@ -202,9 +202,14 @@ type ClaimResponse struct {
 	// carry it.
 	LeaseNumber int64 `protobuf:"varint,3,opt,name=lease_number,json=leaseNumber,proto3" json:"lease_number,omitempty"`
 	// How long the lease lasts unless a heartbeat renews it.
-	LeaseTimeout  *durationpb.Duration `protobuf:"bytes,4,opt,name=lease_timeout,json=leaseTimeout,proto3" json:"lease_timeout,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LeaseTimeout *durationpb.Duration `protobuf:"bytes,4,opt,name=lease_timeout,json=leaseTimeout,proto3" json:"lease_timeout,omitempty"`
+	// Whether the model role of the invocation is on its fallback: the last
+	// dev.getpumi.model_role.switched of the role in the log switched it to
+	// its fallback. The runner then starts the role's fallback adapter, and
+	// does not fall back again (decision 0246).
+	ModelRoleSwitched bool `protobuf:"varint,5,opt,name=model_role_switched,json=modelRoleSwitched,proto3" json:"model_role_switched,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ClaimResponse) Reset() {
@@ -263,6 +268,13 @@ func (x *ClaimResponse) GetLeaseTimeout() *durationpb.Duration {
 		return x.LeaseTimeout
 	}
 	return nil
+}
+
+func (x *ClaimResponse) GetModelRoleSwitched() bool {
+	if x != nil {
+		return x.ModelRoleSwitched
+	}
+	return false
 }
 
 // Invocation is the invocation document: a self-contained record of one
@@ -544,7 +556,8 @@ type ReportRequest struct {
 	// types are allowed: a gate-role invocation may report verdict.recorded
 	// and warning.raised, an external-action invocation merge.performed,
 	// check.ingested and trunk.unattested, and an agent-role invocation
-	// nothing more (decision 0156).
+	// only dev.getpumi.model_role.switched, when a limit switched its model
+	// role to its fallback (decisions 0156 and 0246).
 	Events []*v12.CloudEvent `protobuf:"bytes,4,rep,name=events,proto3" json:"events,omitempty"`
 	// The outcome, appended as invocation.finished.
 	Outcome       v11.InvocationFinished_Outcome `protobuf:"varint,5,opt,name=outcome,proto3,enum=pumi.events.v1.InvocationFinished_Outcome" json:"outcome,omitempty"`
@@ -821,14 +834,15 @@ const file_pumi_runner_v1_runner_proto_rawDesc = "" +
 	"\x05major\x18\x01 \x01(\rR\x05major\x12\x14\n" +
 	"\x05minor\x18\x02 \x01(\rR\x05minor\"\\\n" +
 	"\fClaimRequest\x12L\n" +
-	"\x11protocol_versions\x18\x01 \x03(\v2\x1f.pumi.runner.v1.ProtocolVersionR\x10protocolVersions\"\xfa\x01\n" +
+	"\x11protocol_versions\x18\x01 \x03(\v2\x1f.pumi.runner.v1.ProtocolVersionR\x10protocolVersions\"\xaa\x02\n" +
 	"\rClaimResponse\x12J\n" +
 	"\x10protocol_version\x18\x01 \x01(\v2\x1f.pumi.runner.v1.ProtocolVersionR\x0fprotocolVersion\x12:\n" +
 	"\n" +
 	"invocation\x18\x02 \x01(\v2\x1a.pumi.runner.v1.InvocationR\n" +
 	"invocation\x12!\n" +
 	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\x12>\n" +
-	"\rlease_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fleaseTimeout\"\x90\x05\n" +
+	"\rlease_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fleaseTimeout\x12.\n" +
+	"\x13model_role_switched\x18\x05 \x01(\bR\x11modelRoleSwitched\"\x90\x05\n" +
 	"\n" +
 	"Invocation\x12\x1e\n" +
 	"\n" +

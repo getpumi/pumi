@@ -57,7 +57,7 @@ var appendTable = map[string][]Appender{
 	// it holds the lease timers.
 	TypeInvocationStarted: {AppenderRunnerClaim},
 	// Every Report writes the result and the end of its invocation; an
-	// agent-role invocation writes nothing more.
+	// agent-role invocation writes nothing more but a model role's switch.
 	TypeInvocationResult: {
 		AppenderRunnerReportAgentRole, AppenderRunnerReportGateRole, AppenderRunnerReportExternalAction,
 	},
@@ -72,6 +72,10 @@ var appendTable = map[string][]Appender{
 	TypeMergePerformed:  {AppenderRunnerReportExternalAction},
 	TypeCheckIngested:   {AppenderRunnerReportExternalAction},
 	TypeTrunkUnattested: {AppenderRunnerReportExternalAction},
+	// The runner switches a model role to its fallback in the Report of
+	// the agent run that the provider's limit stopped, and a person
+	// switches it back (decision 0246).
+	TypeModelRoleSwitched: {AppenderRunnerReportAgentRole, AppenderPerson},
 
 	TypeDecisionMade:  {AppenderControlPlane},
 	TypeLeaseGranted:  {AppenderControlPlane},

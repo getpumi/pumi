@@ -81,6 +81,11 @@ message InvocationResult {
   // The refusals that the harness reported, from the adapter's result
   // (decision 0249).
   repeated pumi.harness.v1.Refusal refusals = 7;
+  // The maker of the model of an agent run, such as Anthropic or OpenAI,
+  // from the list-price table: of the model role's model, or of its
+  // fallback's model when the fallback on another adapter ran (decisions
+  // 0246 and 0261). Empty for an invocation that runs no model.
+  string maker = 8;
 }
 
 // InvocationFinished is the data of dev.getpumi.invocation.finished: the

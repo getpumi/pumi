@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: The Pumi Authors
 -->
 # role-falls-back
 
-The runner claims the agent run of the model role frontier. The provider's usage or rate limit stops its run on the role's own adapter, and the role has a fallback on another adapter, so the runner starts the fallback's adapter once, in a fresh checkout of the same input tree, and reports that run's result with the usage of both runs. The Report writes the switch of the role, `dev.getpumi.model_role.switched`, between the result and the end of the invocation; it names the role, the adapter and model it switched to, the invocation and the limit's adapter and model. The run succeeded, so the plan advances to done on result. The kernel does not handle the switch. The person then switches the role back, with an event that names the person (decision 0246).
+The runner claims the agent run of the model role implementer. The provider's usage or rate limit stops its run on the role's own adapter, and the role has a fallback on another adapter, so the runner starts the fallback's adapter once, in a fresh checkout of the same input tree, and reports that run's result with the usage of both runs. The Report writes the switch of the role, `dev.getpumi.model_role.switched`, between the result and the end of the invocation; it names the role, the adapter and model it switched to, the invocation and the limit's adapter and model. The run succeeded, so the plan advances to done on result. The kernel does not handle the switch. The person then switches the role back, with an event that names the person (decision 0246).
 
 Regime sources, in `WalkingDisaster/scale-wholesale` at `9842f55`:
 

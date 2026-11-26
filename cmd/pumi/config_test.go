@@ -32,10 +32,10 @@ func adapterText(name, fields string) string {
 
 // The parts of the model configurations of TestReadConfig.
 var (
-	signedIn = adapterText("claude-code", `executable: "bin/adapter-claude-code" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_SIGN_IN`)
-	keyed    = adapterText("codex", `executable: "/opt/adapter-codex" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_API_KEY api_key_env: "OPENAI_API_KEY" read_paths: "/home/someone/go"`)
-	frontier = `roles { key: "frontier" value { adapter: "claude-code" model: "claude-opus-5-5" fallback { adapter: "codex" model: "astra" } } }`
-	checks   = `check_adapter: "claude-code"`
+	signedIn    = adapterText("claude-code", `executable: "bin/adapter-claude-code" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_SIGN_IN`)
+	keyed       = adapterText("codex", `executable: "/opt/adapter-codex" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_API_KEY api_key_env: "OPENAI_API_KEY" read_paths: "/home/someone/go"`)
+	implementer = `roles { key: "implementer" value { adapter: "claude-code" model: "claude-opus-5-5" fallback { adapter: "codex" model: "astra" } } }`
+	checks      = `check_adapter: "claude-code"`
 )
 
 // models returns a models block of parts.
@@ -47,13 +47,13 @@ func models(parts ...string) string {
 // fallback is on its own adapter gives the gateway its fallback model
 // (decision 0233).
 func TestAFallbackOnTheSameAdapterIsTheGatewaysFallbackModel(t *testing.T) {
-	same := `roles { key: "frontier" value { adapter: "claude-code" model: "claude-opus-5-5" fallback { adapter: "claude-code" model: "claude-sonnet-5-5" } } }`
+	same := `roles { key: "implementer" value { adapter: "claude-code" model: "claude-opus-5-5" fallback { adapter: "claude-code" model: "claude-sonnet-5-5" } } }`
 	cfg, err := readConfig(writeTestConfig(t, models(signedIn, same, checks)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := modelRoles(cfg)["frontier"]; got.Model != "claude-opus-5-5" || got.Fallback != "claude-sonnet-5-5" {
-		t.Errorf("the gateway's role frontier is %+v, want claude-opus-5-5 falling back to claude-sonnet-5-5", got)
+	if got := modelRoles(cfg)["implementer"]; got.Model != "claude-opus-5-5" || got.Fallback != "claude-sonnet-5-5" {
+		t.Errorf("the gateway's role implementer is %+v, want claude-opus-5-5 falling back to claude-sonnet-5-5", got)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestAFallbackOnTheSameAdapterIsTheGatewaysFallbackModel(t *testing.T) {
 // a file that breaks its rules is refused when it is read, with an error
 // that says why (decisions 0240, 0245 and 0253).
 func TestReadConfig(t *testing.T) {
-	cfg, err := readConfig(writeTestConfig(t, models(signedIn, keyed, frontier, checks)))
+	cfg, err := readConfig(writeTestConfig(t, models(signedIn, keyed, implementer, checks)))
 	if err != nil {
 		t.Fatalf("readConfig = %v, want the file read", err)
 	}
@@ -73,35 +73,44 @@ func TestReadConfig(t *testing.T) {
 	if got := a["codex"]; got.Path != "/opt/adapter-codex" || got.SignIn || !slices.Equal(got.ReadPaths, []string{"/home/someone/go"}) {
 		t.Errorf("the adapter codex is %+v, want its absolute path, the API key mode and its read path", got)
 	}
-	if got := cfg.roleAdapters(); len(got) != 1 || got["frontier"] != "claude-code" {
-		t.Errorf("the roles' adapters are %v, want frontier on claude-code", got)
+	if got := cfg.roleAdapters(); len(got) != 1 || got["implementer"] != "claude-code" {
+		t.Errorf("the roles' adapters are %v, want implementer on claude-code", got)
 	}
 	// The fallback is on another adapter, so the gateway has no fallback
 	// model for the role (decision 0246).
-	if got := modelRoles(cfg); len(got) != 1 || got["frontier"].Model != "claude-opus-5-5" || got["frontier"].Fallback != "" {
-		t.Errorf("the gateway's roles are %+v, want frontier on claude-opus-5-5 with no fallback model", got)
+	if got := modelRoles(cfg); len(got) != 1 || got["implementer"].Model != "claude-opus-5-5" || got["implementer"].Fallback != "" {
+		t.Errorf("the gateway's roles are %+v, want implementer on claude-opus-5-5 with no fallback model", got)
 	}
 
 	for name, tc := range map[string]struct{ file, want string }{
 		"no models":   {"", "models"},
-		"no adapters": {models(frontier, checks), "models.adapters"},
+		"no adapters": {models(implementer, checks), "models.adapters"},
 		"an unknown adapter": {
-			models(signedIn, `roles { key: "frontier" value { adapter: "gemini" model: "m" } }`, checks), `"gemini"`,
+			models(signedIn, `roles { key: "implementer" value { adapter: "gemini" model: "m" } }`, checks), `"gemini"`,
 		},
 		"a role without an adapter": {
-			models(signedIn, `roles { key: "frontier" value { model: "claude-opus-5-5" } }`, checks), `"frontier"`,
+			models(signedIn, `roles { key: "implementer" value { model: "claude-opus-5-5" } }`, checks), `"implementer"`,
 		},
 		"a role without a model": {
-			models(signedIn, `roles { key: "frontier" value { adapter: "claude-code" } }`, checks), `"frontier"`,
+			models(signedIn, `roles { key: "implementer" value { adapter: "claude-code" } }`, checks), `"implementer"`,
 		},
 		"a fallback on an unknown adapter": {
-			models(signedIn, `roles { key: "frontier" value { adapter: "claude-code" model: "a" fallback { adapter: "gemini" model: "b" } } }`, checks), `"gemini"`,
+			models(signedIn, `roles { key: "implementer" value { adapter: "claude-code" model: "a" fallback { adapter: "gemini" model: "b" } } }`, checks), `"gemini"`,
 		},
 		"a fallback without a model": {
-			models(signedIn, `roles { key: "frontier" value { adapter: "claude-code" model: "a" fallback { adapter: "claude-code" } } }`, checks), "fallback",
+			models(signedIn, `roles { key: "implementer" value { adapter: "claude-code" model: "a" fallback { adapter: "claude-code" } } }`, checks), "fallback",
 		},
 		"a fallback that is the role itself": {
-			models(signedIn, `roles { key: "frontier" value { adapter: "claude-code" model: "a" fallback { adapter: "claude-code" model: "a" } } }`, checks), "fallback",
+			models(signedIn, `roles { key: "implementer" value { adapter: "claude-code" model: "a" fallback { adapter: "claude-code" model: "a" } } }`, checks), "fallback",
+		},
+		"a default role without an adapter": {
+			models(signedIn, `default_role { model: "claude-opus-5-5" }`, checks), "default_role",
+		},
+		"a default role on an unknown adapter": {
+			models(signedIn, `default_role { adapter: "gemini" model: "m" }`, checks), `"gemini"`,
+		},
+		"a default role whose fallback is itself": {
+			models(signedIn, `default_role { adapter: "claude-code" model: "a" fallback { adapter: "claude-code" model: "a" } }`, checks), "default_role",
 		},
 		"a sign-in entry with a key variable": {
 			models(adapterText("claude-code", `executable: "a" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_SIGN_IN api_key_env: "ANTHROPIC_API_KEY"`), checks),
@@ -126,7 +135,7 @@ func TestReadConfig(t *testing.T) {
 		"an entry with an uppercase SHA-256": {
 			models(adapterText("claude-code", `executable: "a" sha256: "`+strings.ToUpper(validSHA)+`" credential_mode: CREDENTIAL_MODE_SIGN_IN`), checks), "sha256",
 		},
-		"no check adapter":         {models(signedIn, frontier, keyed), "check_adapter"},
+		"no check adapter":         {models(signedIn, implementer, keyed), "check_adapter"},
 		"an unknown check adapter": {models(signedIn, `check_adapter: "gemini"`), `"gemini"`},
 		"the replaced adapter field": {
 			`adapter: "bin/adapter" ` + models(signedIn, checks), "models",

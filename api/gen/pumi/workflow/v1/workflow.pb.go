@@ -371,7 +371,7 @@ type Invoke struct {
 	// invocation's structured output must be, such as
 	// pumi.workflow.v1.PlanningOutput (decision 0160).
 	OutputMessage string `protobuf:"bytes,4,opt,name=output_message,json=outputMessage,proto3" json:"output_message,omitempty"`
-	// The model role of an agent run, such as "frontier", which the
+	// The model role of an agent run, such as "implementer", which the
 	// configuration maps to a model and a fallback model at the model
 	// gateway. A state that starts a harness names one; a state that starts
 	// a check or an external action names none (decision 0233).

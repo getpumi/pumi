@@ -368,7 +368,7 @@ type Invocation struct {
 	Gateway *Gateway `protobuf:"bytes,9,opt,name=gateway,proto3" json:"gateway,omitempty"`
 	// The schema of the structured output.
 	OutputSchema *OutputSchema `protobuf:"bytes,10,opt,name=output_schema,json=outputSchema,proto3" json:"output_schema,omitempty"`
-	// The model role of an agent run, such as "frontier". Through the model
+	// The model role of an agent run, such as "implementer". Through the model
 	// gateway, the adapter asks its harness for the role by name, as the model
 	// of its calls, and the gateway sends each call to the model that the
 	// configuration maps the role to (decision 0233).

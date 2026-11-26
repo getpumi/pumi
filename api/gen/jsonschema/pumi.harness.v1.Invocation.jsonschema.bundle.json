@@ -220,7 +220,7 @@
         },
         "^(model_role)$": {
           "default": "",
-          "description": "The model role of an agent run, such as \"frontier\". Through the model\n gateway, the adapter asks its harness for the role by name, as the model\n of its calls, and the gateway sends each call to the model that the\n configuration maps the role to (decision 0233).",
+          "description": "The model role of an agent run, such as \"implementer\". Through the model\n gateway, the adapter asks its harness for the role by name, as the model\n of its calls, and the gateway sends each call to the model that the\n configuration maps the role to (decision 0233).",
           "type": "string"
         },
         "^(output_schema)$": {
@@ -278,7 +278,7 @@
         },
         "modelRole": {
           "default": "",
-          "description": "The model role of an agent run, such as \"frontier\". Through the model\n gateway, the adapter asks its harness for the role by name, as the model\n of its calls, and the gateway sends each call to the model that the\n configuration maps the role to (decision 0233).",
+          "description": "The model role of an agent run, such as \"implementer\". Through the model\n gateway, the adapter asks its harness for the role by name, as the model\n of its calls, and the gateway sends each call to the model that the\n configuration maps the role to (decision 0233).",
           "type": "string"
         },
         "outputSchema": {

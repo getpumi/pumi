@@ -33,7 +33,7 @@ const (
 // the person; exactly one of invocation and switched_by is set.
 type ModelRoleSwitched struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The model role, such as frontier.
+	// The model role, such as implementer.
 	Role string `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
 	// The adapter that the role switched to.
 	Adapter string `protobuf:"bytes,2,opt,name=adapter,proto3" json:"adapter,omitempty"`

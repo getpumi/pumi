@@ -269,6 +269,11 @@
           "description": "The hash of the blob that holds the full log (decision 0034).",
           "type": "string"
         },
+        "maker": {
+          "default": "",
+          "description": "The maker of the model of an agent run, such as Anthropic or OpenAI,\n from the list-price table: of the model role's model, or of its\n fallback's model when the fallback on another adapter ran (decisions\n 0246 and 0261). Empty for an invocation that runs no model.",
+          "type": "string"
+        },
         "output": {
           "default": "",
           "description": "The structured output, as the protojson of the message that the\n invocation document names, as the runner parsed it (decisions 0160 and\n 0162).",

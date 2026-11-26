@@ -153,7 +153,9 @@ func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*contro
 // to the provider directly while the runner counts their usage (decisions
 // 0240 and 0241), whose output goes to out and whose output files go to the
 // local blob store beside the log (decision 0232). It refuses a workflow
-// that names a model role which the file does not map (decision 0233). It
+// that names a model role which the file neither lists nor gives a default
+// role for, and gives each such role the default (decisions 0233 and 0257),
+// and records the maker of each agent run's model (decision 0261). It
 // stops when any of them fails.
 func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) error {
 	cfg, err := readConfig(configPath)
@@ -164,7 +166,7 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 	if err != nil {
 		return err
 	}
-	if err := checkModelRoles(cfg, wf); err != nil {
+	if err := resolveRoles(cfg, wf); err != nil {
 		return err
 	}
 	id, err := person(ctx, dir)
@@ -226,7 +228,7 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 				Service: runnerClient, Adapters: cfg.adapters(), Roles: cfg.roleAdapters(),
 				CheckAdapter: cfg.file.GetModels().GetCheckAdapter(), Repository: dir, WorkDir: work, Output: out,
 				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: runnerGateway(gw),
-				Models: roleModels(cfg), Fallbacks: fallbacks(cfg), Price: gateway.FigureCost,
+				Models: roleModels(cfg), Fallbacks: fallbacks(cfg), Price: gateway.FigureCost, Maker: gateway.MakerOf,
 			})
 		},
 		func() error {

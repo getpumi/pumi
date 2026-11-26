@@ -224,12 +224,18 @@ type Models struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The adapters by name, such as "claude-code" and "codex".
 	Adapters map[string]*Adapter `protobuf:"bytes,1,rep,name=adapters,proto3" json:"adapters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// The model roles by name, such as "frontier". Each model role that the
-	// workflow names must be here (decision 0233).
+	// The model roles by name, such as "implementer". A model role that the
+	// workflow names and that is not here uses default_role (decision 0257).
 	Roles map[string]*Role `protobuf:"bytes,2,rep,name=roles,proto3" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// The adapter that runs every check and external action, which name no
 	// model role (decision 0253).
-	CheckAdapter  string `protobuf:"bytes,3,opt,name=check_adapter,json=checkAdapter,proto3" json:"check_adapter,omitempty"`
+	CheckAdapter string `protobuf:"bytes,3,opt,name=check_adapter,json=checkAdapter,proto3" json:"check_adapter,omitempty"`
+	// The default role: the adapter, model and fallback of each model role
+	// that the workflow names and roles does not list. pumi refuses a
+	// workflow that names a role which roles does not list when this is not
+	// set (decision 0257). The circuit breaker keeps the state of each such
+	// role by its own name (decision 0264).
+	DefaultRole   *Role `protobuf:"bytes,4,opt,name=default_role,json=defaultRole,proto3" json:"default_role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -283,6 +289,13 @@ func (x *Models) GetCheckAdapter() string {
 		return x.CheckAdapter
 	}
 	return ""
+}
+
+func (x *Models) GetDefaultRole() *Role {
+	if x != nil {
+		return x.DefaultRole
+	}
+	return nil
 }
 
 // Adapter is a harness adapter (decision 0245).
@@ -772,11 +785,12 @@ const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\thard_caps\x18\x06 \x01(\v2\x16.pumi.harness.v1.UsageR\bhardCaps\x124\n" +
 	"\bsettings\x18\a \x01(\v2\x18.pumi.config.v1.SettingsR\bsettings\x125\n" +
 	"\agateway\x18\b \x01(\v2\x17.pumi.config.v1.GatewayB\x02\x18\x01R\agateway\x12.\n" +
-	"\x06models\x18\t \x01(\v2\x16.pumi.config.v1.ModelsR\x06models\"\xce\x02\n" +
+	"\x06models\x18\t \x01(\v2\x16.pumi.config.v1.ModelsR\x06models\"\x87\x03\n" +
 	"\x06Models\x12@\n" +
 	"\badapters\x18\x01 \x03(\v2$.pumi.config.v1.Models.AdaptersEntryR\badapters\x127\n" +
 	"\x05roles\x18\x02 \x03(\v2!.pumi.config.v1.Models.RolesEntryR\x05roles\x12#\n" +
-	"\rcheck_adapter\x18\x03 \x01(\tR\fcheckAdapter\x1aT\n" +
+	"\rcheck_adapter\x18\x03 \x01(\tR\fcheckAdapter\x127\n" +
+	"\fdefault_role\x18\x04 \x01(\v2\x14.pumi.config.v1.RoleR\vdefaultRole\x1aT\n" +
 	"\rAdaptersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
 	"\x05value\x18\x02 \x01(\v2\x17.pumi.config.v1.AdapterR\x05value:\x028\x01\x1aN\n" +
@@ -868,18 +882,19 @@ var file_pumi_config_v1_config_proto_depIdxs = []int32{
 	2,  // 5: pumi.config.v1.Config.models:type_name -> pumi.config.v1.Models
 	10, // 6: pumi.config.v1.Models.adapters:type_name -> pumi.config.v1.Models.AdaptersEntry
 	11, // 7: pumi.config.v1.Models.roles:type_name -> pumi.config.v1.Models.RolesEntry
-	0,  // 8: pumi.config.v1.Adapter.credential_mode:type_name -> pumi.config.v1.Adapter.CredentialMode
-	5,  // 9: pumi.config.v1.Role.fallback:type_name -> pumi.config.v1.Fallback
-	12, // 10: pumi.config.v1.Gateway.model_roles:type_name -> pumi.config.v1.Gateway.ModelRolesEntry
-	13, // 11: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
-	3,  // 12: pumi.config.v1.Models.AdaptersEntry.value:type_name -> pumi.config.v1.Adapter
-	4,  // 13: pumi.config.v1.Models.RolesEntry.value:type_name -> pumi.config.v1.Role
-	7,  // 14: pumi.config.v1.Gateway.ModelRolesEntry.value:type_name -> pumi.config.v1.ModelRole
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	4,  // 8: pumi.config.v1.Models.default_role:type_name -> pumi.config.v1.Role
+	0,  // 9: pumi.config.v1.Adapter.credential_mode:type_name -> pumi.config.v1.Adapter.CredentialMode
+	5,  // 10: pumi.config.v1.Role.fallback:type_name -> pumi.config.v1.Fallback
+	12, // 11: pumi.config.v1.Gateway.model_roles:type_name -> pumi.config.v1.Gateway.ModelRolesEntry
+	13, // 12: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
+	3,  // 13: pumi.config.v1.Models.AdaptersEntry.value:type_name -> pumi.config.v1.Adapter
+	4,  // 14: pumi.config.v1.Models.RolesEntry.value:type_name -> pumi.config.v1.Role
+	7,  // 15: pumi.config.v1.Gateway.ModelRolesEntry.value:type_name -> pumi.config.v1.ModelRole
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_pumi_config_v1_config_proto_init() }

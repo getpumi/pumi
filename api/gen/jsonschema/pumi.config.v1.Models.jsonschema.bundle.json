@@ -119,6 +119,10 @@
           "default": "",
           "description": "The adapter that runs every check and external action, which name no\n model role (decision 0253).",
           "type": "string"
+        },
+        "^(default_role)$": {
+          "$ref": "#/$defs/pumi.config.v1.Role.jsonschema.json",
+          "description": "The default role: the adapter, model and fallback of each model role\n that the workflow names and roles does not list. pumi refuses a\n workflow that names a role which roles does not list when this is not\n set (decision 0257). The circuit breaker keeps the state of each such\n role by its own name (decision 0264)."
         }
       },
       "properties": {
@@ -137,11 +141,15 @@
           "description": "The adapter that runs every check and external action, which name no\n model role (decision 0253).",
           "type": "string"
         },
+        "defaultRole": {
+          "$ref": "#/$defs/pumi.config.v1.Role.jsonschema.json",
+          "description": "The default role: the adapter, model and fallback of each model role\n that the workflow names and roles does not list. pumi refuses a\n workflow that names a role which roles does not list when this is not\n set (decision 0257). The circuit breaker keeps the state of each such\n role by its own name (decision 0264)."
+        },
         "roles": {
           "additionalProperties": {
             "$ref": "#/$defs/pumi.config.v1.Role.jsonschema.json"
           },
-          "description": "The model roles by name, such as \"frontier\". Each model role that the\n workflow names must be here (decision 0233).",
+          "description": "The model roles by name, such as \"implementer\". A model role that the\n workflow names and that is not here uses default_role (decision 0257).",
           "propertyNames": {
             "type": "string"
           },

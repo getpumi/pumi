@@ -40,7 +40,7 @@ const envProviderVariable = "PUMI_SHOWN_API_KEY_ENV"
 const envHarness = "PUMI_SHOWN_HARNESS"
 
 // shownRole is the model role of the spike workflow (decision 0233).
-const shownRole = "frontier"
+const shownRole = "implementer"
 
 // shownHarness is what the shown runs need to know about one harness.
 type shownHarness struct {

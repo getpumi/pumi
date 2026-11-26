@@ -208,6 +208,9 @@ type provider struct {
 	calls []providerCall
 	// limited are the models whose calls it answers with a rate limit.
 	limited map[string]bool
+	// limitedCalls are, by model, how many of its next calls it answers
+	// with a rate limit.
+	limitedCalls map[string]int
 }
 
 // fakeProvider serves a new fake provider, makes pumi run's gateway send
@@ -242,7 +245,10 @@ func (p *provider) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	p.mu.Lock()
 	p.calls = append(p.calls, providerCall{header: r.Header.Clone(), body: body})
-	limited := p.limited[req.Model]
+	limited := p.limited[req.Model] || p.limitedCalls[req.Model] > 0
+	if p.limitedCalls[req.Model] > 0 {
+		p.limitedCalls[req.Model]--
+	}
 	p.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	if limited {
@@ -263,6 +269,14 @@ func (p *provider) limit(models ...string) {
 	for _, m := range models {
 		p.limited[m] = true
 	}
+}
+
+// limitCalls makes the provider answer the next n calls of model with a
+// rate limit, and the calls after them as usual.
+func (p *provider) limitCalls(model string, n int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.limitedCalls = map[string]int{model: n}
 }
 
 // received returns the calls the provider received.

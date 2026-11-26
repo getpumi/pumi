@@ -59,7 +59,7 @@ func stopsAtALimit(inv *harnessv1.Invocation) int {
 }
 
 // circuitModels returns a model configuration, in text format, with two
-// test adapters in the mode mode: the model role frontier runs on testModel
+// test adapters in the mode mode: the model role implementer runs on testModel
 // of the adapter test, and falls back to testFallback on the adapter
 // test-fallback, or has no fallback when noFallback is set.
 func circuitModels(t *testing.T, mode string, noFallback bool) string {
@@ -70,7 +70,7 @@ func circuitModels(t *testing.T, mode string, noFallback bool) string {
 	}
 	return adapterEntry(t, testAdapterName, "/proc/self/exe", mode) + ` ` +
 		adapterEntry(t, fallbackAdapterName, "/proc/self/exe", mode) + ` ` +
-		fmt.Sprintf(`roles { key: "frontier" value { adapter: %q model: %q %s } }`, testAdapterName, testModel, fallback) +
+		fmt.Sprintf(`roles { key: "implementer" value { adapter: %q model: %q %s } }`, testAdapterName, testModel, fallback) +
 		` check_adapter: "` + testAdapterName + `"`
 }
 
@@ -99,16 +99,16 @@ func switchesOf(t *testing.T, evs []*cloudeventsv1.CloudEvent) []*eventsv1.Model
 	return out
 }
 
-// switchedByA1 is the switch of frontier to its fallback that the limit
+// switchedByA1 is the switch of implementer to its fallback that the limit
 // on the run of a1/1 caused.
 var switchedByA1 = &eventsv1.ModelRoleSwitched{
-	Role: "frontier", Adapter: fallbackAdapterName, Model: testFallback, Invocation: "a1/1",
+	Role: "implementer", Adapter: fallbackAdapterName, Model: testFallback, Invocation: "a1/1",
 	Limit: &eventsv1.ModelRoleSwitched_Limit{Adapter: testAdapterName, Model: testModel},
 }
 
-// switchedBack is the person's switch of frontier back to the adapter test.
+// switchedBack is the person's switch of implementer back to the adapter test.
 var switchedBack = &eventsv1.ModelRoleSwitched{
-	Role: "frontier", Adapter: testAdapterName, Model: testModel, SwitchedBy: testPerson,
+	Role: "implementer", Adapter: testAdapterName, Model: testModel, SwitchedBy: testPerson,
 	Limit: &eventsv1.ModelRoleSwitched_Limit{Adapter: testAdapterName, Model: testModel},
 }
 
@@ -131,7 +131,7 @@ func (c *commandClone) checkCalls(from int, want ...string) {
 	}
 }
 
-// TestTheCircuitBreaker: the provider's limit stops the run of frontier on
+// TestTheCircuitBreaker: the provider's limit stops the run of implementer on
 // the adapter test. The runner starts the fallback adapter once, which the
 // gateway sends to the fallback's model, and the plan merges; the log
 // holds the switch. The next plan runs on the fallback at once, also after
@@ -157,8 +157,8 @@ func TestTheCircuitBreaker(t *testing.T) {
 	c.checkCalls(2, testFallback)
 	r.stop(t)
 
-	if out := c.must("status", "--config", c.config); !strings.Contains(out, "frontier") || !strings.Contains(out, fallbackAdapterName) || !strings.Contains(out, "a1/1") {
-		t.Errorf("pumi status does not show frontier on its fallback since a1/1:\n%s", out)
+	if out := c.must("status", "--config", c.config); !strings.Contains(out, "implementer") || !strings.Contains(out, fallbackAdapterName) || !strings.Contains(out, "a1/1") {
+		t.Errorf("pumi status does not show implementer on its fallback since a1/1:\n%s", out)
 	}
 	r = c.start()
 	c.must("add", "--track", "c", "c1")
@@ -166,12 +166,12 @@ func TestTheCircuitBreaker(t *testing.T) {
 	c.checkCalls(3, testFallback)
 
 	c.provider.limit()
-	if out := c.must("role", "reset", "frontier"); !strings.Contains(out, "frontier") {
+	if out := c.must("role", "reset", "implementer"); !strings.Contains(out, "implementer") {
 		t.Errorf("pumi role reset wrote %q, want it to name the role", out)
 	}
 	c.checkSwitches(switchedByA1, switchedBack)
 	if out := c.must("status"); strings.Contains(out, fallbackAdapterName) {
-		t.Errorf("pumi status still shows frontier on its fallback:\n%s", out)
+		t.Errorf("pumi status still shows implementer on its fallback:\n%s", out)
 	}
 	c.must("add", "--track", "d", "d1")
 	c.waitState(r, "d1", "merged")
@@ -220,9 +220,45 @@ func TestALimitOnARoleWithNoFallbackFails(t *testing.T) {
 // back only a model role that is on its fallback.
 func TestRoleResetRefusesARoleThatIsNotSwitched(t *testing.T) {
 	c := newCircuitClone(t, false)
-	out, err := c.pumi("role", "reset", "--config", c.config, "frontier")
-	if err == nil || !strings.Contains(err.Error(), "frontier") {
-		t.Errorf("pumi role reset = %v, %q; want an error that names frontier", err, out)
+	out, err := c.pumi("role", "reset", "--config", c.config, "implementer")
+	if err == nil || !strings.Contains(err.Error(), "implementer") {
+		t.Errorf("pumi role reset = %v, %q; want an error that names implementer", err, out)
 	}
 	c.checkSwitches()
+}
+
+// TestALimitOnOneRoleThatUsesTheDefaultSwitchesOnlyThatRole: the three
+// roles of the roles workflow use the default, which falls back to the
+// adapter test-fallback. The provider's limit stops only the first run,
+// of plan-reviewer, so only plan-reviewer switches to the fallback;
+// implementer and auditor stay on the default, and pumi role reset
+// switches back plan-reviewer alone (decision 0264).
+func TestALimitOnOneRoleThatUsesTheDefaultSwitchesOnlyThatRole(t *testing.T) {
+	t.Setenv(testKeyEnv, testProviderKey)
+	models := adapterEntry(t, testAdapterName, "/proc/self/exe", apiKeyMode) + ` ` +
+		adapterEntry(t, fallbackAdapterName, "/proc/self/exe", apiKeyMode) + ` ` +
+		fmt.Sprintf(`default_role { adapter: %q model: %q fallback { adapter: %q model: %q } }`, testAdapterName, testModel, fallbackAdapterName, testFallback) +
+		` check_adapter: "` + testAdapterName + `"`
+	c := newCommandCloneWith(t, "roles", adapterStopsAtALimit, models)
+	c.provider.limitCalls(testModel, 1)
+	r := c.start()
+	c.must("add", "--track", "a", "a1")
+	c.waitState(r, "a1", "merged")
+	c.checkCalls(0, testModel, testFallback, testModel, testModel)
+	reviewer := &eventsv1.ModelRoleSwitched{
+		Role: "plan-reviewer", Adapter: fallbackAdapterName, Model: testFallback, Invocation: "a1/1",
+		Limit: &eventsv1.ModelRoleSwitched_Limit{Adapter: testAdapterName, Model: testModel},
+	}
+	c.checkSwitches(reviewer)
+	r.stop(t)
+
+	if _, err := c.pumi("role", "reset", "--config", c.config, "implementer"); err == nil {
+		t.Error("pumi role reset implementer succeeded, want it refused: implementer is not on its fallback")
+	}
+	c.must("role", "reset", "--config", c.config, "plan-reviewer")
+	back := &eventsv1.ModelRoleSwitched{
+		Role: "plan-reviewer", Adapter: testAdapterName, Model: testModel, SwitchedBy: testPerson,
+		Limit: &eventsv1.ModelRoleSwitched_Limit{Adapter: testAdapterName, Model: testModel},
+	}
+	c.checkSwitches(reviewer, back)
 }

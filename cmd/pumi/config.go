@@ -144,39 +144,50 @@ func adapterProblems(a *configv1.Adapter) []string {
 }
 
 // checkRoles returns the errors of the model roles of m in the file at
-// path: each needs an adapter that m lists and a model, and a fallback,
-// when it has one, needs an adapter that m lists and a model, and must
-// differ from the role (decisions 0245 and 0246).
+// path, and of its default role when it has one: each needs an adapter
+// that m lists and a model, and a fallback, when it has one, needs an
+// adapter that m lists and a model, and must differ from the role
+// (decisions 0245, 0246 and 0257).
 func checkRoles(path string, m *configv1.Models) []error {
-	known := func(adapter string) bool { _, ok := m.GetAdapters()[adapter]; return ok }
 	var errs []error
 	for _, name := range slices.Sorted(maps.Keys(m.GetRoles())) {
-		r := m.GetRoles()[name]
-		var problems []string
-		switch {
-		case r.GetAdapter() == "":
-			problems = append(problems, "it names no adapter (decision 0245)")
-		case !known(r.GetAdapter()):
-			problems = append(problems, fmt.Sprintf("it names the adapter %q, which models.adapters does not list", r.GetAdapter()))
-		}
-		if r.GetModel() == "" {
-			problems = append(problems, "it names no model")
-		}
-		if f := r.GetFallback(); f != nil {
-			switch {
-			case !known(f.GetAdapter()):
-				problems = append(problems, fmt.Sprintf("its fallback names the adapter %q, which models.adapters does not list", f.GetAdapter()))
-			case f.GetModel() == "":
-				problems = append(problems, "its fallback names no model")
-			case f.GetAdapter() == r.GetAdapter() && f.GetModel() == r.GetModel():
-				problems = append(problems, "its fallback is the role's own adapter and model")
-			}
-		}
-		for _, p := range problems {
+		for _, p := range roleProblems(m, m.GetRoles()[name]) {
 			errs = append(errs, fmt.Errorf("the configuration file %s: the model role %q: %s", path, name, p))
 		}
 	}
+	if d := m.GetDefaultRole(); d != nil {
+		for _, p := range roleProblems(m, d) {
+			errs = append(errs, fmt.Errorf("the configuration file %s: models.default_role: %s", path, p))
+		}
+	}
 	return errs
+}
+
+// roleProblems returns what is wrong with the role r of the model
+// configuration m.
+func roleProblems(m *configv1.Models, r *configv1.Role) []string {
+	known := func(adapter string) bool { _, ok := m.GetAdapters()[adapter]; return ok }
+	var problems []string
+	switch {
+	case r.GetAdapter() == "":
+		problems = append(problems, "it names no adapter (decision 0245)")
+	case !known(r.GetAdapter()):
+		problems = append(problems, fmt.Sprintf("it names the adapter %q, which models.adapters does not list", r.GetAdapter()))
+	}
+	if r.GetModel() == "" {
+		problems = append(problems, "it names no model")
+	}
+	if f := r.GetFallback(); f != nil {
+		switch {
+		case !known(f.GetAdapter()):
+			problems = append(problems, fmt.Sprintf("its fallback names the adapter %q, which models.adapters does not list", f.GetAdapter()))
+		case f.GetModel() == "":
+			problems = append(problems, "its fallback names no model")
+		case f.GetAdapter() == r.GetAdapter() && f.GetModel() == r.GetModel():
+			problems = append(problems, "its fallback is the role's own adapter and model")
+		}
+	}
+	return problems
 }
 
 // isSHA256 reports whether s is a SHA-256 in lowercase hexadecimal.

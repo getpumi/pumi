@@ -1,7 +1,7 @@
 connectrpc.com/connect/v2 v2.0.2 h1:PoPDmOlhc46elsuCdKCKTxjNBb3HJlKF+s/sP2oucPw=
 connectrpc.com/connect/v2 v2.0.2/go.mod h1:N32OLrstcPUzkykFynnefFro3+xzSdOrZlK2jHmS/xo=
-github.com/cedar-policy/cedar-go v1.9.3 h1:ClVTAiyHkhh6FDZgA9/zBucRFESthIIcEXKEX9v4o8Q=
-github.com/cedar-policy/cedar-go v1.9.3/go.mod h1:xF1pHCQW69SIyMguq5BX1ZP9CwdessfnZELtjUpyW7U=
+github.com/cedar-policy/cedar-go v1.9.4 h1:bNt3ecaB4LIp8mah4Gq15WaIimggjxqC6p+FFqsFWvs=
+github.com/cedar-policy/cedar-go v1.9.4/go.mod h1:xF1pHCQW69SIyMguq5BX1ZP9CwdessfnZELtjUpyW7U=
 github.com/go-json-experiment/json v1.27.2 h1:rZIyqYh+Qq+nEa+Y5iwohr8h7G/MfLJqu2CD4/ZONqM=
 github.com/go-json-experiment/json v1.27.2/go.mod h1:tphK2c80bpPhMOI4v6bIc2xWywPfbqi1Z06+RcrMkDg=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=

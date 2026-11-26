@@ -91,11 +91,13 @@ func policySetDigest(files []PolicyFile) string {
 }
 
 // policyFiles returns the core invariants, the core policies of the
-// workflow actions and the wiring's policies.
+// workflow actions, the gate policies (decision 0299) and the wiring's
+// policies.
 func policyFiles(cfg Config) []PolicyFile {
 	return append([]PolicyFile{
 		{Name: "invariants.cedar", Text: policy.Invariants},
 		{Name: "core.cedar", Text: policy.Core},
+		{Name: "gates.cedar", Text: policy.Gates},
 	}, cfg.Policies...)
 }
 

@@ -28,6 +28,14 @@ var Invariants string
 //go:embed core.cedar
 var Core string
 
+// Gates are the policies of the settable gates that are built before
+// epic E10, gates.cedar: the permit of the spec gate (decision 0299). The
+// control plane adds them to every policy set after the invariants and
+// the core policies, until E10 moves them into the public set.
+//
+//go:embed gates.cedar
+var Gates string
+
 // Caps are hard caps on usage. They are the only floor under every profile
 // (decision 0012).
 type Caps struct {

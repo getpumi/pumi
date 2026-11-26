@@ -475,17 +475,23 @@ func TestAdvanceReadsTheUsageOfTheResult(t *testing.T) {
 	}
 }
 
+// TestTheCoreAndTheInvariantsAreInEveryPolicySet: every policy set holds
+// the invariants, the core policies and the gate policies, in that order,
+// before the wiring's own (decision 0299).
 func TestTheCoreAndTheInvariantsAreInEveryPolicySet(t *testing.T) {
 	files := policyFiles(Config{Policies: []PolicyFile{{Name: "lower.cedar", Text: permitAllText}}})
 	names := []string{}
 	for _, f := range files {
 		names = append(names, f.Name)
 	}
-	if want := []string{"invariants.cedar", "core.cedar", "lower.cedar"}; !slices.Equal(names, want) {
-		t.Errorf("the policy files are %q, want %q", names, want)
+	if want := []string{"invariants.cedar", "core.cedar", "gates.cedar", "lower.cedar"}; !slices.Equal(names, want) {
+		t.Fatalf("the policy files are %q, want %q", names, want)
 	}
 	if files[1].Text != policy.Core {
 		t.Error("core.cedar is not the core policies of the api module")
+	}
+	if files[2].Text != policy.Gates {
+		t.Error("gates.cedar is not the gate policies of the api module")
 	}
 }
 

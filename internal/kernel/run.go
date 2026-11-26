@@ -786,12 +786,16 @@ func (k *kernel) madeFor(id string) []decision {
 }
 
 // decide asks the control plane to decide action for the plan, with the
-// plan's last invocation as the key of its facts and cause as the
-// decision's cause, and returns the decision.
+// plan's last invocation and its input tree, as the head tree, as the keys
+// of its facts (decision 0300) and cause as the decision's cause, and
+// returns the decision.
 func (r *planRun) decide(ctx context.Context, action, cause string) (decision, error) {
 	res, err := r.k.cfg.Client.Decide(ctx, &controlplanev1.DecideRequest{
 		Action: action, Plan: r.plan, Cause: cause,
-		Keys: &controlplanev1.FactKeys{Invocation: r.invocation},
+		Keys: &controlplanev1.FactKeys{
+			Invocation: r.invocation,
+			HeadTree:   r.k.documents[r.invocation].GetInput().GetTree(),
+		},
 	})
 	if err != nil {
 		return decision{}, fmt.Errorf("cannot decide %s for the plan %s: %w", action, r.plan, err)

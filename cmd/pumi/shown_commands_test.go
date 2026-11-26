@@ -127,7 +127,7 @@ func shownConfig(t *testing.T, run shownRun) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	models, err := shownModels(run.Adapter)
+	models, err := shownModels(t.Context(), run.Adapter)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 	runnerv1 "getpumi.dev/pumi/api/gen/pumi/runner/v1"
@@ -36,6 +37,9 @@ type Resolved struct {
 	// fallback's model when the fallback is on the same adapter (decision
 	// 0254).
 	Model, FallbackModel string
+	// ReadPaths are the read paths of the adapter's configuration (decision
+	// 0269).
+	ReadPaths []string
 }
 
 // HarnessInvocation derives the harness invocation from the invocation
@@ -75,6 +79,7 @@ func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocat
 		ModelRole:      doc.GetModelRole(),
 		Model:          r.Model,
 		FallbackModel:  r.FallbackModel,
+		ReadPaths:      slices.Clone(r.ReadPaths),
 	}
 	if doc.GetOutputMessage() != "" {
 		inv.OutputSchema = &harnessv1.OutputSchema{Message: doc.GetOutputMessage(), JsonSchema: r.JSONSchema}

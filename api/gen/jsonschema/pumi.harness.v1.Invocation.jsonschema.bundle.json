@@ -226,6 +226,13 @@
         "^(output_schema)$": {
           "$ref": "#/$defs/pumi.harness.v1.OutputSchema.jsonschema.json",
           "description": "The schema of the structured output."
+        },
+        "^(read_paths)$": {
+          "description": "The read paths of the adapter's configuration: absolute paths outside\n the workspace that the harness's commands may read, such as a toolchain\n or a module cache. An adapter whose harness runs commands in a sandbox\n lets the sandbox read them, never write them, and gives the commands a\n writable cache of the invocation's own (decision 0269).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "properties": {
@@ -277,6 +284,13 @@
         "outputSchema": {
           "$ref": "#/$defs/pumi.harness.v1.OutputSchema.jsonschema.json",
           "description": "The schema of the structured output."
+        },
+        "readPaths": {
+          "description": "The read paths of the adapter's configuration: absolute paths outside\n the workspace that the harness's commands may read, such as a toolchain\n or a module cache. An adapter whose harness runs commands in a sandbox\n lets the sandbox read them, never write them, and gives the commands a\n writable cache of the invocation's own (decision 0269).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "role": {
           "anyOf": [

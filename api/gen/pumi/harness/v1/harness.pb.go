@@ -382,6 +382,12 @@ type Invocation struct {
 	// is on the same adapter, which the adapter gives its harness as the
 	// fallback within the run; empty otherwise (decisions 0241, 0246 and 0254).
 	FallbackModel string `protobuf:"bytes,13,opt,name=fallback_model,json=fallbackModel,proto3" json:"fallback_model,omitempty"`
+	// The read paths of the adapter's configuration: absolute paths outside
+	// the workspace that the harness's commands may read, such as a toolchain
+	// or a module cache. An adapter whose harness runs commands in a sandbox
+	// lets the sandbox read them, never write them, and gives the commands a
+	// writable cache of the invocation's own (decision 0269).
+	ReadPaths     []string `protobuf:"bytes,14,rep,name=read_paths,json=readPaths,proto3" json:"read_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -505,6 +511,13 @@ func (x *Invocation) GetFallbackModel() string {
 		return x.FallbackModel
 	}
 	return ""
+}
+
+func (x *Invocation) GetReadPaths() []string {
+	if x != nil {
+		return x.ReadPaths
+	}
+	return nil
 }
 
 // Component is the component that an invocation runs, with its name and
@@ -1396,7 +1409,7 @@ var File_pumi_harness_v1_harness_proto protoreflect.FileDescriptor
 
 const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpumi/harness/v1/harness.proto\x12\x0fpumi.harness.v1\"\xcd\x04\n" +
+	"\x1dpumi/harness/v1/harness.proto\x12\x0fpumi.harness.v1\"\xec\x04\n" +
 	"\n" +
 	"Invocation\x12\x1e\n" +
 	"\n" +
@@ -1415,7 +1428,9 @@ const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\n" +
 	"model_role\x18\v \x01(\tR\tmodelRole\x12\x14\n" +
 	"\x05model\x18\f \x01(\tR\x05model\x12%\n" +
-	"\x0efallback_model\x18\r \x01(\tR\rfallbackModel\"\xca\x01\n" +
+	"\x0efallback_model\x18\r \x01(\tR\rfallbackModel\x12\x1d\n" +
+	"\n" +
+	"read_paths\x18\x0e \x03(\tR\treadPaths\"\xca\x01\n" +
 	"\tComponent\x123\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1f.pumi.harness.v1.Component.KindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +

@@ -300,7 +300,12 @@ type Adapter struct {
 	// key, such as ANTHROPIC_API_KEY: required in the API key mode, and
 	// refused in the sign-in mode. pumi run reads the key from it, which
 	// must not be empty.
-	ApiKeyEnv     string `protobuf:"bytes,4,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`
+	ApiKeyEnv string `protobuf:"bytes,4,opt,name=api_key_env,json=apiKeyEnv,proto3" json:"api_key_env,omitempty"`
+	// Absolute paths outside the workspace that the commands of the adapter's
+	// harness may read, such as a toolchain or a module cache. The runner
+	// passes them in each invocation; pumi refuses a path that is not
+	// absolute (decision 0269).
+	ReadPaths     []string `protobuf:"bytes,5,rep,name=read_paths,json=readPaths,proto3" json:"read_paths,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -361,6 +366,13 @@ func (x *Adapter) GetApiKeyEnv() string {
 		return x.ApiKeyEnv
 	}
 	return ""
+}
+
+func (x *Adapter) GetReadPaths() []string {
+	if x != nil {
+		return x.ReadPaths
+	}
+	return nil
 }
 
 // Role is the adapter and model of a model role, and its fallback
@@ -771,14 +783,16 @@ const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\n" +
 	"RolesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12*\n" +
-	"\x05value\x18\x02 \x01(\v2\x14.pumi.config.v1.RoleR\x05value:\x028\x01\"\x9f\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x14.pumi.config.v1.RoleR\x05value:\x028\x01\"\xbe\x02\n" +
 	"\aAdapter\x12\x1e\n" +
 	"\n" +
 	"executable\x18\x01 \x01(\tR\n" +
 	"executable\x12\x16\n" +
 	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12O\n" +
 	"\x0fcredential_mode\x18\x03 \x01(\x0e2&.pumi.config.v1.Adapter.CredentialModeR\x0ecredentialMode\x12\x1e\n" +
-	"\vapi_key_env\x18\x04 \x01(\tR\tapiKeyEnv\"k\n" +
+	"\vapi_key_env\x18\x04 \x01(\tR\tapiKeyEnv\x12\x1d\n" +
+	"\n" +
+	"read_paths\x18\x05 \x03(\tR\treadPaths\"k\n" +
 	"\x0eCredentialMode\x12\x1f\n" +
 	"\x1bCREDENTIAL_MODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CREDENTIAL_MODE_API_KEY\x10\x01\x12\x1b\n" +

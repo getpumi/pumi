@@ -69,6 +69,12 @@ message Invocation {
   // is on the same adapter, which the adapter gives its harness as the
   // fallback within the run; empty otherwise (decisions 0241, 0246 and 0254).
   string fallback_model = 13;
+  // The read paths of the adapter's configuration: absolute paths outside
+  // the workspace that the harness's commands may read, such as a toolchain
+  // or a module cache. An adapter whose harness runs commands in a sandbox
+  // lets the sandbox read them, never write them, and gives the commands a
+  // writable cache of the invocation's own (decision 0269).
+  repeated string read_paths = 14;
 }
 
 // Component is the component that an invocation runs, with its name and

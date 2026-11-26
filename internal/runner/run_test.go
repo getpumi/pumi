@@ -199,6 +199,20 @@ func fakeAdapter(mode string) int {
 		_, _ = in.ReadString(0)
 		time.Sleep(time.Hour)
 		return 0
+	case "spec check":
+		// A check program that reports spec.valid; the file it writes is
+		// dropped, because the check returns no tree (decision 0282).
+		write("internal/runner/cache.txt", "cache\n")
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: specCheckOutput})
+	case "archive":
+		// The archive step: it writes the living spec and returns the
+		// tree (decisions 0278 and 0282).
+		write("internal/runner/specs/spec.md", "# Spec\n")
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: specCheckOutput})
+	case "archive outside":
+		write("internal/runner/specs/spec.md", "# Spec\n")
+		write("README.md", "changed outside the paths\n")
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: specCheckOutput})
 	case "ignore stop":
 		_, _ = in.ReadString(0)
 		fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"standard input closed")

@@ -334,6 +334,11 @@
           "default": "",
           "description": "The output schema: the full name of a protobuf message in the api\n module (decision 0160).",
           "type": "string"
+        },
+        "^(returns_tree)$": {
+          "default": false,
+          "description": "Whether the result of a check carries the workspace's tree, from the\n workflow state that started it; the runner drops the file changes of a\n check without it (decision 0282).",
+          "type": "boolean"
         }
       },
       "properties": {
@@ -407,6 +412,11 @@
           "default": "",
           "description": "The output schema: the full name of a protobuf message in the api\n module (decision 0160).",
           "type": "string"
+        },
+        "returnsTree": {
+          "default": false,
+          "description": "Whether the result of a check carries the workspace's tree, from the\n workflow state that started it; the runner drops the file changes of a\n check without it (decision 0282).",
+          "type": "boolean"
         },
         "role": {
           "anyOf": [

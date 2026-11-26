@@ -92,6 +92,11 @@ message Invoke {
   // starts a check names one; a state that starts a harness or an external
   // action names none.
   string component = 6;
+  // Whether the result of a check carries the workspace's tree, as the
+  // archive step's does (decisions 0278 and 0282). The runner drops the
+  // file changes of a check without it. Only a state that starts a check
+  // may set it.
+  bool returns_tree = 7;
 }
 
 // Wait is an entry that starts nothing: the state waits for an event.

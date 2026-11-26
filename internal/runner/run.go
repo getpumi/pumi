@@ -56,14 +56,19 @@ type Config struct {
 	// Adapters are the harness adapters by name (decision 0245). The
 	// runner starts one of them once for each invocation (decision 0158):
 	// the adapter of the model role of an agent run, and CheckAdapter for
-	// a check or an external action.
+	// an external action. A check runs its program from Checks instead
+	// (decision 0272).
 	Adapters map[string]Adapter
 	// Roles maps each model role, such as "implementer", to the name of its
 	// adapter (decision 0245).
 	Roles map[string]string
-	// CheckAdapter is the name of the adapter that runs the checks and
-	// external actions, which name no model role (decision 0253).
+	// CheckAdapter is the name of the adapter that runs the external
+	// actions, which name no model role (decision 0253).
 	CheckAdapter string
+	// Checks are the check programs by the component name of the check,
+	// such as "spec". The runner starts the one of a check's component,
+	// with no gateway and no model (decision 0272).
+	Checks map[string]Check
 	// Models maps each model role to the models that an adapter in the
 	// sign-in mode gets in the harness invocation (decision 0254).
 	Models map[string]Models
@@ -126,6 +131,15 @@ type Adapter struct {
 	// of the adapter's harness may read, such as a toolchain; the runner
 	// passes them in each invocation (decision 0269).
 	ReadPaths []string
+}
+
+// Check is a check program's executable (decision 0272).
+type Check struct {
+	// Path is the absolute path of the executable.
+	Path string
+	// SHA256 is the executable's SHA-256 in lowercase hexadecimal. The
+	// runner refuses to start an executable whose SHA-256 differs.
+	SHA256 string
 }
 
 // Models are the models that the configuration maps a model role to, for
@@ -214,7 +228,8 @@ func (c *Config) check() error {
 }
 
 // checkAdapters refuses a configuration with no adapter, with an adapter
-// whose path is not absolute or that has no SHA-256, with a check adapter
+// or a check program whose path is not absolute or that has no SHA-256
+// (decision 0272), with a check adapter
 // or a model role whose adapter it does not list, with an adapter in the
 // sign-in mode when it has no price table, and, in remote mode, with an
 // adapter in the sign-in mode (decisions 0240, 0241, 0245 and 0253).
@@ -236,6 +251,7 @@ func (c *Config) checkAdapters() error {
 			errs = append(errs, fmt.Errorf("runner: the adapter %q is in the sign-in mode, and the runner has no price table to price its usage figures (decision 0241)", name))
 		}
 	}
+	errs = append(errs, c.checkPrograms()...)
 	if _, ok := c.Adapters[c.CheckAdapter]; !ok {
 		errs = append(errs, fmt.Errorf("runner: the check adapter %q is not one of the adapters (decision 0253)", c.CheckAdapter))
 	}
@@ -250,6 +266,22 @@ func (c *Config) checkAdapters() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// checkPrograms returns an error for each check program whose path is not
+// absolute or that has no SHA-256 (decision 0272).
+func (c *Config) checkPrograms() []error {
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(c.Checks)) {
+		p := c.Checks[name]
+		switch {
+		case !filepath.IsAbs(p.Path):
+			errs = append(errs, fmt.Errorf("runner: the check program %q has the path %q, which is not absolute", name, p.Path))
+		case !validSHA256(p.SHA256):
+			errs = append(errs, fmt.Errorf("runner: the check program %q has the SHA-256 %q, which is not 64 lowercase hexadecimal digits", name, p.SHA256))
+		}
+	}
+	return errs
 }
 
 // validSHA256 reports whether s is a SHA-256 in lowercase hexadecimal.
@@ -337,6 +369,14 @@ func Run(ctx context.Context, cfg Config) error {
 // with the usage of both and the switch of the role; when the claim says
 // that the role is on its fallback, it starts only the fallback's adapter
 // (decision 0246).
+//
+// A check runs the program that Checks names for its component, after the
+// runner checked its SHA-256, with the same process contract and no
+// gateway, model or model role; a check whose component has no program
+// fails. Its result carries the workspace's tree only when the document
+// says that it returns one, as the archive step's does, and the runner
+// drops the file changes of any other check (decisions 0272, 0278 and
+// 0282).
 //
 // When a heartbeat carries a cancel request, the runner closes the
 // adapter's standard input, kills it after the grace period and reports
@@ -663,15 +703,18 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	return ex, mt, err
 }
 
-// pickAdapter picks the adapter of the invocation: the adapter of the
+// pickAdapter picks the executable of the invocation: the adapter of the
 // model role of an agent run, or of its fallback when the role is on it,
-// or the check adapter for a check or an external action (decisions 0245,
-// 0246 and 0253). It checks the executable's
-// SHA-256 and refuses one that does not match, and writes the adapter's
-// name, path and SHA-256 to the log (decision 0245).
+// the check program of a check's component, or the check adapter for an
+// external action (decisions 0245, 0246, 0253 and 0272). It checks the
+// executable's SHA-256 and refuses one that does not match, and writes
+// the adapter's or the check program's name, path and SHA-256 to the log
+// (decision 0245).
 func (r *run) pickAdapter() (Adapter, error) {
-	name := r.cfg.CheckAdapter
-	if r.doc.GetComponent().GetKind() == harnessv1.Component_KIND_AGENT_RUN {
+	name, what := r.cfg.CheckAdapter, "adapter"
+	var a Adapter
+	switch r.doc.GetComponent().GetKind() {
+	case harnessv1.Component_KIND_AGENT_RUN:
 		var ok bool
 		if name, ok = r.cfg.Roles[r.doc.GetModelRole()]; !ok {
 			return Adapter{}, fmt.Errorf("the model role %q of the agent run has no adapter (decision 0245)", r.doc.GetModelRole())
@@ -679,17 +722,28 @@ func (r *run) pickAdapter() (Adapter, error) {
 		if r.onFallback {
 			name = r.cfg.Fallbacks[r.doc.GetModelRole()].Adapter
 		}
+		a = r.cfg.Adapters[name]
+	case harnessv1.Component_KIND_CHECK:
+		name, what = r.doc.GetComponent().GetName(), "check program"
+		c, ok := r.cfg.Checks[name]
+		if !ok {
+			return Adapter{}, fmt.Errorf("the check %q has no check program in the configuration, and checks do not run on the check adapter (decision 0272)", name)
+		}
+		// A check program gets no gateway, no model and no read paths
+		// (decision 0272).
+		a = Adapter{Path: c.Path, SHA256: c.SHA256}
+	case harnessv1.Component_KIND_EXTERNAL_ACTION, harnessv1.Component_KIND_UNSPECIFIED:
+		a = r.cfg.Adapters[name]
 	}
-	a := r.cfg.Adapters[name]
 	got, err := hashFile(a.Path)
 	if err != nil {
-		return Adapter{}, fmt.Errorf("the SHA-256 of the adapter %s (%s) could not be computed: %w", name, a.Path, err)
+		return Adapter{}, fmt.Errorf("the SHA-256 of the %s %s (%s) could not be computed: %w", what, name, a.Path, err)
 	}
 	if got != a.SHA256 {
-		return Adapter{}, fmt.Errorf("the adapter %s (%s) has the SHA-256 %s, but the configuration pins %s; the runner does not start it (decision 0245)", name, a.Path, got, a.SHA256)
+		return Adapter{}, fmt.Errorf("the %s %s (%s) has the SHA-256 %s, but the configuration pins %s; the runner does not start it (decision 0245)", what, name, a.Path, got, a.SHA256)
 	}
 	r.adapter = name
-	r.log.note("the adapter %s (%s, SHA-256 %s) runs the invocation %s", name, a.Path, got, r.doc.GetInvocation())
+	r.log.note("the %s %s (%s, SHA-256 %s) runs the invocation %s", what, name, a.Path, got, r.doc.GetInvocation())
 	return a, nil
 }
 

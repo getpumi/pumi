@@ -230,7 +230,7 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		func() error {
 			return runner.Run(ctx, runner.Config{
 				Service: runnerClient, Adapters: cfg.adapters(), Roles: cfg.roleAdapters(),
-				CheckAdapter: cfg.file.GetModels().GetCheckAdapter(), Repository: dir, WorkDir: work, Output: out,
+				CheckAdapter: cfg.file.GetModels().GetCheckAdapter(), Checks: cfg.checks(), Repository: dir, WorkDir: work, Output: out,
 				Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: runnerGateway(gw),
 				Models: roleModels(cfg), Fallbacks: fallbacks(cfg), Price: gateway.FigureCost, Maker: gateway.MakerOf,
 			})

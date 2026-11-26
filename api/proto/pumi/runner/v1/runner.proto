@@ -130,6 +130,10 @@ message Invocation {
   // The model role of an agent run, from the workflow state that started
   // it (decision 0233).
   string model_role = 12;
+  // Whether the result of a check carries the workspace's tree, from the
+  // workflow state that started it; the runner drops the file changes of a
+  // check without it (decision 0282).
+  bool returns_tree = 13;
 }
 
 // HeartbeatRequest is the request of Heartbeat.

@@ -258,6 +258,16 @@ func (c *config) adapters() map[string]runner.Adapter {
 	return out
 }
 
+// checks returns the check programs for the runner by the component name
+// of the check, each executable an absolute path (decision 0272).
+func (c *config) checks() map[string]runner.Check {
+	out := map[string]runner.Check{}
+	for name, p := range c.file.GetChecks() {
+		out[name] = runner.Check{Path: c.path(p.GetExecutable()), SHA256: p.GetSha256()}
+	}
+	return out
+}
+
 // roleAdapters returns the name of the adapter of each model role.
 func (c *config) roleAdapters() map[string]string {
 	out := map[string]string{}

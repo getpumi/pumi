@@ -282,7 +282,8 @@ func heartbeatInterval(timeout *durationpb.Duration) time.Duration {
 }
 
 // judge checks how the adapter's run ended and fills result: the usage,
-// the resulting tree and the structured output. The usage is the gateway's
+// the resulting tree, which a check has only when it returns one
+// (decision 0282), and the structured output. The usage is the gateway's
 // totals with the measured wall time (decision 0230), or on the sign-in
 // path the runner's count of the adapter's usage figures, or of its
 // result's usage when it passed none (decision 0241). It returns the
@@ -310,9 +311,12 @@ func (r *run) judge(ctx context.Context, ex *execution, mt protoreflect.MessageT
 		r.log.note("the provider's usage or rate limit stopped the run of %s (decision 0249)", r.doc.GetInvocation())
 	}
 	r.noteAdapterUsage(res.GetUsage())
-	tree, err := r.resultingTree(ctx, work, index)
-	if err != nil {
-		return failed, err
+	var tree string
+	if r.returnsTree() {
+		var err error
+		if tree, err = r.resultingTree(ctx, work, index); err != nil {
+			return failed, err
+		}
 	}
 	output, err := parseOutput(mt, res)
 	if err != nil {
@@ -538,6 +542,14 @@ func outcomeOf(status harnessv1.Result_Status, stopped bool) (eventsv1.Invocatio
 		return 0, errors.New("the adapter stopped, but the runner did not ask it to")
 	}
 	return 0, fmt.Errorf("the adapter's result has the status %v", status)
+}
+
+// returnsTree reports whether the invocation's result carries the
+// workspace's tree: every invocation but a check, and a check whose
+// document says it does, as the archive step's does. The runner drops the
+// file changes of any other check (decisions 0278 and 0282).
+func (r *run) returnsTree() bool {
+	return r.doc.GetComponent().GetKind() != harnessv1.Component_KIND_CHECK || r.doc.GetReturnsTree()
 }
 
 // resultingTree computes the tree of the workspace and fails when it

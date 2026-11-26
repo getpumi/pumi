@@ -4,11 +4,14 @@
 package main
 
 import (
+	"maps"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	"getpumi.dev/pumi/internal/kernel/firstworkflow"
+	"getpumi.dev/pumi/internal/runner"
 )
 
 // The tests of the check programs that the configuration names by the
@@ -95,5 +98,24 @@ func TestTheArchiveStepIsAfterImplementingByDefault(t *testing.T) {
 	writeFile(t, dir, "pumi.txtpb", "workflow: \"workflow.txtpb\"\ntrunk: \"main\"\nproject { name: \"case\" archive_step: 9 }\n"+models(signedIn, keyed, implementer, checks)+"\n")
 	if _, err := readConfig(dir + "/pumi.txtpb"); err == nil || !strings.Contains(err.Error(), "archive_step") {
 		t.Errorf("readConfig of an unknown archive step = %v, want an error that names archive_step", err)
+	}
+}
+
+// TestTheRunnerGetsTheCheckPrograms: pumi run gives the runner each check
+// program by its component name, with a relative executable made absolute
+// from the directory of the configuration file (decision 0272).
+func TestTheRunnerGetsTheCheckPrograms(t *testing.T) {
+	path := writeTestConfig(t, models(signedIn, keyed, implementer, checks)+" "+builtInPrograms)
+	cfg, err := readConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.checks()
+	want := map[string]runner.Check{
+		"spec":   {Path: filepath.Join(filepath.Dir(path), "bin", "adapter-openspec"), SHA256: validSHA},
+		"checks": {Path: "/opt/pumi-checks", SHA256: validSHA},
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("the runner's check programs are %v, want %v", got, want)
 	}
 }

@@ -144,6 +144,7 @@ const taskHeader = "<!--\nSPDX-License-Identifier: Apache-2.0\nSPDX-FileCopyrigh
 // It also refuses what the machine could not run: a state with no entry, a
 // transition with no trigger, an invocation with no role or kind, a
 // harness with no model role or another kind of component with one, a
+// harness or an external action that sets returns_tree (decision 0282), a
 // superstate that does more than wait or that a transition or the initial
 // state names, a final state with transitions, a result or in-doubt
 // trigger in a state that starts no invocation, an in-doubt trigger in a
@@ -328,6 +329,8 @@ func (l *loader) checkInvoke(state string, inv *workflowv1.Invoke) {
 		l.problem("state %q starts a check and names no component, by which the configuration names its program (decision 0272)", state)
 	case !check && inv.GetComponent() != "":
 		l.problem("state %q starts a %s and names the component %q, which only a check has (decision 0272)", state, kindName(inv.GetKind()), inv.GetComponent())
+	case !check && inv.GetReturnsTree():
+		l.problem("state %q starts a %s and sets returns_tree, which only a check sets (decision 0282)", state, kindName(inv.GetKind()))
 	}
 	l.readTask(state, inv.GetTask())
 }

@@ -119,6 +119,7 @@ func TestTheLoaderRefuses(t *testing.T) {
 		{"model-role-on-check", []string{`state "review"`, "check", `model role "frontier"`}},
 		{"component-missing", []string{`state "review"`, "check", "no component", "0272"}},
 		{"component-on-harness", []string{`state "planning"`, "harness", `component "planner"`, "only a check"}},
+		{"returns-tree-on-harness", []string{`state "planning"`, "harness", "returns_tree", "only a check", "0282"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -140,8 +141,8 @@ func TestEveryFixtureIsTested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 32 {
-		t.Errorf("testdata has %d workflow fixtures, want the valid one and 31 refusals: %q", len(names), names)
+	if len(names) != 33 {
+		t.Errorf("testdata has %d workflow fixtures, want the valid one and 32 refusals: %q", len(names), names)
 	}
 }
 

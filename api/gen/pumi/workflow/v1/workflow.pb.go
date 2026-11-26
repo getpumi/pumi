@@ -380,7 +380,12 @@ type Invoke struct {
 	// configuration names the check's program (decision 0272). A state that
 	// starts a check names one; a state that starts a harness or an external
 	// action names none.
-	Component     string `protobuf:"bytes,6,opt,name=component,proto3" json:"component,omitempty"`
+	Component string `protobuf:"bytes,6,opt,name=component,proto3" json:"component,omitempty"`
+	// Whether the result of a check carries the workspace's tree, as the
+	// archive step's does (decisions 0278 and 0282). The runner drops the
+	// file changes of a check without it. Only a state that starts a check
+	// may set it.
+	ReturnsTree   bool `protobuf:"varint,7,opt,name=returns_tree,json=returnsTree,proto3" json:"returns_tree,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -455,6 +460,13 @@ func (x *Invoke) GetComponent() string {
 		return x.Component
 	}
 	return ""
+}
+
+func (x *Invoke) GetReturnsTree() bool {
+	if x != nil {
+		return x.ReturnsTree
+	}
+	return false
 }
 
 // Wait is an entry that starts nothing: the state waits for an event.
@@ -982,7 +994,7 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\x04wait\x18\x05 \x01(\v2\x16.pumi.workflow.v1.WaitH\x00R\x04wait\x12/\n" +
 	"\x05final\x18\x06 \x01(\v2\x17.pumi.workflow.v1.FinalH\x00R\x05final\x12>\n" +
 	"\vtransitions\x18\a \x03(\v2\x1c.pumi.workflow.v1.TransitionR\vtransitionsB\a\n" +
-	"\x05entry\"\xfd\x02\n" +
+	"\x05entry\"\xa0\x03\n" +
 	"\x06Invoke\x121\n" +
 	"\x04role\x18\x01 \x01(\x0e2\x1d.pumi.workflow.v1.Invoke.RoleR\x04role\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.pumi.workflow.v1.Invoke.KindR\x04kind\x12\x12\n" +
@@ -990,7 +1002,8 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\x0eoutput_message\x18\x04 \x01(\tR\routputMessage\x12\x1d\n" +
 	"\n" +
 	"model_role\x18\x05 \x01(\tR\tmodelRole\x12\x1c\n" +
-	"\tcomponent\x18\x06 \x01(\tR\tcomponent\";\n" +
+	"\tcomponent\x18\x06 \x01(\tR\tcomponent\x12!\n" +
+	"\freturns_tree\x18\a \x01(\bR\vreturnsTree\";\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

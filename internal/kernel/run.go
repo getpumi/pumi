@@ -927,6 +927,11 @@ func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Inv
 		doc.Component = &harnessv1.Component{}
 	}
 	doc.Component.Kind = kindOf[inv.GetKind()]
+	if inv.GetKind() == workflowv1.Invoke_KIND_CHECK {
+		// A check runs the program that the configuration names for its
+		// component, whose version is the program's own (decision 0272).
+		doc.Component.Name, doc.Component.Version = inv.GetComponent(), ""
+	}
 	if doc.Input == nil {
 		doc.Input = &harnessv1.Input{}
 	}

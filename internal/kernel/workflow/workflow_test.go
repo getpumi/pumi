@@ -45,6 +45,26 @@ func TestModelRolesListsTheRolesOfTheAgentRuns(t *testing.T) {
 	}
 }
 
+// TestChecksListsTheComponentsOfTheChecks: the component names of the
+// states that start a check, by which the configuration names their
+// programs (decision 0272).
+func TestChecksListsTheComponentsOfTheChecks(t *testing.T) {
+	w, err := load(t, "valid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Checks(); len(got) != 0 {
+		t.Errorf("Checks() of a workflow with no check = %q, want none", got)
+	}
+	w, err = Load(os.DirFS("../testdata/recovery"), "workflow.txtpb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Checks(); !slices.Equal(got, []string{"check"}) {
+		t.Errorf("Checks() = %q, want [check]", got)
+	}
+}
+
 func TestTheTaskTextsAreReadWithoutTheirSPDXHeader(t *testing.T) {
 	w, err := load(t, "valid")
 	if err != nil {
@@ -97,6 +117,8 @@ func TestTheLoaderRefuses(t *testing.T) {
 		{"failed-without-invoke", []string{`state "planning-escalated", transition 3`, `"failed"`, "starts no invocation"}},
 		{"model-role-missing", []string{`state "planning"`, "harness", "no model role"}},
 		{"model-role-on-check", []string{`state "review"`, "check", `model role "frontier"`}},
+		{"component-missing", []string{`state "review"`, "check", "no component", "0272"}},
+		{"component-on-harness", []string{`state "planning"`, "harness", `component "planner"`, "only a check"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -118,8 +140,8 @@ func TestEveryFixtureIsTested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 30 {
-		t.Errorf("testdata has %d workflow fixtures, want the valid one and 29 refusals: %q", len(names), names)
+	if len(names) != 32 {
+		t.Errorf("testdata has %d workflow fixtures, want the valid one and 31 refusals: %q", len(names), names)
 	}
 }
 

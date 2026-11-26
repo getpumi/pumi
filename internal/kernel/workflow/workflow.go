@@ -323,6 +323,12 @@ func (l *loader) checkInvoke(state string, inv *workflowv1.Invoke) {
 	case !harness && inv.GetModelRole() != "":
 		l.problem("state %q starts a %s and names the model role %q, which only an agent run has (decision 0233)", state, kindName(inv.GetKind()), inv.GetModelRole())
 	}
+	switch check := inv.GetKind() == workflowv1.Invoke_KIND_CHECK; {
+	case check && inv.GetComponent() == "":
+		l.problem("state %q starts a check and names no component, by which the configuration names its program (decision 0272)", state)
+	case !check && inv.GetComponent() != "":
+		l.problem("state %q starts a %s and names the component %q, which only a check has (decision 0272)", state, kindName(inv.GetKind()), inv.GetComponent())
+	}
 	l.readTask(state, inv.GetTask())
 }
 
@@ -516,6 +522,20 @@ func (l *loader) checkReachable() {
 			l.problem("state %q cannot be reached from the initial state %q", s.GetName(), l.def.GetInitial())
 		}
 	}
+}
+
+// Checks returns the component names of the checks that the states start,
+// sorted, each once (decision 0272). The configuration must name a program
+// for each of them.
+func (w *Workflow) Checks() []string {
+	var checks []string
+	for _, s := range w.def.GetStates() {
+		if c := s.GetInvoke().GetComponent(); c != "" && !slices.Contains(checks, c) {
+			checks = append(checks, c)
+		}
+	}
+	slices.Sort(checks)
+	return checks
 }
 
 // ModelRoles returns the model roles that the states that start a harness

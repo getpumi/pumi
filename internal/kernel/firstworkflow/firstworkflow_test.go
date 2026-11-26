@@ -550,3 +550,22 @@ func TestEachAgentStateHasAModelRoleOfItsOwn(t *testing.T) {
 		t.Errorf("the states' model roles are %v, want %v", got, want)
 	}
 }
+
+// TestTheChecksNameTheirComponents: the spec state runs the spec check
+// program, whose output holds spec.valid and the narratives, and the
+// checking state runs the program of the checks (decisions 0272 and 0279).
+func TestTheChecksNameTheirComponents(t *testing.T) {
+	w := load(t)
+	if got := w.Checks(); !slices.Equal(got, []string{"checks", "spec"}) {
+		t.Errorf("Checks() = %q, want [checks spec]", got)
+	}
+	for _, s := range w.Definition().GetStates() {
+		if s.GetName() != "spec" {
+			continue
+		}
+		inv := s.GetInvoke()
+		if inv.GetComponent() != "spec" || inv.GetOutputMessage() != "pumi.workflow.v1.SpecCheckOutput" {
+			t.Errorf("the spec state runs %q with the output %q, want spec with pumi.workflow.v1.SpecCheckOutput", inv.GetComponent(), inv.GetOutputMessage())
+		}
+	}
+}

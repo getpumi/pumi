@@ -91,6 +91,25 @@
       "title": "Adapter",
       "type": "object"
     },
+    "pumi.config.v1.Check.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Check is a check program (decision 0272). The runner starts it with the\n process contract of the harness adapters, with no gateway and no model:\n one pumi.harness.v1.Invocation line on standard input and a\n pumi.harness.v1.Result on standard output, whose output is the check's\n output message (decisions 0158 to 0160).",
+      "properties": {
+        "executable": {
+          "default": "",
+          "description": "The executable, relative to the directory of the configuration file\n or absolute.",
+          "type": "string"
+        },
+        "sha256": {
+          "default": "",
+          "description": "The SHA-256 of the executable, in lowercase hexadecimal. The runner\n refuses to start an executable whose SHA-256 differs (decision 0245).",
+          "type": "string"
+        }
+      },
+      "title": "Check",
+      "type": "object"
+    },
     "pumi.config.v1.Config.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -111,6 +130,16 @@
           "$ref": "#/$defs/pumi.runner.v1.Invocation.jsonschema.json",
           "description": "The base of each invocation document: the component's name and version,\n the repository, the capabilities and the budget. The kernel sets the\n rest, and the input tree from the trunk (decision 0165)."
         },
+        "checks": {
+          "additionalProperties": {
+            "$ref": "#/$defs/pumi.config.v1.Check.jsonschema.json"
+          },
+          "description": "The check programs, by the component name of the check, such as\n \"spec\" (decision 0272). Each check that the workflow starts needs one;\n a program for a check that the workflow does not start is accepted, so\n that adopters can name their own checks.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
         "gateway": {
           "$ref": "#/$defs/pumi.config.v1.Gateway.jsonschema.json",
           "description": "Replaced by models (decision 0245): the API key variables are on the\n adapters, and the model roles are models.roles. pumi refuses a file\n that sets it."
@@ -121,7 +150,7 @@
         },
         "models": {
           "$ref": "#/$defs/pumi.config.v1.Models.jsonschema.json",
-          "description": "The model configuration: the adapters, the model roles and the adapter\n of the checks and external actions (decisions 0245 and 0253). It is\n apart from the profile settings."
+          "description": "The model configuration: the adapters, the model roles and the adapter\n of the external actions (decisions 0245, 0253 and 0272). It is apart\n from the profile settings."
         },
         "project": {
           "$ref": "#/$defs/pumi.config.v1.Project.jsonschema.json",
@@ -231,7 +260,7 @@
       "patternProperties": {
         "^(check_adapter)$": {
           "default": "",
-          "description": "The adapter that runs every check and external action, which name no\n model role (decision 0253).",
+          "description": "The adapter that runs every external action, which names no model role\n (decision 0253), until epic E11 brings the forge adapter. Checks do not\n run on it: each runs as the program that checks names (decision 0272).",
           "type": "string"
         },
         "^(default_role)$": {
@@ -252,7 +281,7 @@
         },
         "checkAdapter": {
           "default": "",
-          "description": "The adapter that runs every check and external action, which name no\n model role (decision 0253).",
+          "description": "The adapter that runs every external action, which names no model role\n (decision 0253), until epic E11 brings the forge adapter. Checks do not\n run on it: each runs as the program that checks names (decision 0272).",
           "type": "string"
         },
         "defaultRole": {
@@ -278,6 +307,30 @@
       "additionalProperties": false,
       "description": "Project is the project of the Cedar resource Plan (decision 0141), and the\n project section that the kernel adds to the task of every agent run\n (decision 0250). It is apart from the model configuration.",
       "patternProperties": {
+        "^(archive_step)$": {
+          "anyOf": [
+            {
+              "pattern": "^ARCHIVE_STEP_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ARCHIVE_STEP_AFTER_IMPLEMENTING",
+                "ARCHIVE_STEP_AFTER_CONFORMANCE",
+                "ARCHIVE_STEP_OFF"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Where the change is archived.",
+          "title": "Archive Step"
+        },
         "^(check_commands)$": {
           "description": "The commands that run the project's checks, such as make test.",
           "items": {
@@ -301,6 +354,30 @@
         }
       },
       "properties": {
+        "archiveStep": {
+          "anyOf": [
+            {
+              "pattern": "^ARCHIVE_STEP_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ARCHIVE_STEP_AFTER_IMPLEMENTING",
+                "ARCHIVE_STEP_AFTER_CONFORMANCE",
+                "ARCHIVE_STEP_OFF"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Where the change is archived.",
+          "title": "Archive Step"
+        },
         "checkCommands": {
           "description": "The commands that run the project's checks, such as make test.",
           "items": {

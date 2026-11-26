@@ -87,6 +87,11 @@ message Invoke {
   // gateway. A state that starts a harness names one; a state that starts
   // a check or an external action names none (decision 0233).
   string model_role = 5;
+  // The component name of a check, such as "spec", by which the
+  // configuration names the check's program (decision 0272). A state that
+  // starts a check names one; a state that starts a harness or an external
+  // action names none.
+  string component = 6;
 }
 
 // Wait is an entry that starts nothing: the state waits for an event.

@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "pumi.config.v1.Check.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Check is a check program (decision 0272). The runner starts it with the\n process contract of the harness adapters, with no gateway and no model:\n one pumi.harness.v1.Invocation line on standard input and a\n pumi.harness.v1.Result on standard output, whose output is the check's\n output message (decisions 0158 to 0160).",
+      "properties": {
+        "executable": {
+          "default": "",
+          "description": "The executable, relative to the directory of the configuration file\n or absolute.",
+          "type": "string"
+        },
+        "sha256": {
+          "default": "",
+          "description": "The SHA-256 of the executable, in lowercase hexadecimal. The runner\n refuses to start an executable whose SHA-256 differs (decision 0245).",
+          "type": "string"
+        }
+      },
+      "title": "Check",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.config.v1.Check.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.config.v1.Check.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

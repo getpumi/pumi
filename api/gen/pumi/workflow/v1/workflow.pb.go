@@ -375,7 +375,12 @@ type Invoke struct {
 	// configuration maps to a model and a fallback model at the model
 	// gateway. A state that starts a harness names one; a state that starts
 	// a check or an external action names none (decision 0233).
-	ModelRole     string `protobuf:"bytes,5,opt,name=model_role,json=modelRole,proto3" json:"model_role,omitempty"`
+	ModelRole string `protobuf:"bytes,5,opt,name=model_role,json=modelRole,proto3" json:"model_role,omitempty"`
+	// The component name of a check, such as "spec", by which the
+	// configuration names the check's program (decision 0272). A state that
+	// starts a check names one; a state that starts a harness or an external
+	// action names none.
+	Component     string `protobuf:"bytes,6,opt,name=component,proto3" json:"component,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -441,6 +446,13 @@ func (x *Invoke) GetOutputMessage() string {
 func (x *Invoke) GetModelRole() string {
 	if x != nil {
 		return x.ModelRole
+	}
+	return ""
+}
+
+func (x *Invoke) GetComponent() string {
+	if x != nil {
+		return x.Component
 	}
 	return ""
 }
@@ -970,14 +982,15 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\x04wait\x18\x05 \x01(\v2\x16.pumi.workflow.v1.WaitH\x00R\x04wait\x12/\n" +
 	"\x05final\x18\x06 \x01(\v2\x17.pumi.workflow.v1.FinalH\x00R\x05final\x12>\n" +
 	"\vtransitions\x18\a \x03(\v2\x1c.pumi.workflow.v1.TransitionR\vtransitionsB\a\n" +
-	"\x05entry\"\xdf\x02\n" +
+	"\x05entry\"\xfd\x02\n" +
 	"\x06Invoke\x121\n" +
 	"\x04role\x18\x01 \x01(\x0e2\x1d.pumi.workflow.v1.Invoke.RoleR\x04role\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.pumi.workflow.v1.Invoke.KindR\x04kind\x12\x12\n" +
 	"\x04task\x18\x03 \x01(\tR\x04task\x12%\n" +
 	"\x0eoutput_message\x18\x04 \x01(\tR\routputMessage\x12\x1d\n" +
 	"\n" +
-	"model_role\x18\x05 \x01(\tR\tmodelRole\";\n" +
+	"model_role\x18\x05 \x01(\tR\tmodelRole\x12\x1c\n" +
+	"\tcomponent\x18\x06 \x01(\tR\tcomponent\";\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

@@ -1,0 +1,87 @@
+{
+  "$defs": {
+    "pumi.facts.v1.SpecValid.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "SpecValid is spec.valid: whether the spec adapter accepts the tree's spec.",
+      "patternProperties": {
+        "^(spec_adapter_version)$": {
+          "default": "",
+          "description": "The version of the spec adapter.",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "specAdapterVersion": {
+          "default": "",
+          "description": "The version of the spec adapter.",
+          "type": "string"
+        },
+        "tree": {
+          "default": "",
+          "description": "The tree.",
+          "type": "string"
+        },
+        "value": {
+          "default": false,
+          "description": "Whether the spec is valid.",
+          "type": "boolean"
+        }
+      },
+      "title": "Spec Valid",
+      "type": "object"
+    },
+    "pumi.workflow.v1.SpecCheckOutput.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "SpecCheckOutput is the structured output of the spec check of the first\n workflow (decisions 0277 and 0279): spec.valid and the narratives of the\n plan's change and of the capabilities it touches, which the kernel adds\n to the tasks of the second opinion, plan review and the conformance\n audit. Its spec_valid is the spec.valid fact, which the state reported as\n its whole output before (decision 0272). The check's findings go to its\n log, not here (decision 0277).",
+      "patternProperties": {
+        "^(capability_narratives)$": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The narratives of the capabilities that the change touches, by the\n capability's name.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "^(change_narrative)$": {
+          "default": "",
+          "description": "The narrative of the plan's change (decision 0271).",
+          "type": "string"
+        },
+        "^(spec_valid)$": {
+          "$ref": "#/$defs/pumi.facts.v1.SpecValid.jsonschema.json",
+          "description": "spec.valid."
+        }
+      },
+      "properties": {
+        "capabilityNarratives": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The narratives of the capabilities that the change touches, by the\n capability's name.",
+          "propertyNames": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "changeNarrative": {
+          "default": "",
+          "description": "The narrative of the plan's change (decision 0271).",
+          "type": "string"
+        },
+        "specValid": {
+          "$ref": "#/$defs/pumi.facts.v1.SpecValid.jsonschema.json",
+          "description": "spec.valid."
+        }
+      },
+      "title": "Spec Check Output",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.SpecCheckOutput.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.SpecCheckOutput.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

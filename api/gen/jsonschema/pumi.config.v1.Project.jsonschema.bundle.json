@@ -5,6 +5,30 @@
       "additionalProperties": false,
       "description": "Project is the project of the Cedar resource Plan (decision 0141), and the\n project section that the kernel adds to the task of every agent run\n (decision 0250). It is apart from the model configuration.",
       "patternProperties": {
+        "^(archive_step)$": {
+          "anyOf": [
+            {
+              "pattern": "^ARCHIVE_STEP_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ARCHIVE_STEP_AFTER_IMPLEMENTING",
+                "ARCHIVE_STEP_AFTER_CONFORMANCE",
+                "ARCHIVE_STEP_OFF"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Where the change is archived.",
+          "title": "Archive Step"
+        },
         "^(check_commands)$": {
           "description": "The commands that run the project's checks, such as make test.",
           "items": {
@@ -28,6 +52,30 @@
         }
       },
       "properties": {
+        "archiveStep": {
+          "anyOf": [
+            {
+              "pattern": "^ARCHIVE_STEP_UNSPECIFIED$",
+              "type": "string"
+            },
+            {
+              "enum": [
+                "ARCHIVE_STEP_AFTER_IMPLEMENTING",
+                "ARCHIVE_STEP_AFTER_CONFORMANCE",
+                "ARCHIVE_STEP_OFF"
+              ],
+              "type": "string"
+            },
+            {
+              "maximum": 2147483647,
+              "minimum": -2147483648,
+              "type": "integer"
+            }
+          ],
+          "default": 0,
+          "description": "Where the change is archived.",
+          "title": "Archive Step"
+        },
         "checkCommands": {
           "description": "The commands that run the project's checks, such as make test.",
           "items": {

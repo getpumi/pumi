@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "pumi.workflow.v1.CoverageReport.Requirement.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Requirement is one requirement that the change adds or modifies.",
+      "patternProperties": {
+        "^(no_test_reason)$": {
+          "default": "",
+          "description": "The reason the plan gives for having no test for the requirement;\n empty when it gives none.",
+          "type": "string"
+        },
+        "^(test_files)$": {
+          "description": "The test files, relative to the root of the repository, whose\n Verifies: line names the ID.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "properties": {
+        "id": {
+          "default": "",
+          "description": "The requirement's ID, such as BLS-001 (decision 0274).",
+          "type": "string"
+        },
+        "noTestReason": {
+          "default": "",
+          "description": "The reason the plan gives for having no test for the requirement;\n empty when it gives none.",
+          "type": "string"
+        },
+        "testFiles": {
+          "description": "The test files, relative to the root of the repository, whose\n Verifies: line names the ID.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Requirement",
+      "type": "object"
+    },
+    "pumi.workflow.v1.CoverageReport.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "CoverageReport is the coverage of the requirements of the plan's change\n (decision 0280), which the kernel adds to the task of the conformance\n audit. It is not a fact.",
+      "properties": {
+        "requirements": {
+          "description": "The requirements that the change adds or modifies, each once. A\n removed or only renamed requirement is not listed.",
+          "items": {
+            "$ref": "#/$defs/pumi.workflow.v1.CoverageReport.Requirement.jsonschema.json"
+          },
+          "type": "array"
+        }
+      },
+      "title": "Coverage Report",
+      "type": "object"
+    }
+  },
+  "$id": "pumi.workflow.v1.CoverageReport.jsonschema.bundle.json",
+  "$ref": "#/$defs/pumi.workflow.v1.CoverageReport.jsonschema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

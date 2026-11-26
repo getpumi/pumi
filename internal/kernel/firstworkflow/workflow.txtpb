@@ -47,7 +47,9 @@ states {
 }
 
 # 1. Spec (initial): the spec adapter validates the OpenSpec change of the
-# plan and reports spec.valid (decision 0172). To planning on the spec gate;
+# plan and reports spec.valid (decision 0172), with the narratives (decision
+# 0279), as the check program that the configuration names for spec
+# (decision 0272). To planning on the spec gate;
 # otherwise escalate. There is no retry, because only a person can fix the
 # spec.
 states {
@@ -57,8 +59,9 @@ states {
   invoke {
     role: ROLE_GATE
     kind: KIND_CHECK
+    component: "spec"
     task: "validate-spec"
-    output_message: "pumi.facts.v1.SpecValid"
+    output_message: "pumi.workflow.v1.SpecCheckOutput"
   }
   transitions {
     trigger { result {} }
@@ -446,6 +449,7 @@ states {
   invoke {
     role: ROLE_GATE
     kind: KIND_CHECK
+    component: "checks"
     task: "run-checks"
     output_message: "pumi.workflow.v1.CheckingOutput"
   }

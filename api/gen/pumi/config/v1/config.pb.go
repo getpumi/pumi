@@ -82,7 +82,67 @@ func (x Adapter_CredentialMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Adapter_CredentialMode.Descriptor instead.
 func (Adapter_CredentialMode) EnumDescriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{2, 0}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{3, 0}
+}
+
+// ArchiveStep is where the spec adapter archives the plan's change into
+// the living specs, inside the plan's pull request (decision 0278).
+type Project_ArchiveStep int32
+
+const (
+	// Not set, which is ARCHIVE_STEP_AFTER_IMPLEMENTING.
+	Project_ARCHIVE_STEP_UNSPECIFIED Project_ArchiveStep = 0
+	// In a state of its own right after implementing, the default.
+	Project_ARCHIVE_STEP_AFTER_IMPLEMENTING Project_ArchiveStep = 1
+	// After the conformance audit; every check runs again on the archived
+	// tree before approval.
+	Project_ARCHIVE_STEP_AFTER_CONFORMANCE Project_ArchiveStep = 2
+	// No archive step: a person archives the change by hand in the
+	// change's own commits.
+	Project_ARCHIVE_STEP_OFF Project_ArchiveStep = 3
+)
+
+// Enum value maps for Project_ArchiveStep.
+var (
+	Project_ArchiveStep_name = map[int32]string{
+		0: "ARCHIVE_STEP_UNSPECIFIED",
+		1: "ARCHIVE_STEP_AFTER_IMPLEMENTING",
+		2: "ARCHIVE_STEP_AFTER_CONFORMANCE",
+		3: "ARCHIVE_STEP_OFF",
+	}
+	Project_ArchiveStep_value = map[string]int32{
+		"ARCHIVE_STEP_UNSPECIFIED":        0,
+		"ARCHIVE_STEP_AFTER_IMPLEMENTING": 1,
+		"ARCHIVE_STEP_AFTER_CONFORMANCE":  2,
+		"ARCHIVE_STEP_OFF":                3,
+	}
+)
+
+func (x Project_ArchiveStep) Enum() *Project_ArchiveStep {
+	p := new(Project_ArchiveStep)
+	*p = x
+	return p
+}
+
+func (x Project_ArchiveStep) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Project_ArchiveStep) Descriptor() protoreflect.EnumDescriptor {
+	return file_pumi_config_v1_config_proto_enumTypes[1].Descriptor()
+}
+
+func (Project_ArchiveStep) Type() protoreflect.EnumType {
+	return &file_pumi_config_v1_config_proto_enumTypes[1]
+}
+
+func (x Project_ArchiveStep) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Project_ArchiveStep.Descriptor instead.
+func (Project_ArchiveStep) EnumDescriptor() ([]byte, []int) {
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{8, 0}
 }
 
 // Config is the configuration file.
@@ -116,9 +176,14 @@ type Config struct {
 	// Deprecated: Marked as deprecated in pumi/config/v1/config.proto.
 	Gateway *Gateway `protobuf:"bytes,8,opt,name=gateway,proto3" json:"gateway,omitempty"`
 	// The model configuration: the adapters, the model roles and the adapter
-	// of the checks and external actions (decisions 0245 and 0253). It is
-	// apart from the profile settings.
-	Models        *Models `protobuf:"bytes,9,opt,name=models,proto3" json:"models,omitempty"`
+	// of the external actions (decisions 0245, 0253 and 0272). It is apart
+	// from the profile settings.
+	Models *Models `protobuf:"bytes,9,opt,name=models,proto3" json:"models,omitempty"`
+	// The check programs, by the component name of the check, such as
+	// "spec" (decision 0272). Each check that the workflow starts needs one;
+	// a program for a check that the workflow does not start is accepted, so
+	// that adopters can name their own checks.
+	Checks        map[string]*Check `protobuf:"bytes,10,rep,name=checks,proto3" json:"checks,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,6 +283,74 @@ func (x *Config) GetModels() *Models {
 	return nil
 }
 
+func (x *Config) GetChecks() map[string]*Check {
+	if x != nil {
+		return x.Checks
+	}
+	return nil
+}
+
+// Check is a check program (decision 0272). The runner starts it with the
+// process contract of the harness adapters, with no gateway and no model:
+// one pumi.harness.v1.Invocation line on standard input and a
+// pumi.harness.v1.Result on standard output, whose output is the check's
+// output message (decisions 0158 to 0160).
+type Check struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The executable, relative to the directory of the configuration file
+	// or absolute.
+	Executable string `protobuf:"bytes,1,opt,name=executable,proto3" json:"executable,omitempty"`
+	// The SHA-256 of the executable, in lowercase hexadecimal. The runner
+	// refuses to start an executable whose SHA-256 differs (decision 0245).
+	Sha256        string `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Check) Reset() {
+	*x = Check{}
+	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Check) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Check) ProtoMessage() {}
+
+func (x *Check) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Check.ProtoReflect.Descriptor instead.
+func (*Check) Descriptor() ([]byte, []int) {
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Check) GetExecutable() string {
+	if x != nil {
+		return x.Executable
+	}
+	return ""
+}
+
+func (x *Check) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
 // Models is the model configuration (decision 0245): which adapter and
 // model serve each model role, and their fallbacks.
 type Models struct {
@@ -227,8 +360,9 @@ type Models struct {
 	// The model roles by name, such as "implementer". A model role that the
 	// workflow names and that is not here uses default_role (decision 0257).
 	Roles map[string]*Role `protobuf:"bytes,2,rep,name=roles,proto3" json:"roles,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// The adapter that runs every check and external action, which name no
-	// model role (decision 0253).
+	// The adapter that runs every external action, which names no model role
+	// (decision 0253), until epic E11 brings the forge adapter. Checks do not
+	// run on it: each runs as the program that checks names (decision 0272).
 	CheckAdapter string `protobuf:"bytes,3,opt,name=check_adapter,json=checkAdapter,proto3" json:"check_adapter,omitempty"`
 	// The default role: the adapter, model and fallback of each model role
 	// that the workflow names and roles does not list. pumi refuses a
@@ -242,7 +376,7 @@ type Models struct {
 
 func (x *Models) Reset() {
 	*x = Models{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -254,7 +388,7 @@ func (x *Models) String() string {
 func (*Models) ProtoMessage() {}
 
 func (x *Models) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[1]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -267,7 +401,7 @@ func (x *Models) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Models.ProtoReflect.Descriptor instead.
 func (*Models) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{1}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Models) GetAdapters() map[string]*Adapter {
@@ -325,7 +459,7 @@ type Adapter struct {
 
 func (x *Adapter) Reset() {
 	*x = Adapter{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -337,7 +471,7 @@ func (x *Adapter) String() string {
 func (*Adapter) ProtoMessage() {}
 
 func (x *Adapter) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[2]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -350,7 +484,7 @@ func (x *Adapter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Adapter.ProtoReflect.Descriptor instead.
 func (*Adapter) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{2}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Adapter) GetExecutable() string {
@@ -410,7 +544,7 @@ type Role struct {
 
 func (x *Role) Reset() {
 	*x = Role{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -422,7 +556,7 @@ func (x *Role) String() string {
 func (*Role) ProtoMessage() {}
 
 func (x *Role) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[3]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -435,7 +569,7 @@ func (x *Role) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Role.ProtoReflect.Descriptor instead.
 func (*Role) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{3}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Role) GetAdapter() string {
@@ -473,7 +607,7 @@ type Fallback struct {
 
 func (x *Fallback) Reset() {
 	*x = Fallback{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[4]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +619,7 @@ func (x *Fallback) String() string {
 func (*Fallback) ProtoMessage() {}
 
 func (x *Fallback) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[4]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +632,7 @@ func (x *Fallback) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Fallback.ProtoReflect.Descriptor instead.
 func (*Fallback) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{4}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Fallback) GetAdapter() string {
@@ -537,7 +671,7 @@ type Gateway struct {
 
 func (x *Gateway) Reset() {
 	*x = Gateway{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[5]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +683,7 @@ func (x *Gateway) String() string {
 func (*Gateway) ProtoMessage() {}
 
 func (x *Gateway) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[5]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,7 +696,7 @@ func (x *Gateway) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Gateway.ProtoReflect.Descriptor instead.
 func (*Gateway) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{5}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Gateway) GetApiKeyEnv() string {
@@ -594,7 +728,7 @@ type ModelRole struct {
 
 func (x *ModelRole) Reset() {
 	*x = ModelRole{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[6]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -606,7 +740,7 @@ func (x *ModelRole) String() string {
 func (*ModelRole) ProtoMessage() {}
 
 func (x *ModelRole) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[6]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -619,7 +753,7 @@ func (x *ModelRole) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelRole.ProtoReflect.Descriptor instead.
 func (*ModelRole) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{6}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ModelRole) GetModel() string {
@@ -651,13 +785,15 @@ type Project struct {
 	// relative to the root of the repository. The task names a file that the
 	// input tree does not hold as missing.
 	ConventionFiles []string `protobuf:"bytes,4,rep,name=convention_files,json=conventionFiles,proto3" json:"convention_files,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Where the change is archived.
+	ArchiveStep   Project_ArchiveStep `protobuf:"varint,5,opt,name=archive_step,json=archiveStep,proto3,enum=pumi.config.v1.Project_ArchiveStep" json:"archive_step,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Project) Reset() {
 	*x = Project{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[7]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -669,7 +805,7 @@ func (x *Project) String() string {
 func (*Project) ProtoMessage() {}
 
 func (x *Project) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[7]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -682,7 +818,7 @@ func (x *Project) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Project.ProtoReflect.Descriptor instead.
 func (*Project) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{7}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Project) GetName() string {
@@ -713,6 +849,13 @@ func (x *Project) GetConventionFiles() []string {
 	return nil
 }
 
+func (x *Project) GetArchiveStep() Project_ArchiveStep {
+	if x != nil {
+		return x.ArchiveStep
+	}
+	return Project_ARCHIVE_STEP_UNSPECIFIED
+}
+
 // Settings are the profile settings that pumi reads from the file
 // (decisions 0189 and 0201).
 type Settings struct {
@@ -729,7 +872,7 @@ type Settings struct {
 
 func (x *Settings) Reset() {
 	*x = Settings{}
-	mi := &file_pumi_config_v1_config_proto_msgTypes[8]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -741,7 +884,7 @@ func (x *Settings) String() string {
 func (*Settings) ProtoMessage() {}
 
 func (x *Settings) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_config_v1_config_proto_msgTypes[8]
+	mi := &file_pumi_config_v1_config_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -754,7 +897,7 @@ func (x *Settings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Settings.ProtoReflect.Descriptor instead.
 func (*Settings) Descriptor() ([]byte, []int) {
-	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{8}
+	return file_pumi_config_v1_config_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Settings) GetParallelism() int32 {
@@ -775,7 +918,7 @@ var File_pumi_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpumi/config/v1/config.proto\x12\x0epumi.config.v1\x1a\x1dpumi/harness/v1/harness.proto\x1a\x1bpumi/runner/v1/runner.proto\"\x8d\x03\n" +
+	"\x1bpumi/config/v1/config.proto\x12\x0epumi.config.v1\x1a\x1dpumi/harness/v1/harness.proto\x1a\x1bpumi/runner/v1/runner.proto\"\x9b\x04\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x1c\n" +
 	"\aadapter\x18\x02 \x01(\tB\x02\x18\x01R\aadapter\x12\x14\n" +
@@ -785,7 +928,17 @@ const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\thard_caps\x18\x06 \x01(\v2\x16.pumi.harness.v1.UsageR\bhardCaps\x124\n" +
 	"\bsettings\x18\a \x01(\v2\x18.pumi.config.v1.SettingsR\bsettings\x125\n" +
 	"\agateway\x18\b \x01(\v2\x17.pumi.config.v1.GatewayB\x02\x18\x01R\agateway\x12.\n" +
-	"\x06models\x18\t \x01(\v2\x16.pumi.config.v1.ModelsR\x06models\"\x87\x03\n" +
+	"\x06models\x18\t \x01(\v2\x16.pumi.config.v1.ModelsR\x06models\x12:\n" +
+	"\x06checks\x18\n" +
+	" \x03(\v2\".pumi.config.v1.Config.ChecksEntryR\x06checks\x1aP\n" +
+	"\vChecksEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12+\n" +
+	"\x05value\x18\x02 \x01(\v2\x15.pumi.config.v1.CheckR\x05value:\x028\x01\"?\n" +
+	"\x05Check\x12\x1e\n" +
+	"\n" +
+	"executable\x18\x01 \x01(\tR\n" +
+	"executable\x12\x16\n" +
+	"\x06sha256\x18\x02 \x01(\tR\x06sha256\"\x87\x03\n" +
 	"\x06Models\x12@\n" +
 	"\badapters\x18\x01 \x03(\v2$.pumi.config.v1.Models.AdaptersEntryR\badapters\x127\n" +
 	"\x05roles\x18\x02 \x03(\v2!.pumi.config.v1.Models.RolesEntryR\x05roles\x12#\n" +
@@ -827,12 +980,18 @@ const file_pumi_config_v1_config_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x19.pumi.config.v1.ModelRoleR\x05value:\x028\x01\"=\n" +
 	"\tModelRole\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12\x1a\n" +
-	"\bfallback\x18\x02 \x01(\tR\bfallback\"\x98\x01\n" +
+	"\bfallback\x18\x02 \x01(\tR\bfallback\"\xed\x02\n" +
 	"\aProject\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12'\n" +
 	"\x0fprotected_paths\x18\x02 \x03(\tR\x0eprotectedPaths\x12%\n" +
 	"\x0echeck_commands\x18\x03 \x03(\tR\rcheckCommands\x12)\n" +
-	"\x10convention_files\x18\x04 \x03(\tR\x0fconventionFiles\"\xba\x01\n" +
+	"\x10convention_files\x18\x04 \x03(\tR\x0fconventionFiles\x12F\n" +
+	"\farchive_step\x18\x05 \x01(\x0e2#.pumi.config.v1.Project.ArchiveStepR\varchiveStep\"\x8a\x01\n" +
+	"\vArchiveStep\x12\x1c\n" +
+	"\x18ARCHIVE_STEP_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fARCHIVE_STEP_AFTER_IMPLEMENTING\x10\x01\x12\"\n" +
+	"\x1eARCHIVE_STEP_AFTER_CONFORMANCE\x10\x02\x12\x14\n" +
+	"\x10ARCHIVE_STEP_OFF\x10\x03\"\xba\x01\n" +
 	"\bSettings\x12 \n" +
 	"\vparallelism\x18\x01 \x01(\x05R\vparallelism\x12L\n" +
 	"\fmax_attempts\x18\x02 \x03(\v2).pumi.config.v1.Settings.MaxAttemptsEntryR\vmaxAttempts\x1a>\n" +
@@ -853,48 +1012,54 @@ func file_pumi_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_pumi_config_v1_config_proto_rawDescData
 }
 
-var file_pumi_config_v1_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pumi_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_pumi_config_v1_config_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_pumi_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_pumi_config_v1_config_proto_goTypes = []any{
 	(Adapter_CredentialMode)(0), // 0: pumi.config.v1.Adapter.CredentialMode
-	(*Config)(nil),              // 1: pumi.config.v1.Config
-	(*Models)(nil),              // 2: pumi.config.v1.Models
-	(*Adapter)(nil),             // 3: pumi.config.v1.Adapter
-	(*Role)(nil),                // 4: pumi.config.v1.Role
-	(*Fallback)(nil),            // 5: pumi.config.v1.Fallback
-	(*Gateway)(nil),             // 6: pumi.config.v1.Gateway
-	(*ModelRole)(nil),           // 7: pumi.config.v1.ModelRole
-	(*Project)(nil),             // 8: pumi.config.v1.Project
-	(*Settings)(nil),            // 9: pumi.config.v1.Settings
-	nil,                         // 10: pumi.config.v1.Models.AdaptersEntry
-	nil,                         // 11: pumi.config.v1.Models.RolesEntry
-	nil,                         // 12: pumi.config.v1.Gateway.ModelRolesEntry
-	nil,                         // 13: pumi.config.v1.Settings.MaxAttemptsEntry
-	(*v1.Invocation)(nil),       // 14: pumi.runner.v1.Invocation
-	(*v11.Usage)(nil),           // 15: pumi.harness.v1.Usage
+	(Project_ArchiveStep)(0),    // 1: pumi.config.v1.Project.ArchiveStep
+	(*Config)(nil),              // 2: pumi.config.v1.Config
+	(*Check)(nil),               // 3: pumi.config.v1.Check
+	(*Models)(nil),              // 4: pumi.config.v1.Models
+	(*Adapter)(nil),             // 5: pumi.config.v1.Adapter
+	(*Role)(nil),                // 6: pumi.config.v1.Role
+	(*Fallback)(nil),            // 7: pumi.config.v1.Fallback
+	(*Gateway)(nil),             // 8: pumi.config.v1.Gateway
+	(*ModelRole)(nil),           // 9: pumi.config.v1.ModelRole
+	(*Project)(nil),             // 10: pumi.config.v1.Project
+	(*Settings)(nil),            // 11: pumi.config.v1.Settings
+	nil,                         // 12: pumi.config.v1.Config.ChecksEntry
+	nil,                         // 13: pumi.config.v1.Models.AdaptersEntry
+	nil,                         // 14: pumi.config.v1.Models.RolesEntry
+	nil,                         // 15: pumi.config.v1.Gateway.ModelRolesEntry
+	nil,                         // 16: pumi.config.v1.Settings.MaxAttemptsEntry
+	(*v1.Invocation)(nil),       // 17: pumi.runner.v1.Invocation
+	(*v11.Usage)(nil),           // 18: pumi.harness.v1.Usage
 }
 var file_pumi_config_v1_config_proto_depIdxs = []int32{
-	14, // 0: pumi.config.v1.Config.base:type_name -> pumi.runner.v1.Invocation
-	8,  // 1: pumi.config.v1.Config.project:type_name -> pumi.config.v1.Project
-	15, // 2: pumi.config.v1.Config.hard_caps:type_name -> pumi.harness.v1.Usage
-	9,  // 3: pumi.config.v1.Config.settings:type_name -> pumi.config.v1.Settings
-	6,  // 4: pumi.config.v1.Config.gateway:type_name -> pumi.config.v1.Gateway
-	2,  // 5: pumi.config.v1.Config.models:type_name -> pumi.config.v1.Models
-	10, // 6: pumi.config.v1.Models.adapters:type_name -> pumi.config.v1.Models.AdaptersEntry
-	11, // 7: pumi.config.v1.Models.roles:type_name -> pumi.config.v1.Models.RolesEntry
-	4,  // 8: pumi.config.v1.Models.default_role:type_name -> pumi.config.v1.Role
-	0,  // 9: pumi.config.v1.Adapter.credential_mode:type_name -> pumi.config.v1.Adapter.CredentialMode
-	5,  // 10: pumi.config.v1.Role.fallback:type_name -> pumi.config.v1.Fallback
-	12, // 11: pumi.config.v1.Gateway.model_roles:type_name -> pumi.config.v1.Gateway.ModelRolesEntry
-	13, // 12: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
-	3,  // 13: pumi.config.v1.Models.AdaptersEntry.value:type_name -> pumi.config.v1.Adapter
-	4,  // 14: pumi.config.v1.Models.RolesEntry.value:type_name -> pumi.config.v1.Role
-	7,  // 15: pumi.config.v1.Gateway.ModelRolesEntry.value:type_name -> pumi.config.v1.ModelRole
-	16, // [16:16] is the sub-list for method output_type
-	16, // [16:16] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	17, // 0: pumi.config.v1.Config.base:type_name -> pumi.runner.v1.Invocation
+	10, // 1: pumi.config.v1.Config.project:type_name -> pumi.config.v1.Project
+	18, // 2: pumi.config.v1.Config.hard_caps:type_name -> pumi.harness.v1.Usage
+	11, // 3: pumi.config.v1.Config.settings:type_name -> pumi.config.v1.Settings
+	8,  // 4: pumi.config.v1.Config.gateway:type_name -> pumi.config.v1.Gateway
+	4,  // 5: pumi.config.v1.Config.models:type_name -> pumi.config.v1.Models
+	12, // 6: pumi.config.v1.Config.checks:type_name -> pumi.config.v1.Config.ChecksEntry
+	13, // 7: pumi.config.v1.Models.adapters:type_name -> pumi.config.v1.Models.AdaptersEntry
+	14, // 8: pumi.config.v1.Models.roles:type_name -> pumi.config.v1.Models.RolesEntry
+	6,  // 9: pumi.config.v1.Models.default_role:type_name -> pumi.config.v1.Role
+	0,  // 10: pumi.config.v1.Adapter.credential_mode:type_name -> pumi.config.v1.Adapter.CredentialMode
+	7,  // 11: pumi.config.v1.Role.fallback:type_name -> pumi.config.v1.Fallback
+	15, // 12: pumi.config.v1.Gateway.model_roles:type_name -> pumi.config.v1.Gateway.ModelRolesEntry
+	1,  // 13: pumi.config.v1.Project.archive_step:type_name -> pumi.config.v1.Project.ArchiveStep
+	16, // 14: pumi.config.v1.Settings.max_attempts:type_name -> pumi.config.v1.Settings.MaxAttemptsEntry
+	3,  // 15: pumi.config.v1.Config.ChecksEntry.value:type_name -> pumi.config.v1.Check
+	5,  // 16: pumi.config.v1.Models.AdaptersEntry.value:type_name -> pumi.config.v1.Adapter
+	6,  // 17: pumi.config.v1.Models.RolesEntry.value:type_name -> pumi.config.v1.Role
+	9,  // 18: pumi.config.v1.Gateway.ModelRolesEntry.value:type_name -> pumi.config.v1.ModelRole
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_pumi_config_v1_config_proto_init() }
@@ -907,8 +1072,8 @@ func file_pumi_config_v1_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_config_v1_config_proto_rawDesc), len(file_pumi_config_v1_config_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   13,
+			NumEnums:      2,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

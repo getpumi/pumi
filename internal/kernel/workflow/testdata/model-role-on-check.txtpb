@@ -86,6 +86,7 @@ states {
   invoke {
     role: ROLE_GATE
     kind: KIND_CHECK
+    component: "review"
     model_role: "frontier"
     task: "review-plan"
     output_message: "pumi.workflow.v1.SecondOpinion"

@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 )
@@ -24,6 +25,9 @@ type Project struct {
 	Conventions []string
 	// ProtectedPaths are the project's protected path patterns.
 	ProtectedPaths []string
+	// ArchiveStep is where the spec adapter archives the plan's change,
+	// never ARCHIVE_STEP_UNSPECIFIED (decision 0278).
+	ArchiveStep configv1.Project_ArchiveStep
 }
 
 // planningOutput is the output message of a planning invocation, whose

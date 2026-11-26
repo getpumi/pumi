@@ -16,6 +16,7 @@ import (
 
 const config = `{
   "api": {"path": "api", "modules": []},
+  "conformance": {"path": "conformance", "modules": []},
   "components": [
     {"name": "kernel", "path": "internal/kernel", "modules": []},
     {"name": "runner", "path": "internal/runner", "modules": []}
@@ -25,8 +26,8 @@ const config = `{
   "commands": {"path": "cmd", "modules": []}
 }`
 
-// newModule writes a small core module, with its api module and
-// .pumi/imports.json, to a temporary directory and makes it the working
+// newModule writes a small core module, with its api and conformance
+// modules and .pumi/imports.json, to a temporary directory and makes it the working
 // directory. The kernel imports the runner when broken is true.
 func newModule(t *testing.T, broken bool) {
 	t.Helper()
@@ -38,15 +39,17 @@ func newModule(t *testing.T, broken bool) {
 		kernel += "\nimport _ \"example.com/core/internal/runner\"\n"
 	}
 	for name, src := range map[string]string{
-		"go.mod":                    "module example.com/core\n\ngo 1.26.0\n\nrequire example.com/core/api v0.0.0\n\nreplace example.com/core/api => ./api\n",
-		"api/go.mod":                "module example.com/core/api\n\ngo 1.26.0\n",
-		"api/api.go":                "package api\n",
-		"internal/kernel/kernel.go": kernel,
-		"internal/runner/runner.go": "package runner\n",
-		"internal/shared/shared.go": "package shared\n\nimport _ \"example.com/core/api\"\n",
-		"internal/checks/c/c.go":    "package c\n",
-		"cmd/core/main.go":          "package main\n\nimport (\n\t_ \"example.com/core/internal/kernel\"\n\t_ \"example.com/core/internal/runner\"\n)\n\nfunc main() {}\n",
-		".pumi/imports.json":        config,
+		"go.mod":                     "module example.com/core\n\ngo 1.26.0\n\nrequire example.com/core/api v0.0.0\n\nreplace example.com/core/api => ./api\n",
+		"api/go.mod":                 "module example.com/core/api\n\ngo 1.26.0\n",
+		"api/api.go":                 "package api\n",
+		"conformance/go.mod":         "module example.com/core/conformance\n\ngo 1.26.0\n",
+		"conformance/conformance.go": "package conformance\n",
+		"internal/kernel/kernel.go":  kernel,
+		"internal/runner/runner.go":  "package runner\n",
+		"internal/shared/shared.go":  "package shared\n\nimport _ \"example.com/core/api\"\n",
+		"internal/checks/c/c.go":     "package c\n",
+		"cmd/core/main.go":           "package main\n\nimport (\n\t_ \"example.com/core/internal/kernel\"\n\t_ \"example.com/core/internal/runner\"\n)\n\nfunc main() {}\n",
+		".pumi/imports.json":         config,
 	} {
 		if err := os.MkdirAll(filepath.Dir(name), 0o750); err != nil {
 			t.Fatal(err)

@@ -354,7 +354,7 @@ func shownRunner(ctx context.Context, run shownRun, dir string) (runner.Config, 
 	if err != nil {
 		return runner.Config{}, nil, err
 	}
-	models, err := shownModels(run.Adapter)
+	models, err := shownModels(ctx, run.Adapter)
 	if err != nil {
 		_ = blobs.Close()
 		return runner.Config{}, nil, err

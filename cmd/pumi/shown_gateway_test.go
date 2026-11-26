@@ -122,8 +122,10 @@ func (h shownHarness) tokenIn(environ []byte) (gatewayToken, bool) {
 // adapter of the harness that PUMI_SHOWN_HARNESS names at path (decision
 // 0245): in the API key mode when PUMI_SHOWN_API_KEY_ENV names the key's
 // variable, and in the sign-in mode otherwise, running the model role and
-// the checks.
-func shownModels(path string) (*configv1.Models, error) {
+// the checks. Its read paths are Go's root and module cache, so that a
+// harness that runs commands in a sandbox can run the plan's go test
+// commands (decision 0269).
+func shownModels(ctx context.Context, path string) (*configv1.Models, error) {
 	h, err := shownHarnessOf()
 	if err != nil {
 		return nil, err
@@ -132,7 +134,14 @@ func shownModels(path string) (*configv1.Models, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &configv1.Adapter{Executable: path, Sha256: hash, CredentialMode: configv1.Adapter_CREDENTIAL_MODE_SIGN_IN}
+	goEnv, err := exec.CommandContext(ctx, "go", "env", "GOROOT", "GOMODCACHE").Output()
+	if err != nil {
+		return nil, fmt.Errorf("go env GOROOT GOMODCACHE: %w", err)
+	}
+	a := &configv1.Adapter{
+		Executable: path, Sha256: hash, CredentialMode: configv1.Adapter_CREDENTIAL_MODE_SIGN_IN,
+		ReadPaths: strings.Fields(string(goEnv)),
+	}
 	if key := os.Getenv(envProviderVariable); key != "" {
 		a.CredentialMode, a.ApiKeyEnv = configv1.Adapter_CREDENTIAL_MODE_API_KEY, key
 	}

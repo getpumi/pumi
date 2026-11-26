@@ -4,7 +4,10 @@
 package main
 
 import (
+	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
@@ -46,7 +49,7 @@ func TestTheShownCodexRunsUseTheCodexAdapterAndOpenAIModels(t *testing.T) {
 	t.Setenv(envHarness, "codex")
 	t.Setenv(envProviderVariable, "PUMI_OPENAI_KEY")
 	path := writeAdapter(t)
-	m, err := shownModels(path)
+	m, err := shownModels(t.Context(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +73,7 @@ func TestTheShownCodexRunsUseTheCodexAdapterAndOpenAIModels(t *testing.T) {
 func TestTheShownCodexRunsOnASignInHaveNoKey(t *testing.T) {
 	t.Setenv(envHarness, "codex")
 	t.Setenv(envProviderVariable, "")
-	m, err := shownModels(writeAdapter(t))
+	m, err := shownModels(t.Context(), writeAdapter(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +130,27 @@ func TestOnlyTheAPIKeyModeHasAKeyPathToCheck(t *testing.T) {
 		}
 		if h.keyPathHeader != want {
 			t.Errorf("%s: keyPathHeader = %v, want %v", harness, h.keyPathHeader, want)
+		}
+	}
+}
+
+// TestTheShownRunsLetCommandsReadGo: the adapter of the shown runs lists
+// Go's root and module cache as read paths, so that a harness that runs
+// commands in a sandbox can run the go test commands of the plan with the
+// toolchain and modules of the machine (decision 0269).
+func TestTheShownRunsLetCommandsReadGo(t *testing.T) {
+	m, err := shownModels(t.Context(), writeAdapter(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.CommandContext(t.Context(), "go", "env", "GOROOT", "GOMODCACHE").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Fields(string(out))
+	for _, a := range m.GetAdapters() {
+		if !slices.Equal(a.GetReadPaths(), want) {
+			t.Errorf("the read paths are %q, want Go's root and module cache %q", a.GetReadPaths(), want)
 		}
 	}
 }

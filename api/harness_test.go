@@ -31,10 +31,13 @@ func TestTheHarnessInvocationHasTheFieldsOf0158(t *testing.T) {
 	inv := (&harnessv1.Invocation{}).ProtoReflect().Descriptor()
 	want := []string{
 		"budget", "capabilities", "component", "fallback_model", "gateway", "idempotency_key", "input",
-		"invocation", "model", "model_role", "output_schema", "role", "workspace",
+		"invocation", "model", "model_role", "output_schema", "read_paths", "role", "workspace",
 	}
 	if got := fieldNames(inv); !slices.Equal(got, want) {
-		t.Errorf("Invocation has %q, want %q (decisions 0158, 0233 and 0254)", got, want)
+		t.Errorf("Invocation has %q, want %q (decisions 0158, 0233, 0254 and 0269)", got, want)
+	}
+	if f := fieldOf(t, inv, "read_paths"); f.Kind() != protoreflect.StringKind || !f.IsList() {
+		t.Errorf("read_paths is a %v, list %v; want a list of strings (decision 0269)", f.Kind(), f.IsList())
 	}
 	for _, name := range []string{"model", "fallback_model"} {
 		if f := fieldOf(t, inv, name); f.Kind() != protoreflect.StringKind || f.IsList() {

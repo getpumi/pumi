@@ -82,6 +82,11 @@ message Adapter {
   // refused in the sign-in mode. pumi run reads the key from it, which
   // must not be empty.
   string api_key_env = 4;
+  // Absolute paths outside the workspace that the commands of the adapter's
+  // harness may read, such as a toolchain or a module cache. The runner
+  // passes them in each invocation; pumi refuses a path that is not
+  // absolute (decision 0269).
+  repeated string read_paths = 5;
 }
 
 // Role is the adapter and model of a model role, and its fallback

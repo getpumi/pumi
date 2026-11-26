@@ -118,6 +118,10 @@ type Adapter struct {
 	// SignIn is set when the harness uses the person's own sign-in, and
 	// not an API key that the gateway holds.
 	SignIn bool
+	// ReadPaths are absolute paths outside the workspace that the commands
+	// of the adapter's harness may read, such as a toolchain; the runner
+	// passes them in each invocation (decision 0269).
+	ReadPaths []string
 }
 
 // Models are the models that the configuration maps a model role to, for
@@ -608,7 +612,7 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 		return nil, nil, fmt.Errorf("the input tree could not be checked out: %w", err)
 	}
 	var mt protoreflect.MessageType
-	resolved := Resolved{Workspace: work, Gateway: gateway}
+	resolved := Resolved{Workspace: work, Gateway: gateway, ReadPaths: adapter.ReadPaths}
 	if r.meter != nil {
 		models := r.cfg.Models[r.doc.GetModelRole()]
 		if r.onFallback {

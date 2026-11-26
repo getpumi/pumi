@@ -32,6 +32,13 @@
           "default": 0,
           "description": "The credential mode.",
           "title": "Credential Mode"
+        },
+        "^(read_paths)$": {
+          "description": "Absolute paths outside the workspace that the commands of the adapter's\n harness may read, such as a toolchain or a module cache. The runner\n passes them in each invocation; pumi refuses a path that is not\n absolute (decision 0269).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         }
       },
       "properties": {
@@ -67,6 +74,13 @@
           "default": "",
           "description": "The executable, relative to the directory of the configuration file\n or absolute (decision 0158).",
           "type": "string"
+        },
+        "readPaths": {
+          "description": "Absolute paths outside the workspace that the commands of the adapter's\n harness may read, such as a toolchain or a module cache. The runner\n passes them in each invocation; pumi refuses a path that is not\n absolute (decision 0269).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "sha256": {
           "default": "",

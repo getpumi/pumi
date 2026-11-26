@@ -121,6 +121,11 @@ func adapterProblems(a *configv1.Adapter) []string {
 	if !isSHA256(a.GetSha256()) {
 		problems = append(problems, fmt.Sprintf("its sha256 %q is not 64 lowercase hexadecimal digits", a.GetSha256()))
 	}
+	for _, p := range a.GetReadPaths() {
+		if !filepath.IsAbs(p) {
+			problems = append(problems, fmt.Sprintf("its read path %q is not absolute (decision 0269)", p))
+		}
+	}
 	switch a.GetCredentialMode() {
 	case configv1.Adapter_CREDENTIAL_MODE_API_KEY:
 		if a.GetApiKeyEnv() == "" {
@@ -194,7 +199,8 @@ func (c *config) adapters() map[string]runner.Adapter {
 	for name, a := range c.file.GetModels().GetAdapters() {
 		out[name] = runner.Adapter{
 			Path: c.path(a.GetExecutable()), SHA256: a.GetSha256(),
-			SignIn: a.GetCredentialMode() == configv1.Adapter_CREDENTIAL_MODE_SIGN_IN,
+			SignIn:    a.GetCredentialMode() == configv1.Adapter_CREDENTIAL_MODE_SIGN_IN,
+			ReadPaths: slices.Clone(a.GetReadPaths()),
 		}
 	}
 	return out

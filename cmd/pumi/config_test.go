@@ -4,6 +4,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -32,7 +33,7 @@ func adapterText(name, fields string) string {
 // The parts of the model configurations of TestReadConfig.
 var (
 	signedIn = adapterText("claude-code", `executable: "bin/adapter-claude-code" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_SIGN_IN`)
-	keyed    = adapterText("codex", `executable: "/opt/adapter-codex" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_API_KEY api_key_env: "OPENAI_API_KEY"`)
+	keyed    = adapterText("codex", `executable: "/opt/adapter-codex" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_API_KEY api_key_env: "OPENAI_API_KEY" read_paths: "/home/someone/go"`)
 	frontier = `roles { key: "frontier" value { adapter: "claude-code" model: "claude-opus-5-5" fallback { adapter: "codex" model: "astra" } } }`
 	checks   = `check_adapter: "claude-code"`
 )
@@ -69,8 +70,8 @@ func TestReadConfig(t *testing.T) {
 	if got := a["claude-code"]; got.Path != cfg.dir+"/bin/adapter-claude-code" || got.SHA256 != validSHA || !got.SignIn {
 		t.Errorf("the adapter claude-code is %+v, want the path in the file's directory, its SHA-256 and the sign-in mode", got)
 	}
-	if got := a["codex"]; got.Path != "/opt/adapter-codex" || got.SignIn {
-		t.Errorf("the adapter codex is %+v, want its absolute path and the API key mode", got)
+	if got := a["codex"]; got.Path != "/opt/adapter-codex" || got.SignIn || !slices.Equal(got.ReadPaths, []string{"/home/someone/go"}) {
+		t.Errorf("the adapter codex is %+v, want its absolute path, the API key mode and its read path", got)
 	}
 	if got := cfg.roleAdapters(); len(got) != 1 || got["frontier"] != "claude-code" {
 		t.Errorf("the roles' adapters are %v, want frontier on claude-code", got)
@@ -111,6 +112,10 @@ func TestReadConfig(t *testing.T) {
 		},
 		"an entry without a credential mode": {
 			models(adapterText("claude-code", `executable: "a" sha256: "`+validSHA+`"`), checks), "credential_mode",
+		},
+		"a read path that is not absolute": {
+			models(adapterText("claude-code", `executable: "a" sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_SIGN_IN read_paths: "go/pkg"`), checks),
+			`read path "go/pkg"`,
 		},
 		"an entry without an executable": {
 			models(adapterText("claude-code", `sha256: "`+validSHA+`" credential_mode: CREDENTIAL_MODE_SIGN_IN`), checks), "executable",

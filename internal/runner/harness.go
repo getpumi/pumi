@@ -76,7 +76,7 @@ func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocat
 		Budget:         proto.CloneOf(doc.GetBudget()),
 		Workspace:      r.Workspace,
 		Gateway:        proto.CloneOf(r.Gateway),
-		ModelRole:      doc.GetModelRole(),
+		ModelRole:      modelRole(doc),
 		Model:          r.Model,
 		FallbackModel:  r.FallbackModel,
 		ReadPaths:      slices.Clone(r.ReadPaths),
@@ -85,6 +85,15 @@ func HarnessInvocation(doc *runnerv1.Invocation, r Resolved) (*harnessv1.Invocat
 		inv.OutputSchema = &harnessv1.OutputSchema{Message: doc.GetOutputMessage(), JsonSchema: r.JSONSchema}
 	}
 	return inv, nil
+}
+
+// modelRole returns the model role of an agent run, and nothing for any
+// other kind of invocation, which runs no model (decisions 0233 and 0272).
+func modelRole(doc *runnerv1.Invocation) string {
+	if doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN {
+		return ""
+	}
+	return doc.GetModelRole()
 }
 
 // checkAgentRun refuses an agent run whose adapter is in the API key mode

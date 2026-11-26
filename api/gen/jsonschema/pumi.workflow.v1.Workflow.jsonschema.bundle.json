@@ -28,6 +28,11 @@
           "default": "",
           "description": "The full name of the protobuf message in the api module that the\n invocation's structured output must be, such as\n pumi.workflow.v1.PlanningOutput (decision 0160).",
           "type": "string"
+        },
+        "^(returns_tree)$": {
+          "default": false,
+          "description": "Whether the result of a check carries the workspace's tree, as the\n archive step's does (decisions 0278 and 0282). The runner drops the\n file changes of a check without it. Only a state that starts a check\n may set it.",
+          "type": "boolean"
         }
       },
       "properties": {
@@ -69,6 +74,11 @@
           "default": "",
           "description": "The full name of the protobuf message in the api module that the\n invocation's structured output must be, such as\n pumi.workflow.v1.PlanningOutput (decision 0160).",
           "type": "string"
+        },
+        "returnsTree": {
+          "default": false,
+          "description": "Whether the result of a check carries the workspace's tree, as the\n archive step's does (decisions 0278 and 0282). The runner drops the\n file changes of a check without it. Only a state that starts a check\n may set it.",
+          "type": "boolean"
         },
         "role": {
           "anyOf": [

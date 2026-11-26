@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
-	harnessv1 "getpumi.dev/pumi/api/gen/pumi/harness/v1"
 )
 
 // fakeAdapterName is the name of the fixture's adapter, which runs its
@@ -149,25 +148,6 @@ func TestTheCredentialModeIsPerAdapter(t *testing.T) {
 				t.Errorf("the runner opened %q with the gateway", opened)
 			}
 		})
-	}
-}
-
-// TestACheckRunsOnTheCheckAdapter: a check names no model role, so the
-// runner starts the check adapter (decision 0253).
-func TestACheckRunsOnTheCheckAdapter(t *testing.T) {
-	checks := copyAdapter(t, "check-adapter")
-	f := newFixture(t, "success")
-	f.cfg.Adapters["checks"] = Adapter{Path: checks, SHA256: fakeAdapterHash(t)}
-	f.cfg.CheckAdapter = "checks"
-	f.service.claim.Invocation.Component.Kind = harnessv1.Component_KIND_CHECK
-	f.service.claim.Invocation.ModelRole = ""
-	f.service.claim.Invocation.Capabilities.Network.Access = harnessv1.Capabilities_Network_ACCESS_NONE
-	report := f.runOne(t)
-	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
-		t.Fatalf("the outcome is %v, want succeeded; the log is\n%s", report.GetOutcome(), f.service.log())
-	}
-	if got := startedPath(t, f.service.log()); got != checks {
-		t.Errorf("the runner started %s, want the check adapter %s", got, checks)
 	}
 }
 

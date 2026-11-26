@@ -931,6 +931,9 @@ func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Inv
 		// A check runs the program that the configuration names for its
 		// component, whose version is the program's own (decision 0272).
 		doc.Component.Name, doc.Component.Version = inv.GetComponent(), ""
+		// The archive step's result carries the workspace's tree, and the
+		// runner drops the file changes of any other check (decision 0282).
+		doc.ReturnsTree = inv.GetReturnsTree()
 	}
 	if doc.Input == nil {
 		doc.Input = &harnessv1.Input{}

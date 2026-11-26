@@ -249,9 +249,8 @@ func TestAnAgentRunIsRefused(t *testing.T) {
 // TestACheckRunsWithoutTheGateway: a check makes no model calls, so the
 // runner opens no gateway for it; its usage is the measured wall time.
 func TestACheckRunsWithoutTheGateway(t *testing.T) {
-	f := newFixture(t, "success")
-	f.service.claim.Invocation.Component.Kind = harnessv1.Component_KIND_CHECK
-	f.service.claim.Invocation.Capabilities.Network.Access = harnessv1.Capabilities_Network_ACCESS_NONE
+	f, _ := newCheckFixture(t, "success")
+	f.service.claim.Invocation.OutputMessage = "pumi.workflow.v1.ImplementationOutput"
 	f.cfg.Gateway = nil
 	report := f.runOne(t)
 	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {

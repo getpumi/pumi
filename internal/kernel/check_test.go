@@ -8,6 +8,7 @@ import (
 
 	"getpumi.dev/pumi/api/events"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 // TestACheckNamesItsComponent: the invocation document of a check names
@@ -35,5 +36,31 @@ func TestACheckNamesItsComponent(t *testing.T) {
 	}
 	if got := k.cfg.Base.GetComponent().GetName(); got != "scripted" {
 		t.Errorf("a check changed the base's component to %q", got)
+	}
+}
+
+// TestACheckThatReturnsATreeSaysSo: the invocation document carries
+// returns_tree from the state that started it, as the archive state sets
+// it (decision 0282).
+func TestACheckThatReturnsATreeSaysSo(t *testing.T) {
+	k, r := firstWorkflowKernel(t, Project{}, treeFiles{})
+	for _, set := range []bool{false, true} {
+		inv := proto.CloneOf(k.states["spec"].GetInvoke())
+		inv.ReturnsTree = set
+		req, err := r.request(t.Context(), "spec", inv, "cause")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var data eventsv1.InvocationRequested
+		if err := unpack(req, &data); err != nil {
+			t.Fatal(err)
+		}
+		doc, err := events.Document(&data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.GetReturnsTree() != set {
+			t.Errorf("with returns_tree %v on the state, the document has returns_tree %v", set, doc.GetReturnsTree())
+		}
 	}
 }

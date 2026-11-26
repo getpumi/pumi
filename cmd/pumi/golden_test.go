@@ -18,6 +18,7 @@ import (
 
 	"getpumi.dev/pumi/api/events"
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	controlplanev1 "getpumi.dev/pumi/api/gen/pumi/controlplane/v1"
 	"getpumi.dev/pumi/api/gen/pumi/controlplane/v1/controlplanev1connect"
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
@@ -108,6 +109,23 @@ type caseSettings struct {
 	// ActionHappened is the fake answer of the adapter of an external
 	// action in doubt to whether the action happened (decision 0202).
 	ActionHappened bool `json:"actionHappened"`
+	// ArchiveStep is the project's archive step, by its name in
+	// pumi.config.v1.Project.ArchiveStep, or empty for after implementing
+	// (decisions 0278 and 0296).
+	ArchiveStep string `json:"archiveStep"`
+}
+
+// archiveStep returns the project's archive step of the settings s.
+func (s caseSettings) archiveStep(t *testing.T) configv1.Project_ArchiveStep {
+	t.Helper()
+	if s.ArchiveStep == "" {
+		return configv1.Project_ARCHIVE_STEP_UNSPECIFIED
+	}
+	v, ok := configv1.Project_ArchiveStep_value[s.ArchiveStep]
+	if !ok {
+		t.Fatalf("settings.json: the archive step %q is unknown", s.ArchiveStep)
+	}
+	return configv1.Project_ArchiveStep(v)
 }
 
 // readSettings returns the settings of the case in dir, from its
@@ -291,8 +309,9 @@ func (p *pumi) startKernel() {
 			default:
 			}
 		},
-		Wrote: func(position uint64) { p.wrote(position) },
-		Trunk: p.trunk,
+		Wrote:   func(position uint64) { p.wrote(position) },
+		Trunk:   p.trunk,
+		Project: kernel.Project{ArchiveStep: p.settings.archiveStep(p.t)},
 	}
 	go func() { p.done <- kernel.Run(ctx, cfg) }()
 }

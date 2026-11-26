@@ -27,6 +27,11 @@
           "description": "The component name of a check, such as \"spec\", by which the\n configuration names the check's program (decision 0272). A state that\n starts a check names one; a state that starts a harness or an external\n action names none.",
           "type": "string"
         },
+        "coverage": {
+          "default": false,
+          "description": "Whether the kernel adds the coverage report of the plan's change, with\n the plan's reasons for having no test, to the task of an agent run\n (decisions 0280, 0295 and 0298). Only a state that starts a harness may\n set it.",
+          "type": "boolean"
+        },
         "kind": {
           "anyOf": [
             {
@@ -55,6 +60,11 @@
           "default": "",
           "description": "The model role of an agent run, such as \"implementer\", which the\n configuration maps to a model and a fallback model at the model\n gateway. A state that starts a harness names one; a state that starts\n a check or an external action names none (decision 0233).",
           "type": "string"
+        },
+        "narratives": {
+          "default": false,
+          "description": "Whether the kernel adds the narratives of the plan's change and of the\n capabilities it touches, from the spec check's result, to the task of\n an agent run (decisions 0271, 0279 and 0298). Only a state that starts\n a harness may set it.",
+          "type": "boolean"
         },
         "outputMessage": {
           "default": "",

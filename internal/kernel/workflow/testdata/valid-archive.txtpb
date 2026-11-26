@@ -1,0 +1,247 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The valid workflow with an archive step (decision 0296): after planning
+# when the project archives after implementing, after the review when it
+# archives after the conformance audit, and not at all when it is off. The
+# archive step is a check with no output message and no text file for its
+# task, whose text is the task id (decision 0297).
+name: "small-archive"
+version: "1"
+initial: "planning"
+
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+states {
+  name: "planning"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    model_role: "frontier"
+    task: "plan"
+    output_message: "pumi.workflow.v1.PlanningOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_IMPLEMENTING
+  }
+  transitions {
+    trigger { result {} }
+    target: "review"
+    action: "advance"
+    archive_steps: [ARCHIVE_STEP_AFTER_CONFORMANCE, ARCHIVE_STEP_OFF]
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "planning-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "review"
+  parent: "active"
+  gate: "planReview"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_HARNESS
+    model_role: "frontier"
+    task: "review-plan"
+    output_message: "pumi.workflow.v1.SecondOpinion"
+  }
+  transitions {
+    trigger { result {} }
+    target: "done"
+    action: "planReview"
+    archive_steps: [ARCHIVE_STEP_AFTER_IMPLEMENTING, ARCHIVE_STEP_OFF]
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving"
+    action: "planReview"
+    archive_steps: ARCHIVE_STEP_AFTER_CONFORMANCE
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { result {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "review"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "review"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "review-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "done"
+    action: "planReview"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "review-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "archiving"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "spec"
+    task: "archive-change"
+    returns_tree: true
+  }
+  transitions {
+    trigger { result {} }
+    target: "review"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_IMPLEMENTING
+  }
+  transitions {
+    trigger { result {} }
+    target: "done"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_CONFORMANCE
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archiving"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "archiving-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archiving"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "done"
+  final {}
+}
+
+states {
+  name: "cancelled"
+  final {}
+}

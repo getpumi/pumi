@@ -4,11 +4,59 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "description": "Transition is one transition of a state (decision 0168).",
+      "patternProperties": {
+        "^(archive_steps)$": {
+          "description": "The archive steps of the project under which the transition holds\n (decision 0296). The kernel skips a transition that does not list the\n project's archive step; a transition that lists none holds under every\n archive step.",
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ARCHIVE_STEP_UNSPECIFIED",
+                  "ARCHIVE_STEP_AFTER_IMPLEMENTING",
+                  "ARCHIVE_STEP_AFTER_CONFORMANCE",
+                  "ARCHIVE_STEP_OFF"
+                ],
+                "type": "string"
+              },
+              {
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "type": "integer"
+              }
+            ],
+            "title": "Archive Step"
+          },
+          "type": "array"
+        }
+      },
       "properties": {
         "action": {
           "default": "",
           "description": "The name of the Cedar action that guards the transition, as\n pumi.cedarschema declares it, such as \"advance\" or \"retry\".",
           "type": "string"
+        },
+        "archiveSteps": {
+          "description": "The archive steps of the project under which the transition holds\n (decision 0296). The kernel skips a transition that does not list the\n project's archive step; a transition that lists none holds under every\n archive step.",
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ARCHIVE_STEP_UNSPECIFIED",
+                  "ARCHIVE_STEP_AFTER_IMPLEMENTING",
+                  "ARCHIVE_STEP_AFTER_CONFORMANCE",
+                  "ARCHIVE_STEP_OFF"
+                ],
+                "type": "string"
+              },
+              {
+                "maximum": 2147483647,
+                "minimum": -2147483648,
+                "type": "integer"
+              }
+            ],
+            "title": "Archive Step"
+          },
+          "type": "array"
         },
         "target": {
           "default": "",

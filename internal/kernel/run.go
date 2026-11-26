@@ -165,6 +165,15 @@ type planRun struct {
 	// and planned is whether it has one (decision 0250).
 	declared []string
 	planned  bool
+	// noTest are the requirements that the plan's last planning output
+	// gives no test, with the reasons (decision 0295).
+	noTest []*workflowv1.PlanningOutput_NoTest
+	// narratives is the output of the plan's last spec check, whose
+	// narratives the kernel adds to the tasks that ask for them, and
+	// coverage the last coverage report, or nil when there is none yet
+	// (decisions 0279 and 0294).
+	narratives *workflowv1.SpecCheckOutput
+	coverage   *workflowv1.CoverageReport
 }
 
 // Run runs every plan that a plan.added of the log adds on the workflow
@@ -280,7 +289,9 @@ func (k *kernel) newPlan(a *eventsv1.PlanAdded, id string) *planRun {
 		k: k, plan: a.GetPlan(), track: a.GetTrack(), dependsOn: a.GetDependsOn(), added: id,
 		state: k.cfg.Workflow.Definition().GetInitial(),
 	}
-	r.m = k.cfg.Workflow.NewMachine(
+	// The plan moves only on the transitions that hold under the project's
+	// archive step (decision 0296).
+	r.m = k.cfg.Workflow.NewMachine(k.cfg.Project.ArchiveStep,
 		func(context.Context) (string, error) { return r.state, nil },
 		func(_ context.Context, s string) error { r.state = s; return nil },
 	)
@@ -537,7 +548,7 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 		if len(res.GetRefusals()) > 0 {
 			k.refusals[res.GetInvocation()] = res.GetRefusals()
 		}
-		return k.followDeclared(&res)
+		return k.followOutput(&res)
 	},
 	events.TypeLeaseGranted: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
 		var g eventsv1.LeaseGranted
@@ -910,7 +921,10 @@ func (r *planRun) reason(trigger string, denied []string) string {
 // idempotency key is the invocation, both derived from the log (decision
 // 0019). The task of an agent run is the workflow's task text followed by
 // the project section, so the text stays the same for every project
-// (decision 0250); a check or an external action gets the text alone.
+// (decision 0250), then the narratives and the coverage report when the
+// state asks for them (decision 0298); an external action gets the text
+// alone, and a check its task id, which names the check program's
+// operation (decision 0297).
 func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Invoke, cause string) (*cloudeventsv1.CloudEvent, error) {
 	task, ok := r.k.cfg.Workflow.Task(inv.GetTask())
 	if !ok {
@@ -946,14 +960,11 @@ func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Inv
 	doc.Input.BaseTree = r.tree
 	doc.Input.Task = task
 	if inv.GetKind() == workflowv1.Invoke_KIND_HARNESS {
-		section, err := r.projectSection(ctx, doc.GetInput().GetTree())
+		text, err := r.agentTask(ctx, task, inv, doc.GetInput().GetTree())
 		if err != nil {
 			return nil, fmt.Errorf("the invocation of the state %s: %w", state, err)
 		}
-		if !strings.HasSuffix(task, "\n") {
-			task += "\n"
-		}
-		doc.Input.Task = task + "\n" + section
+		doc.Input.Task = text
 	}
 	doc.OutputMessage = inv.GetOutputMessage()
 	doc.ModelRole = inv.GetModelRole()
@@ -962,6 +973,27 @@ func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Inv
 		return nil, fmt.Errorf("the invocation of the state %s: %w", state, err)
 	}
 	return r.event(data, cause)
+}
+
+// agentTask returns the task of an agent run that the state starts with
+// inv, on the input tree tree: the task text, the project section and,
+// when the state asks for them, the narratives and the coverage report
+// (decisions 0250 and 0298).
+func (r *planRun) agentTask(ctx context.Context, task string, inv *workflowv1.Invoke, tree string) (string, error) {
+	section, err := r.projectSection(ctx, tree)
+	if err != nil {
+		return "", err
+	}
+	if inv.GetNarratives() {
+		section += "\n" + r.narrativesSection()
+	}
+	if inv.GetCoverage() {
+		section += "\n" + r.coverageSection()
+	}
+	if !strings.HasSuffix(task, "\n") {
+		task += "\n"
+	}
+	return task + "\n" + section, nil
 }
 
 // roleOf gives the role of the invocation document for each role of the

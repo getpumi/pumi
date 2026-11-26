@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"getpumi.dev/pumi/api/events"
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 )
 
 // load loads the fixture name from testdata.
@@ -120,6 +121,13 @@ func TestTheLoaderRefuses(t *testing.T) {
 		{"component-missing", []string{`state "review"`, "check", "no component", "0272"}},
 		{"component-on-harness", []string{`state "planning"`, "harness", `component "planner"`, "only a check"}},
 		{"returns-tree-on-harness", []string{`state "planning"`, "harness", "returns_tree", "only a check", "0282"}},
+		{"archive-step-unspecified", []string{`state "planning", transition 1`, "ARCHIVE_STEP_UNSPECIFIED", "0296"}},
+		{"archive-step-twice", []string{`state "planning", transition 1`, "ARCHIVE_STEP_OFF", "more than once"}},
+		{"last-not-always-allowed-under-an-archive-step", []string{`state "planning", transition 1`, `last transition on "result"`, "ARCHIVE_STEP_AFTER_IMPLEMENTING", "ARCHIVE_STEP_AFTER_CONFORMANCE", "always allowed"}},
+		{"cap-reached-missing-under-an-archive-step", []string{`state "planning"`, `no transition on "cap-reached"`, "ARCHIVE_STEP_AFTER_IMPLEMENTING", "ARCHIVE_STEP_AFTER_CONFORMANCE"}},
+		{"narratives-on-check", []string{`state "review"`, "check", "narratives", "only an agent run", "0298"}},
+		{"coverage-on-check", []string{`state "review"`, "check", "coverage", "only an agent run", "0298"}},
+		{"check-task-of-an-agent-run", []string{`state "review"`, `task "plan"`, "not a check", "0297"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -141,8 +149,8 @@ func TestEveryFixtureIsTested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 33 {
-		t.Errorf("testdata has %d workflow fixtures, want the valid one and 32 refusals: %q", len(names), names)
+	if len(names) != 41 {
+		t.Errorf("testdata has %d workflow fixtures, want the two valid ones and 39 refusals: %q", len(names), names)
 	}
 }
 
@@ -186,7 +194,7 @@ func machine(t *testing.T, state string) (*Machine, *storage) {
 		t.Fatal(err)
 	}
 	s := &storage{state: state}
-	return w.NewMachine(s.load, s.store), s
+	return w.NewMachine(configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING, s.load, s.store), s
 }
 
 // summary writes transitions as "state:action>target" for comparison.
@@ -357,5 +365,66 @@ func TestGraphIsTheDOTOfTheMachineInItsInitialState(t *testing.T) {
 	}
 	if w.Graph() != g {
 		t.Error("Graph is not the same each time")
+	}
+}
+
+// TestACheckNeedsNoTaskTextFile: the task text of a check is its task id,
+// so a check's task has no text file (decision 0297), and a check that
+// returns the workspace's tree may name no output message, as the archive
+// step does (decision 0278).
+func TestACheckNeedsNoTaskTextFile(t *testing.T) {
+	w, err := load(t, "valid-archive")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, ok := w.Task("archive-change"); !ok || got != "archive-change" {
+		t.Errorf(`Task("archive-change") = %q, %v, want the task id`, got, ok)
+	}
+	if got, ok := w.Task("plan"); !ok || got != "Write the plan for the change.\n" {
+		t.Errorf(`Task("plan") = %q, %v, want the text of plan.md`, got, ok)
+	}
+}
+
+// archiveMachine returns a machine of the valid-archive fixture for the
+// archive step step, in state.
+func archiveMachine(t *testing.T, step configv1.Project_ArchiveStep, state string) *Machine {
+	t.Helper()
+	w, err := load(t, "valid-archive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &storage{state: state}
+	return w.NewMachine(step, s.load, s.store)
+}
+
+// TestTheMachineSkipsTheTransitionsOfAnotherArchiveStep: a transition that
+// lists archive steps holds only under them, one that lists none under
+// every step, and the unspecified step is after implementing (decisions
+// 0278 and 0296).
+func TestTheMachineSkipsTheTransitionsOfAnotherArchiveStep(t *testing.T) {
+	afterImplementing := []string{"planning:advance>archiving", "planning:escalate>planning-escalated"}
+	other := []string{"planning:advance>review", "planning:escalate>planning-escalated"}
+	for step, want := range map[configv1.Project_ArchiveStep][]string{
+		configv1.Project_ARCHIVE_STEP_UNSPECIFIED:        afterImplementing,
+		configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING: afterImplementing,
+		configv1.Project_ARCHIVE_STEP_AFTER_CONFORMANCE:  other,
+		configv1.Project_ARCHIVE_STEP_OFF:                other,
+	} {
+		ts, err := archiveMachine(t, step, "planning").Transitions(t.Context(), Result)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := summary(ts); !slices.Equal(got, want) {
+			t.Errorf("under %s the transitions on result = %q, want %q", step, got, want)
+		}
+	}
+	m := archiveMachine(t, configv1.Project_ARCHIVE_STEP_OFF, "planning")
+	all := archiveMachine(t, configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING, "planning")
+	ts, err := all.Transitions(t.Context(), Result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Fire(t.Context(), ts[0].Index); err == nil || !strings.Contains(err.Error(), "ARCHIVE_STEP_OFF") {
+		t.Errorf("Fire of a transition of another archive step = %v, want an error that names the step", err)
 	}
 }

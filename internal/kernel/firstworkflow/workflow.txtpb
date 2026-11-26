@@ -27,7 +27,18 @@
 # fails, on retry, which the attempts and the hard caps guard; otherwise it
 # escalates (decision 0235).
 #
-# The task of each invocation is the text file <task>.md beside this file.
+# The task of an agent run or an external action is the text file
+# <task>.md beside this file; the task of a check is its task id, which
+# names the operation of the check program (decision 0297).
+#
+# The archive step of the project places the archive state (decisions 0278
+# and 0296): a transition that lists archive_steps holds only under them.
+# After implementing, the default, the change is archived before the
+# checks. After the conformance audit, it is archived after the audit, and
+# the archived tree goes through the checks again, in the archived-* states,
+# before approval. Off, there is no archive state, and a person archives the
+# change by hand. Every fix loop goes back to implementing, so a later round
+# runs the archive step again, which checks that the archive is unchanged.
 name: "spec-to-merge"
 version: "1"
 initial: "spec"
@@ -212,6 +223,7 @@ states {
     model_role: "second-opinion"
     task: "answer-questions"
     output_message: "pumi.workflow.v1.SecondOpinion"
+    narratives: true
   }
   transitions {
     trigger { result {} }
@@ -296,6 +308,7 @@ states {
     model_role: "plan-reviewer"
     task: "review-plan"
     output_message: "pumi.events.v1.VerdictRecorded"
+    narratives: true
   }
   transitions {
     trigger { result {} }
@@ -371,8 +384,9 @@ states {
   }
 }
 
-# 5. Implementing: an agent makes the change in the workspace. To checking on
-# advance; otherwise escalate. An agent that finds a question here fails its
+# 5. Implementing: an agent makes the change in the workspace. On advance,
+# to archiving when the project archives after implementing, and to
+# checking otherwise; otherwise escalate. An agent that finds a question here fails its
 # run, and the retry is a new attempt (decision 0171).
 states {
   name: "implementing"
@@ -386,8 +400,15 @@ states {
   }
   transitions {
     trigger { result {} }
+    target: "archiving"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_IMPLEMENTING
+  }
+  transitions {
+    trigger { result {} }
     target: "checking"
     action: "advance"
+    archive_steps: [ARCHIVE_STEP_AFTER_CONFORMANCE, ARCHIVE_STEP_OFF]
   }
   transitions {
     trigger { result {} }
@@ -437,6 +458,79 @@ states {
   transitions {
     trigger { event: "dev.getpumi.escalation.resolved" }
     target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# 5a. Archiving (decision 0278): the spec check's program archives the
+# plan's change in the workspace with the task archive-change (decision
+# 0284), or on a later round checks that the archive equals the archive of
+# the change from the base tree (decision 0285). Its result carries the
+# workspace's tree and no output (decision 0282). Under the archive step
+# after implementing, to checking on advance; after the conformance audit,
+# to archived-checking; otherwise escalate. The answer of a person runs it
+# again.
+states {
+  name: "archiving"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "spec"
+    task: "archive-change"
+    returns_tree: true
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_IMPLEMENTING
+  }
+  transitions {
+    trigger { result {} }
+    target: "archived-checking"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_CONFORMANCE
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archiving"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+}
+
+# Archiving, escalated: wait for a person. Archiving escalates when the
+# archive fails, as when the change does not archive or a later round finds
+# that the archive changed, or when advance is denied. An answer goes back
+# to archiving, decided by resume, which reads the usage and the hard caps.
+# A denied resume keeps the plan here.
+states {
+  name: "archiving-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archiving"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archiving-escalated"
     action: "escalate"
   }
 }
@@ -670,7 +764,7 @@ states {
 
 # 7d. Outside checks: a state that only decides, on entered: every required
 # check that Pumi does not run passed on the head commit (decision 0140). To
-# conformance audit on the outsideChecks gate; otherwise escalate. A missing
+# report-coverage on the outsideChecks gate; otherwise escalate. A missing
 # or pending result is not a pass, so it escalates rather than retrying the
 # implementation while the checks run.
 states {
@@ -680,7 +774,7 @@ states {
   wait {}
   transitions {
     trigger { entered {} }
-    target: "conformance-audit"
+    target: "report-coverage"
     action: "outsideChecks"
   }
   transitions {
@@ -692,7 +786,7 @@ states {
 
 # Outside checks, escalated: wait for a person or for the results. Each
 # check.ingested decides the outsideChecks gate again, and the plan goes on to
-# conformance audit once the required checks pass. An override goes on the
+# report-coverage once the required checks pass. An override goes on the
 # same way. An answer goes back to implementing, decided by resume. Each
 # trigger ends in escalate, so a denied decision keeps the plan here.
 states {
@@ -701,7 +795,7 @@ states {
   wait {}
   transitions {
     trigger { event: "dev.getpumi.check.ingested" }
-    target: "conformance-audit"
+    target: "report-coverage"
     action: "outsideChecks"
   }
   transitions {
@@ -711,7 +805,7 @@ states {
   }
   transitions {
     trigger { event: "dev.getpumi.override.recorded" }
-    target: "conformance-audit"
+    target: "report-coverage"
     action: "outsideChecks"
   }
   transitions {
@@ -731,9 +825,74 @@ states {
   }
 }
 
+# 7e. Report coverage (decision 0294): the spec check's program lists each
+# requirement that the change adds or modifies, with the test files whose
+# Verifies: line names its ID, with the task report-coverage. The kernel
+# adds the plan's reasons for having no test and gives the report to the
+# conformance audit (decision 0295). To conformance audit on advance;
+# otherwise escalate.
+states {
+  name: "report-coverage"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "spec"
+    task: "report-coverage"
+    output_message: "pumi.workflow.v1.CoverageReport"
+  }
+  transitions {
+    trigger { result {} }
+    target: "conformance-audit"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "report-coverage-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "report-coverage-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "report-coverage"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "report-coverage-escalated"
+    action: "escalate"
+  }
+}
+
+# Report coverage, escalated: wait for a person. It escalates when the
+# report fails or advance is denied. An answer goes back to report-coverage,
+# decided by resume, which reads the usage and the hard caps. A denied
+# resume keeps the plan here.
+states {
+  name: "report-coverage-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "report-coverage"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "report-coverage-escalated"
+    action: "escalate"
+  }
+}
+
 # 8. Conformance audit (gate role): an independent audit of the tree against
-# the change and the plan. To awaiting approval on the conformance gate;
-# otherwise retry to implementing; otherwise escalate.
+# the change and the plan, with the narratives and the coverage report
+# (decisions 0279 and 0280). On the conformance gate, to archiving when the
+# project archives after the conformance audit, and to awaiting approval
+# otherwise; otherwise retry to implementing; otherwise escalate.
 states {
   name: "conformance-audit"
   parent: "active"
@@ -744,11 +903,20 @@ states {
     model_role: "auditor"
     task: "audit-conformance"
     output_message: "pumi.events.v1.VerdictRecorded"
+    narratives: true
+    coverage: true
   }
   transitions {
     trigger { result {} }
     target: "awaiting-approval"
     action: "conformance"
+    archive_steps: [ARCHIVE_STEP_AFTER_IMPLEMENTING, ARCHIVE_STEP_OFF]
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving"
+    action: "conformance"
+    archive_steps: ARCHIVE_STEP_AFTER_CONFORMANCE
   }
   transitions {
     trigger { result {} }
@@ -788,7 +956,8 @@ states {
 }
 
 # Conformance audit, escalated: wait for a person (decision 0170). An override
-# goes on to awaiting-approval, decided again by the conformance gate, which
+# goes on to awaiting-approval, or to archiving when the project archives
+# after the conformance audit, decided again by the conformance gate, which
 # now reads the override. An answer goes back to implementing, decided by
 # resume, which reads the usage and the hard caps; the answer goes into the
 # next invocation's input. Each trigger ends in escalate, so a denied decision
@@ -801,6 +970,13 @@ states {
     trigger { event: "dev.getpumi.override.recorded" }
     target: "awaiting-approval"
     action: "conformance"
+    archive_steps: [ARCHIVE_STEP_AFTER_IMPLEMENTING, ARCHIVE_STEP_OFF]
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archiving"
+    action: "conformance"
+    archive_steps: ARCHIVE_STEP_AFTER_CONFORMANCE
   }
   transitions {
     trigger { event: "dev.getpumi.override.recorded" }
@@ -815,6 +991,284 @@ states {
   transitions {
     trigger { event: "dev.getpumi.escalation.resolved" }
     target: "conformance-audit-escalated"
+    action: "escalate"
+  }
+}
+
+# 8a. Archived checking (decision 0278): after the archive step that runs
+# after the conformance audit, every check runs again on the archived tree
+# before approval, in the archived-* states. The check runs as in checking.
+# To archived-scope on advance; otherwise escalate.
+states {
+  name: "archived-checking"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "checks"
+    task: "run-checks"
+    output_message: "pumi.workflow.v1.CheckingOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "archived-scope"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archived-checking"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+}
+
+# Archived checking, escalated: wait for a person, as checking-escalated.
+# An answer goes back to archived-checking, decided by resume.
+states {
+  name: "archived-checking-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-checking"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+}
+
+# 8b. Archived scope: the scope gate on the archived tree. To
+# archived-budgets on the scope gate; otherwise retry to implementing;
+# otherwise escalate.
+states {
+  name: "archived-scope"
+  parent: "active"
+  gate: "scope"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "archived-budgets"
+    action: "scope"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "archived-scope-escalated"
+    action: "escalate"
+  }
+}
+
+# Archived scope, escalated: as scope-escalated. An override goes on to
+# archived-budgets; an answer goes back to implementing.
+states {
+  name: "archived-scope-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archived-budgets"
+    action: "scope"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archived-scope-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-scope-escalated"
+    action: "escalate"
+  }
+}
+
+# 8c. Archived budgets: the budgets gate on the archived tree. To
+# archived-dco on the budgets gate; otherwise retry to implementing;
+# otherwise escalate.
+states {
+  name: "archived-budgets"
+  parent: "active"
+  gate: "budgets"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "archived-dco"
+    action: "budgets"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "archived-budgets-escalated"
+    action: "escalate"
+  }
+}
+
+# Archived budgets, escalated: as budgets-escalated. An override goes on to
+# archived-dco; an answer goes back to implementing.
+states {
+  name: "archived-budgets-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archived-dco"
+    action: "budgets"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archived-budgets-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-budgets-escalated"
+    action: "escalate"
+  }
+}
+
+# 8d. Archived DCO: the dco gate on the archived tree. To
+# archived-outside-checks on the dco gate; otherwise retry to implementing;
+# otherwise escalate.
+states {
+  name: "archived-dco"
+  parent: "active"
+  gate: "dco"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "archived-outside-checks"
+    action: "dco"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "archived-dco-escalated"
+    action: "escalate"
+  }
+}
+
+# Archived DCO, escalated: as dco-escalated. An override goes on to
+# archived-outside-checks; an answer goes back to implementing.
+states {
+  name: "archived-dco-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archived-outside-checks"
+    action: "dco"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archived-dco-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-dco-escalated"
+    action: "escalate"
+  }
+}
+
+# 8e. Archived outside checks: the outsideChecks gate on the archived tree's
+# head commit. To awaiting approval on the outsideChecks gate; otherwise
+# escalate.
+states {
+  name: "archived-outside-checks"
+  parent: "active"
+  gate: "outsideChecks"
+  wait {}
+  transitions {
+    trigger { entered {} }
+    target: "awaiting-approval"
+    action: "outsideChecks"
+  }
+  transitions {
+    trigger { entered {} }
+    target: "archived-outside-checks-escalated"
+    action: "escalate"
+  }
+}
+
+# Archived outside checks, escalated: as outside-checks-escalated. Each
+# check.ingested and an override decide the outsideChecks gate again, and
+# the plan goes on to awaiting approval; an answer goes back to
+# implementing.
+states {
+  name: "archived-outside-checks-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.check.ingested" }
+    target: "awaiting-approval"
+    action: "outsideChecks"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.check.ingested" }
+    target: "archived-outside-checks-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "awaiting-approval"
+    action: "outsideChecks"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "archived-outside-checks-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-outside-checks-escalated"
     action: "escalate"
   }
 }

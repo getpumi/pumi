@@ -455,6 +455,19 @@ func reportOf(invocation string, usage *eventsv1.InvocationResult_Usage) step {
 	}
 }
 
+// reportTreeOf reports the claimed invocation as succeeded with the tree
+// tree-2 and no output, as the archive step reports (decisions 0278 and
+// 0282).
+func reportTreeOf(invocation string) step {
+	return func(p *pumi) {
+		c, ok := p.claims[invocation]
+		if !ok {
+			p.t.Fatalf("the seed reports %s, which the runner did not claim", invocation)
+		}
+		p.report(&eventsv1.InvocationResult{Invocation: invocation, Usage: underCaps, Tree: "tree-2"}, eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, c.GetLeaseNumber())
+	}
+}
+
 // addStep adds plan to track as the person, depending on dependsOn
 // (decisions 0196 and 0198).
 func addStep(plan, track string, dependsOn ...string) step {
@@ -589,6 +602,20 @@ var seeds = map[string][]step{
 	},
 	// With parallelism 1, b1 waits while a1 runs; the person cancels b1,
 	// and b1 does not start when a1 has merged.
+	// The project archives after implementing: the plan implements, the
+	// archive step returns the tree with no output, and the checks run
+	// (decisions 0278 and 0296).
+	"archive/after-implementing": {
+		addPlanA, claimStep, reportOf("plan-a/1", underCaps), claimStep, reportTreeOf("plan-a/2"), claimStep, reportOf("plan-a/3", underCaps),
+	},
+	// The project archives after the conformance audit: the checks run,
+	// the archive step returns the tree, and the checks run again on it.
+	"archive/after-conformance": {
+		addPlanA, claimStep, reportOf("plan-a/1", underCaps), claimStep, reportOf("plan-a/2", underCaps),
+		claimStep, reportTreeOf("plan-a/3"), claimStep, reportOf("plan-a/4", underCaps),
+	},
+	// The archive step is off: no state archives.
+	"archive/off": {addPlanA, claimStep, reportOf("plan-a/1", underCaps), claimStep, reportOf("plan-a/2", underCaps)},
 	"tracks/cancel-while-waiting": {
 		addStep("a1", "a"), addStep("b1", "b"), cancelStep("b1"), claimStep, reportOf("a1/1", underCaps),
 	},

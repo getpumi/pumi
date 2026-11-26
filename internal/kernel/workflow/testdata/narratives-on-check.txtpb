@@ -1,0 +1,161 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The valid workflow whose review is a check that asks for the narratives,
+# which only an agent run gets (decision 0298).
+name: "small"
+version: "1"
+initial: "planning"
+
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+states {
+  name: "planning"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    model_role: "frontier"
+    task: "plan"
+    output_message: "pumi.workflow.v1.PlanningOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "review"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "planning-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "review"
+  parent: "active"
+  gate: "planReview"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "review"
+    task: "review-plan"
+    narratives: true
+    output_message: "pumi.workflow.v1.SecondOpinion"
+  }
+  transitions {
+    trigger { result {} }
+    target: "done"
+    action: "planReview"
+  }
+  transitions {
+    trigger { result {} }
+    target: "planning"
+    action: "retry"
+  }
+  transitions {
+    trigger { result {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "review"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "review-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "review-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "done"
+    action: "planReview"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "review-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "planning"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "review-escalated"
+    action: "escalate"
+  }
+}
+
+states {
+  name: "done"
+  final {}
+}
+
+states {
+  name: "cancelled"
+  final {}
+}

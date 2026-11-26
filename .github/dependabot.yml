@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: The Pumi Authors
 
 # Dependabot updates the pins it supports (decision 0115): the SHAs of the
-# GitHub Actions, the go.mod files of the core and api modules and the golang
-# and rust base images of the devcontainer. make pins, run by the weekly pins workflow,
-# reports the other pins. Each update is a pull request of its own (decision
-# 0116).
+# GitHub Actions, the go.mod files of the core, api and conformance modules
+# and the golang and rust base images of the devcontainer. make pins, run by
+# the weekly pins workflow, reports the other pins. Each update is a pull
+# request of its own (decision 0116).
 
 version: 2
 
@@ -19,6 +19,7 @@ updates:
     directories:
       - /
       - /api
+      - /conformance
     schedule:
       interval: weekly
 

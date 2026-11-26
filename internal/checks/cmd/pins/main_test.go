@@ -64,6 +64,7 @@ func newRepo(t *testing.T, golangciLint string) {
 		".devcontainer/Dockerfile":       "FROM rust:1.100.0-trixie@sha256:223c AS cedar\nARG CEDAR_VERSION=4.15.0\nFROM golang:1.27.4-trixie@sha256:f18c\nENV PUMI_GO_OLDER=go1.26.11\n",
 		"go.mod":                         "module getpumi.dev/pumi\n\ngo 1.27.0\n\ntoolchain go1.27.4\n",
 		"api/go.mod":                     "module getpumi.dev/pumi/api\n\ngo 1.26.0\n\ntoolchain go1.27.4\n",
+		"conformance/go.mod":             "module getpumi.dev/pumi/conformance\n\ngo 1.26.0\n\ntoolchain go1.27.4\n",
 	} {
 		if err := os.MkdirAll(filepath.Dir(name), 0o750); err != nil {
 			t.Fatal(err)
@@ -82,10 +83,10 @@ func TestRunCurrent(t *testing.T) {
 		t.Fatalf("run() = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
-	if len(lines) != 10 || lines[0] != "pins: golangci-lint 2.15.0 in .devcontainer/install-tools.sh: current" ||
+	if len(lines) != 12 || lines[0] != "pins: golangci-lint 2.15.0 in .devcontainer/install-tools.sh: current" ||
 		lines[2] != "pins: cedar-policy-cli 4.15.0 in .devcontainer/Dockerfile: current" ||
-		lines[9] != "pins: pins checked: 9, none is out of date" {
-		t.Errorf("run() wrote stdout %q, want 9 pins and a summary", stdout.String())
+		lines[11] != "pins: pins checked: 11, none is out of date" {
+		t.Errorf("run() wrote stdout %q, want 11 pins and a summary", stdout.String())
 	}
 	if stderr.Len() != 0 {
 		t.Errorf("run() wrote stderr %q, want nothing", stderr.String())

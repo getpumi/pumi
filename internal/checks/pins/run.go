@@ -22,6 +22,9 @@ const (
 	Dockerfile    = ".devcontainer/Dockerfile"
 	CoreModFile   = "go.mod"
 	APIModFile    = "api/go.mod"
+	// ConformanceModFile is the go.mod of the conformance module, which,
+	// like the api module, adapters import (decision 0244).
+	ConformanceModFile = "conformance/go.mod"
 	// ToolsDir holds one module file for each pinned Go tool (decision
 	// 0086).
 	ToolsDir = "tools"

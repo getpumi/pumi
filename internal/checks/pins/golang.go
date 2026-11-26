@@ -35,7 +35,7 @@ func readGoPins(read func(string) ([]byte, error)) ([]goPin, error) {
 	for _, f := range []struct {
 		file  string
 		older bool
-	}{{CoreModFile, false}, {APIModFile, true}} {
+	}{{CoreModFile, false}, {APIModFile, true}, {ConformanceModFile, true}} {
 		data, err := read(f.file)
 		if err != nil {
 			return nil, err

@@ -18,6 +18,10 @@
 //   - the api module imports anything from the core module (decision 0105);
 //     such an import can make an import cycle that stops go list from
 //     loading the core, so it is reported alone;
+//   - the api module imports the conformance module, which imports it
+//     (decision 0244);
+//   - the conformance module imports anything from the core module, or a
+//     third-party module that is not on its list (decision 0244);
 //   - a package of the core module is in none of the places that
 //     .pumi/imports.json lists (decision 0105).
 //
@@ -95,6 +99,7 @@ type checker struct {
 	cfg  *Config
 	core string
 	api  string
+	conf string
 	// mods holds the build list of the core module, without the core and
 	// the api module.
 	mods []string
@@ -128,12 +133,24 @@ func Check(ctx context.Context, dir string, cfg *Config) (*Result, error) {
 	if want := c.core + "/" + cfg.API.Path; c.api != want {
 		return nil, fmt.Errorf(`"api": %s is the module %s, not %s`, cfg.API.Path, c.api, want)
 	}
-	importsCore, err := c.checkAPI(ctx, apiDir)
+	confDir := filepath.Join(dir, filepath.FromSlash(cfg.Conformance.Path))
+	if c.conf, err = mainModule(ctx, confDir); err != nil {
+		return nil, err
+	}
+	if want := c.core + "/" + cfg.Conformance.Path; c.conf != want {
+		return nil, fmt.Errorf(`"conformance": %s is the module %s, not %s`, cfg.Conformance.Path, c.conf, want)
+	}
+	importsCore, err := c.checkOuter(ctx, apiDir, c.api, c.apiProblem)
 	if err != nil {
 		return nil, err
 	}
 	if importsCore {
 		return &Result{Findings: c.sorted()}, nil
+	}
+	// The conformance module requires the api module, not the core, so an
+	// import of the core from it makes no cycle in the core.
+	if _, err := c.checkOuter(ctx, confDir, c.conf, c.conformanceProblem); err != nil {
+		return nil, err
 	}
 	return c.checkCoreModule(ctx, dir)
 }
@@ -253,10 +270,15 @@ func (c *checker) checkUsed(used map[place]bool) error {
 	return nil
 }
 
-// checkAPI checks the imports of every Go file of the api module in dir: it
-// imports nothing from the core module, and only the third-party modules on
-// its list (decision 0125). It reports whether any file imports the core.
-func (c *checker) checkAPI(ctx context.Context, dir string) (bool, error) {
+// outerProblem returns the rule that an import from a module beside the
+// core breaks, or "", and whether the import can stop go list from loading
+// the core. mods is that module's build list.
+type outerProblem func(mods []string, imp string) (string, bool, error)
+
+// checkOuter checks the imports of every Go file of the module mod in dir,
+// the api or the conformance module, with problem. It reports whether any
+// import can stop go list from loading the core.
+func (c *checker) checkOuter(ctx context.Context, dir, mod string, problem outerProblem) (bool, error) {
 	mods, err := buildList(ctx, dir)
 	if err != nil {
 		return false, err
@@ -267,7 +289,7 @@ func (c *checker) checkAPI(ctx context.Context, dir string) (bool, error) {
 	}
 	importsCore := false
 	for _, rel := range rels {
-		core, err := c.checkAPIPackage(mods, filepath.Join(dir, filepath.FromSlash(rel)), packagePath(c.api, rel))
+		core, err := c.checkOuterPackage(mods, filepath.Join(dir, filepath.FromSlash(rel)), packagePath(mod, rel), problem)
 		if err != nil {
 			return false, err
 		}
@@ -276,22 +298,23 @@ func (c *checker) checkAPI(ctx context.Context, dir string) (bool, error) {
 	return importsCore, nil
 }
 
-// checkAPIPackage checks the package path of the api module in dir and
-// reports whether it imports the core.
-func (c *checker) checkAPIPackage(mods []string, dir, path string) (bool, error) {
+// checkOuterPackage checks the package path of the api or the conformance
+// module in dir with problem and reports whether an import can stop go list
+// from loading the core.
+func (c *checker) checkOuterPackage(mods []string, dir, path string, problem outerProblem) (bool, error) {
 	imps, err := dirImports(dir)
 	if err != nil {
 		return false, err
 	}
 	importsCore := false
 	for _, imp := range imps {
-		problem, core, err := c.apiProblem(mods, imp)
+		found, core, err := problem(mods, imp)
 		if err != nil {
 			return false, fmt.Errorf("%s: %w", path, err)
 		}
-		if problem != "" {
+		if found != "" {
 			importsCore = importsCore || core
-			c.findings[Finding{Package: path, Import: imp, Problem: problem}] = true
+			c.findings[Finding{Package: path, Import: imp, Problem: found}] = true
 		}
 	}
 	return importsCore, nil
@@ -307,10 +330,16 @@ func packagePath(mod, rel string) string {
 }
 
 // apiProblem returns the rule that an import from the api module breaks, or
-// "", and whether the import is of the core module. mods is the api module's
+// "", and whether the import can stop go list from loading the core: an
+// import of the core or of the conformance module. mods is the api module's
 // build list.
 func (c *checker) apiProblem(mods []string, imp string) (string, bool, error) {
 	switch {
+	case within(imp, c.conf):
+		// The api module does not require the conformance module, which
+		// requires it, so go list cannot load such an import in the core
+		// either.
+		return apiConformanceProblem, true, nil
 	case c.inCore(imp):
 		return apiProblem, true, nil
 	case within(imp, c.api), standard(imp):
@@ -326,9 +355,30 @@ func (c *checker) apiProblem(mods []string, imp string) (string, bool, error) {
 	return fmt.Sprintf("the module %s is not on the list of the api module in .pumi/imports.json (decisions 0064 and 0125)", mod), false, nil
 }
 
+// conformanceProblem returns the rule that an import from the conformance
+// module breaks, or "". mods is the conformance module's build list. It
+// never reports an import of the core as one that can make a cycle, because
+// the core does not import the conformance module.
+func (c *checker) conformanceProblem(mods []string, imp string) (string, bool, error) {
+	switch {
+	case c.inCore(imp):
+		return conformanceProblem, false, nil
+	case within(imp, c.conf), within(imp, c.api), standard(imp):
+		return "", false, nil
+	}
+	mod := longestModule(mods, imp, c.conf)
+	if mod == "" {
+		return "", false, fmt.Errorf("no module in the build list of the conformance module provides %s", imp)
+	}
+	if slices.ContainsFunc(c.cfg.Conformance.Modules, func(m Module) bool { return m.Module == mod }) {
+		return "", false, nil
+	}
+	return fmt.Sprintf("the module %s is not on the list of the conformance module in .pumi/imports.json (decisions 0064 and 0244)", mod), false, nil
+}
+
 // inCore reports whether path is a package of the core module.
 func (c *checker) inCore(path string) bool {
-	return within(path, c.core) && !within(path, c.api)
+	return within(path, c.core) && !within(path, c.api) && !within(path, c.conf)
 }
 
 // placeOf returns the place of a package of the core module.
@@ -449,7 +499,11 @@ func (c *checker) noPlaceProblem() string {
 	return fmt.Sprintf("is not in a component, %s, %s or %s as .pumi/imports.json lists them (decision 0105)", c.cfg.Shared.Path, c.cfg.Checks.Path, c.cfg.Commands.Path)
 }
 
-const apiProblem = "the api module imports nothing from the core module (decisions 0063 and 0105)"
+const (
+	apiProblem            = "the api module imports nothing from the core module (decisions 0063 and 0105)"
+	apiConformanceProblem = "the api module imports nothing from the conformance module, which imports the api module (decision 0244)"
+	conformanceProblem    = "the conformance module imports nothing from the core module (decisions 0105 and 0244)"
+)
 
 // binaries returns each binary under cmd with the third-party modules it
 // links.

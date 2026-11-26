@@ -12,18 +12,20 @@ import (
 	"strings"
 )
 
-// Config is .pumi/imports.json (decision 0112): where the api module, each
-// component, internal/shared, internal/checks and cmd are, and the
-// third-party modules each of them may import (decisions 0064 and 0125). internal/shared has no list,
+// Config is .pumi/imports.json (decision 0112): where the api module, the
+// conformance module (decision 0244), each component, internal/shared,
+// internal/checks and cmd are, and the third-party modules each of them may
+// import (decisions 0064 and 0125). internal/shared has no list,
 // because it imports only the standard library and the api module (decision
 // 0063). Every path is relative to the root of the core module. Adding a
 // module to a list loosens the gate and is reviewed as such (decision 0064).
 type Config struct {
-	API        Group       `json:"api"`
-	Components []Component `json:"components"`
-	Shared     Shared      `json:"shared"`
-	Checks     Group       `json:"checks"`
-	Commands   Group       `json:"commands"`
+	API         Group       `json:"api"`
+	Conformance Group       `json:"conformance"`
+	Components  []Component `json:"components"`
+	Shared      Shared      `json:"shared"`
+	Checks      Group       `json:"checks"`
+	Commands    Group       `json:"commands"`
 }
 
 // Component is one component: its name for messages, its directory and the
@@ -39,7 +41,8 @@ type Shared struct {
 	Path string `json:"path"`
 }
 
-// Group is the api module, internal/checks or cmd: its directory and the
+// Group is the api module, the conformance module, internal/checks or cmd:
+// its directory and the
 // third-party modules its packages may import.
 type Group struct {
 	Path    string   `json:"path"`
@@ -85,6 +88,7 @@ func (cfg *Config) validate() error {
 		group Group
 	}{
 		{"api", cfg.API},
+		{"conformance", cfg.Conformance},
 		{"shared", Group{Path: cfg.Shared.Path, Modules: []Module{}}},
 		{"checks", cfg.Checks},
 		{"commands", cfg.Commands},
@@ -141,7 +145,7 @@ func validateModules(mods []Module) error {
 
 // paths returns every path in the configuration, in the order of the file.
 func (cfg *Config) paths() []string {
-	paths := []string{cfg.API.Path}
+	paths := []string{cfg.API.Path, cfg.Conformance.Path}
 	for _, c := range cfg.Components {
 		paths = append(paths, c.Path)
 	}

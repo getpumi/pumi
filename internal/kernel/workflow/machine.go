@@ -10,6 +10,7 @@ import (
 
 	"getpumi.dev/pumi/api/events"
 
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 	"github.com/qmuntal/stateless"
 )
@@ -20,6 +21,9 @@ import (
 type Machine struct {
 	w  *Workflow
 	sm *stateless.StateMachine
+	// step is the project's archive step, under which the machine skips
+	// the transitions that do not hold (decision 0296).
+	step configv1.Project_ArchiveStep
 	// load reads the plan's state.
 	load func(context.Context) (string, error)
 }
@@ -37,17 +41,28 @@ func (f firing) String() string { return f.label }
 
 // firingOf returns the internal trigger of tr. Its label is the trigger,
 // with an event type shortened by its dev.getpumi. prefix, and the Cedar
-// action, such as "result / advance".
+// action, such as "result / advance", followed by the archive steps it
+// holds under when it lists any, such as "[after_implementing]".
 func firingOf(tr Transition) firing {
-	return firing{index: tr.Index, label: strings.TrimPrefix(string(tr.Trigger), events.TypePrefix) + " / " + tr.Action}
+	label := strings.TrimPrefix(string(tr.Trigger), events.TypePrefix) + " / " + tr.Action
+	if len(tr.ArchiveSteps) > 0 {
+		names := make([]string, len(tr.ArchiveSteps))
+		for i, step := range tr.ArchiveSteps {
+			names[i] = strings.ToLower(strings.TrimPrefix(step.String(), "ARCHIVE_STEP_"))
+		}
+		label += " [" + strings.Join(names, ", ") + "]"
+	}
+	return firing{index: tr.Index, label: label}
 }
 
-// NewMachine returns a machine for one plan on the workflow, whose state
-// load reads and store writes. The stateless machine has each superstate
+// NewMachine returns a machine for one plan on the workflow, under the
+// project's archive step step, whose state load reads and store writes.
+// The machine lists and fires only the transitions that hold under step,
+// where the unspecified step is after implementing (decision 0296). The stateless machine has each superstate
 // as a superstate of its substates, one internal trigger for each
 // transition, which is unique by the transition's index, and no guards, so
 // that it never sees two allowed transitions at once (decision 0169).
-func (w *Workflow) NewMachine(load func(context.Context) (string, error), store func(context.Context, string) error) *Machine {
+func (w *Workflow) NewMachine(step configv1.Project_ArchiveStep, load func(context.Context) (string, error), store func(context.Context, string) error) *Machine {
 	sm := stateless.NewStateMachineWithExternalStorage(
 		func(ctx context.Context) (stateless.State, error) { return load(ctx) },
 		func(ctx context.Context, s stateless.State) error {
@@ -73,7 +88,7 @@ func (w *Workflow) NewMachine(load func(context.Context) (string, error), store 
 			}
 		}
 	}
-	return &Machine{w: w, sm: sm, load: load}
+	return &Machine{w: w, sm: sm, step: stepOf(step), load: load}
 }
 
 // state reads the plan's state and checks that the workflow has it.
@@ -99,7 +114,9 @@ func (m *Machine) available(s *workflowv1.State) []Transition {
 	out := []Transition{}
 	for at := s.GetName(); at != ""; at = m.w.states[at].GetParent() {
 		for _, i := range m.w.own[at] {
-			out = append(out, m.w.transitions[i])
+			if tr := m.w.transitions[i]; tr.Holds(m.step) {
+				out = append(out, tr)
+			}
 		}
 	}
 	return out
@@ -142,6 +159,9 @@ func (m *Machine) Fire(ctx context.Context, index int) error {
 	for _, a := range m.available(s) {
 		found = found || a.Index == index
 	}
+	if !found && !tr.Holds(m.step) {
+		return fmt.Errorf("transition %d, of state %q, does not hold under the archive step %s", index, tr.State, m.step)
+	}
 	if !found {
 		return fmt.Errorf("transition %d, of state %q, does not apply in the state %q", index, tr.State, s.GetName())
 	}
@@ -154,10 +174,12 @@ func (m *Machine) Fire(ctx context.Context, index int) error {
 // Graph returns the workflow's state machine in the DOT language of
 // Graphviz, as stateless writes it, with the initial state marked. Each
 // transition is labeled with its trigger and the Cedar action that guards
-// it, so that a change to the workflow shows up as a diff of the graph.
+// it, and with the archive steps it holds under when it lists any, so that
+// a change to the workflow shows up as a diff of the graph. The graph has
+// the transitions of every archive step.
 func (w *Workflow) Graph() string {
 	initial := w.def.GetInitial()
-	m := w.NewMachine(
+	m := w.NewMachine(configv1.Project_ARCHIVE_STEP_UNSPECIFIED,
 		func(context.Context) (string, error) { return initial, nil },
 		func(context.Context, string) error { return nil },
 	)

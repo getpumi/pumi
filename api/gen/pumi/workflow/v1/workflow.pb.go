@@ -16,6 +16,7 @@
 package workflowv1
 
 import (
+	v1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -385,7 +386,17 @@ type Invoke struct {
 	// archive step's does (decisions 0278 and 0282). The runner drops the
 	// file changes of a check without it. Only a state that starts a check
 	// may set it.
-	ReturnsTree   bool `protobuf:"varint,7,opt,name=returns_tree,json=returnsTree,proto3" json:"returns_tree,omitempty"`
+	ReturnsTree bool `protobuf:"varint,7,opt,name=returns_tree,json=returnsTree,proto3" json:"returns_tree,omitempty"`
+	// Whether the kernel adds the narratives of the plan's change and of the
+	// capabilities it touches, from the spec check's result, to the task of
+	// an agent run (decisions 0271, 0279 and 0298). Only a state that starts
+	// a harness may set it.
+	Narratives bool `protobuf:"varint,8,opt,name=narratives,proto3" json:"narratives,omitempty"`
+	// Whether the kernel adds the coverage report of the plan's change, with
+	// the plan's reasons for having no test, to the task of an agent run
+	// (decisions 0280, 0295 and 0298). Only a state that starts a harness may
+	// set it.
+	Coverage      bool `protobuf:"varint,9,opt,name=coverage,proto3" json:"coverage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -465,6 +476,20 @@ func (x *Invoke) GetComponent() string {
 func (x *Invoke) GetReturnsTree() bool {
 	if x != nil {
 		return x.ReturnsTree
+	}
+	return false
+}
+
+func (x *Invoke) GetNarratives() bool {
+	if x != nil {
+		return x.Narratives
+	}
+	return false
+}
+
+func (x *Invoke) GetCoverage() bool {
+	if x != nil {
+		return x.Coverage
 	}
 	return false
 }
@@ -563,7 +588,12 @@ type Transition struct {
 	Target string `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
 	// The name of the Cedar action that guards the transition, as
 	// pumi.cedarschema declares it, such as "advance" or "retry".
-	Action        string `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	Action string `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"`
+	// The archive steps of the project under which the transition holds
+	// (decision 0296). The kernel skips a transition that does not list the
+	// project's archive step; a transition that lists none holds under every
+	// archive step.
+	ArchiveSteps  []v1.Project_ArchiveStep `protobuf:"varint,4,rep,packed,name=archive_steps,json=archiveSteps,proto3,enum=pumi.config.v1.Project_ArchiveStep" json:"archive_steps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -617,6 +647,13 @@ func (x *Transition) GetAction() string {
 		return x.Action
 	}
 	return ""
+}
+
+func (x *Transition) GetArchiveSteps() []v1.Project_ArchiveStep {
+	if x != nil {
+		return x.ArchiveSteps
+	}
+	return nil
 }
 
 // Trigger is what fires a transition (decision 0170): exactly one of these.
@@ -980,7 +1017,7 @@ var File_pumi_workflow_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\n" +
-	"\x1fpumi/workflow/v1/workflow.proto\x12\x10pumi.workflow.v1\"\x83\x01\n" +
+	"\x1fpumi/workflow/v1/workflow.proto\x12\x10pumi.workflow.v1\x1a\x1bpumi/config/v1/config.proto\"\x83\x01\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x18\n" +
@@ -994,7 +1031,7 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\x04wait\x18\x05 \x01(\v2\x16.pumi.workflow.v1.WaitH\x00R\x04wait\x12/\n" +
 	"\x05final\x18\x06 \x01(\v2\x17.pumi.workflow.v1.FinalH\x00R\x05final\x12>\n" +
 	"\vtransitions\x18\a \x03(\v2\x1c.pumi.workflow.v1.TransitionR\vtransitionsB\a\n" +
-	"\x05entry\"\xa0\x03\n" +
+	"\x05entry\"\xdc\x03\n" +
 	"\x06Invoke\x121\n" +
 	"\x04role\x18\x01 \x01(\x0e2\x1d.pumi.workflow.v1.Invoke.RoleR\x04role\x121\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1d.pumi.workflow.v1.Invoke.KindR\x04kind\x12\x12\n" +
@@ -1003,7 +1040,11 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"model_role\x18\x05 \x01(\tR\tmodelRole\x12\x1c\n" +
 	"\tcomponent\x18\x06 \x01(\tR\tcomponent\x12!\n" +
-	"\freturns_tree\x18\a \x01(\bR\vreturnsTree\";\n" +
+	"\freturns_tree\x18\a \x01(\bR\vreturnsTree\x12\x1e\n" +
+	"\n" +
+	"narratives\x18\b \x01(\bR\n" +
+	"narratives\x12\x1a\n" +
+	"\bcoverage\x18\t \x01(\bR\bcoverage\";\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -1017,12 +1058,13 @@ const file_pumi_workflow_v1_workflow_proto_rawDesc = "" +
 	"\x14KIND_EXTERNAL_ACTION\x10\x03\"\x06\n" +
 	"\x04Wait\"\x1f\n" +
 	"\x05Final\x12\x16\n" +
-	"\x06merged\x18\x01 \x01(\bR\x06merged\"q\n" +
+	"\x06merged\x18\x01 \x01(\bR\x06merged\"\xbb\x01\n" +
 	"\n" +
 	"Transition\x123\n" +
 	"\atrigger\x18\x01 \x01(\v2\x19.pumi.workflow.v1.TriggerR\atrigger\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x16\n" +
-	"\x06action\x18\x03 \x01(\tR\x06action\"\xfb\x03\n" +
+	"\x06action\x18\x03 \x01(\tR\x06action\x12H\n" +
+	"\rarchive_steps\x18\x04 \x03(\x0e2#.pumi.config.v1.Project.ArchiveStepR\farchiveSteps\"\xfb\x03\n" +
 	"\aTrigger\x12D\n" +
 	"\x06result\x18\x01 \x01(\v2*.pumi.workflow.v1.Trigger.InvocationResultH\x00R\x06result\x12B\n" +
 	"\aentered\x18\x02 \x01(\v2&.pumi.workflow.v1.Trigger.StateEnteredH\x00R\aentered\x12\x16\n" +
@@ -1068,6 +1110,7 @@ var file_pumi_workflow_v1_workflow_proto_goTypes = []any{
 	(*Trigger_InvocationInDoubt)(nil),    // 11: pumi.workflow.v1.Trigger.InvocationInDoubt
 	(*Trigger_InvocationCapReached)(nil), // 12: pumi.workflow.v1.Trigger.InvocationCapReached
 	(*Trigger_InvocationFailed)(nil),     // 13: pumi.workflow.v1.Trigger.InvocationFailed
+	(v1.Project_ArchiveStep)(0),          // 14: pumi.config.v1.Project.ArchiveStep
 }
 var file_pumi_workflow_v1_workflow_proto_depIdxs = []int32{
 	3,  // 0: pumi.workflow.v1.Workflow.states:type_name -> pumi.workflow.v1.State
@@ -1078,16 +1121,17 @@ var file_pumi_workflow_v1_workflow_proto_depIdxs = []int32{
 	0,  // 5: pumi.workflow.v1.Invoke.role:type_name -> pumi.workflow.v1.Invoke.Role
 	1,  // 6: pumi.workflow.v1.Invoke.kind:type_name -> pumi.workflow.v1.Invoke.Kind
 	8,  // 7: pumi.workflow.v1.Transition.trigger:type_name -> pumi.workflow.v1.Trigger
-	9,  // 8: pumi.workflow.v1.Trigger.result:type_name -> pumi.workflow.v1.Trigger.InvocationResult
-	10, // 9: pumi.workflow.v1.Trigger.entered:type_name -> pumi.workflow.v1.Trigger.StateEntered
-	11, // 10: pumi.workflow.v1.Trigger.in_doubt:type_name -> pumi.workflow.v1.Trigger.InvocationInDoubt
-	12, // 11: pumi.workflow.v1.Trigger.cap_reached:type_name -> pumi.workflow.v1.Trigger.InvocationCapReached
-	13, // 12: pumi.workflow.v1.Trigger.failed:type_name -> pumi.workflow.v1.Trigger.InvocationFailed
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	14, // 8: pumi.workflow.v1.Transition.archive_steps:type_name -> pumi.config.v1.Project.ArchiveStep
+	9,  // 9: pumi.workflow.v1.Trigger.result:type_name -> pumi.workflow.v1.Trigger.InvocationResult
+	10, // 10: pumi.workflow.v1.Trigger.entered:type_name -> pumi.workflow.v1.Trigger.StateEntered
+	11, // 11: pumi.workflow.v1.Trigger.in_doubt:type_name -> pumi.workflow.v1.Trigger.InvocationInDoubt
+	12, // 12: pumi.workflow.v1.Trigger.cap_reached:type_name -> pumi.workflow.v1.Trigger.InvocationCapReached
+	13, // 13: pumi.workflow.v1.Trigger.failed:type_name -> pumi.workflow.v1.Trigger.InvocationFailed
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_pumi_workflow_v1_workflow_proto_init() }

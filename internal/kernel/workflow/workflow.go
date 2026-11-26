@@ -22,6 +22,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strings"
 
 	"getpumi.dev/pumi/api/events"
 	cloudeventsv1 "getpumi.dev/pumi/api/gen/io/cloudevents/v1"
@@ -82,6 +83,33 @@ type Transition struct {
 	Target string
 	// Action is the Cedar action that guards the transition.
 	Action string
+	// ArchiveSteps are the archive steps of the project under which the
+	// transition holds, or none when it holds under every archive step
+	// (decision 0296).
+	ArchiveSteps []configv1.Project_ArchiveStep
+}
+
+// ArchiveSteps are the archive steps of a project (decision 0278). A
+// project that sets none archives after implementing.
+var ArchiveSteps = []configv1.Project_ArchiveStep{
+	configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING,
+	configv1.Project_ARCHIVE_STEP_AFTER_CONFORMANCE,
+	configv1.Project_ARCHIVE_STEP_OFF,
+}
+
+// stepOf returns step, or after implementing for the unspecified step.
+func stepOf(step configv1.Project_ArchiveStep) configv1.Project_ArchiveStep {
+	if step == configv1.Project_ARCHIVE_STEP_UNSPECIFIED {
+		return configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING
+	}
+	return step
+}
+
+// Holds reports whether the transition holds under the project's archive
+// step step, where the unspecified step is after implementing (decision
+// 0296).
+func (t Transition) Holds(step configv1.Project_ArchiveStep) bool {
+	return len(t.ArchiveSteps) == 0 || slices.Contains(t.ArchiveSteps, stepOf(step))
 }
 
 // Workflow is a loaded workflow.
@@ -133,14 +161,21 @@ var taskID = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 const taskHeader = "<!--\nSPDX-License-Identifier: Apache-2.0\nSPDX-FileCopyrightText: The Pumi Authors\n-->\n"
 
 // Load reads the workflow file at name in fsys and the text of each task it
-// names, the file <task>.md in the same directory, and checks the
-// workflow. It refuses, with an error for each problem that names the
+// names that a state other than a check starts, the file <task>.md in the
+// same directory, and checks the workflow. The text of a check's task is
+// its task id (decision 0297). It refuses, with an error for each problem that names the
 // state or transition: a duplicate or unknown state, a parent cycle, a
 // state that cannot be reached from the initial state, a state that is not
 // final and has no transitions, a Cedar action that pumi.cedarschema does
 // not declare, an output message that the api module does not have, a
 // task with no text file, an unknown trigger, and a trigger whose last
 // transition in a state is not always allowed (decisions 0168 and 0169).
+// A transition may list the archive steps it holds under (decision 0296);
+// the loader refuses an unknown or repeated step, and checks the last
+// transition of each trigger and the triggers a state must declare under
+// each archive step. A check may name no output message (decision 0278);
+// the narratives and the coverage report are only for an agent run, and a
+// task is either a check's or another state's (decisions 0297 and 0298).
 // It also refuses what the machine could not run: a state with no entry, a
 // transition with no trigger, an invocation with no role or kind, a
 // harness with no model role or another kind of component with one, a
@@ -160,7 +195,7 @@ func Load(fsys fs.FS, name string) (*Workflow, error) {
 	if err := prototext.Unmarshal(src, def); err != nil {
 		return nil, fmt.Errorf("cannot parse the workflow %s: %w", name, err)
 	}
-	l := &loader{fsys: fsys, dir: path.Dir(name), def: def, w: &Workflow{
+	l := &loader{fsys: fsys, dir: path.Dir(name), def: def, checkTasks: map[string]string{}, textTasks: map[string]string{}, w: &Workflow{
 		def:    def,
 		states: map[string]*workflowv1.State{},
 		own:    map[string][]int{},
@@ -198,6 +233,11 @@ type loader struct {
 	problems []error
 	// children are the substates of each state.
 	children map[string][]string
+	// checkTasks are the tasks that a check names, whose text is the task
+	// id, and textTasks those that another state names, whose text is a
+	// file (decision 0297), each with the first state that names it.
+	checkTasks map[string]string
+	textTasks  map[string]string
 }
 
 // problem records a problem.
@@ -315,9 +355,7 @@ func (l *loader) checkInvoke(state string, inv *workflowv1.Invoke) {
 	if inv.GetKind() == workflowv1.Invoke_KIND_UNSPECIFIED {
 		l.problem("state %q starts an invocation with no kind", state)
 	}
-	if !hasMessage(inv.GetOutputMessage()) {
-		l.problem("state %q expects the output message %q, which the api module does not have", state, inv.GetOutputMessage())
-	}
+	l.checkOutputAndInputs(state, inv)
 	switch harness := inv.GetKind() == workflowv1.Invoke_KIND_HARNESS; {
 	case harness && inv.GetModelRole() == "":
 		l.problem("state %q starts a harness and names no model role (decision 0233)", state)
@@ -332,7 +370,28 @@ func (l *loader) checkInvoke(state string, inv *workflowv1.Invoke) {
 	case !check && inv.GetReturnsTree():
 		l.problem("state %q starts a %s and sets returns_tree, which only a check sets (decision 0282)", state, kindName(inv.GetKind()))
 	}
-	l.readTask(state, inv.GetTask())
+	l.readTask(state, inv.GetTask(), inv.GetKind() == workflowv1.Invoke_KIND_CHECK)
+}
+
+// checkOutputAndInputs checks the output message of the invocation that
+// state starts, which a check may leave out, as the archive step, whose
+// result carries the workspace's tree and no output (decision 0278), and
+// the narratives and the coverage report, which only an agent run gets
+// (decision 0298).
+func (l *loader) checkOutputAndInputs(state string, inv *workflowv1.Invoke) {
+	check := inv.GetKind() == workflowv1.Invoke_KIND_CHECK
+	if (!check || inv.GetOutputMessage() != "") && !hasMessage(inv.GetOutputMessage()) {
+		l.problem("state %q expects the output message %q, which the api module does not have", state, inv.GetOutputMessage())
+	}
+	if inv.GetKind() == workflowv1.Invoke_KIND_HARNESS {
+		return
+	}
+	if inv.GetNarratives() {
+		l.problem("state %q starts a %s and sets narratives, which only an agent run gets (decision 0298)", state, kindName(inv.GetKind()))
+	}
+	if inv.GetCoverage() {
+		l.problem("state %q starts a %s and sets coverage, which only an agent run gets (decision 0298)", state, kindName(inv.GetKind()))
+	}
 }
 
 // kindName names a kind of component in a problem.
@@ -376,11 +435,31 @@ func findMessage(ms protoreflect.MessageDescriptors, full protoreflect.FullName)
 	return false
 }
 
-// readTask reads the text file of task, which state names.
-func (l *loader) readTask(state, task string) {
+// readTask reads the text file of task, which state names. The text of a
+// check's task, when check is true, is the task id, and it has no file
+// (decision 0297).
+func (l *loader) readTask(state, task string, check bool) {
 	if !taskID.MatchString(task) {
 		l.problem("state %q names the task %q, which is not an id of lowercase letters, digits and hyphens", state, task)
 		return
+	}
+	if check {
+		if other, ok := l.textTasks[task]; ok {
+			l.problem("state %q starts a check with the task %q, which state %q, that is not a check, also names; a check's task text is its task id (decision 0297)", state, task, other)
+			return
+		}
+		if _, ok := l.checkTasks[task]; !ok {
+			l.checkTasks[task] = state
+		}
+		l.w.tasks[task] = task
+		return
+	}
+	if other, ok := l.checkTasks[task]; ok {
+		l.problem("state %q names the task %q, which state %q starts as a check; a check's task text is its task id (decision 0297)", state, task, other)
+		return
+	}
+	if _, ok := l.textTasks[task]; !ok {
+		l.textTasks[task] = state
 	}
 	if _, ok := l.w.tasks[task]; ok {
 		return
@@ -431,33 +510,113 @@ func (l *loader) checkTransitions(s *workflowv1.State) {
 		l.problem("state %q is not final and has no transitions", name)
 	}
 	check := invokes && inv.Invoke.GetKind() == workflowv1.Invoke_KIND_CHECK
-	last := map[Trigger]int{}
+	// last holds, under each archive step, the index of the last transition
+	// of each trigger that holds under it (decision 0296).
+	last := map[configv1.Project_ArchiveStep]map[Trigger]int{}
+	for _, step := range ArchiveSteps {
+		last[step] = map[Trigger]int{}
+	}
 	for i, t := range s.GetTransitions() {
 		at := fmt.Sprintf("state %q, transition %d", name, i+1)
 		trig := l.checkTransition(at, t, invokes)
 		if trig == InDoubt && check {
 			l.problem("%s is triggered by %q, but the state starts a check, which runs again when it is in doubt (decision 0200)", at, InDoubt)
 		}
-		if trig != "" {
-			last[trig] = i
+		steps := l.checkArchiveSteps(at, t)
+		tr := Transition{
+			Index: len(l.w.transitions), State: name, Trigger: trig, Target: t.GetTarget(), Action: t.GetAction(), ArchiveSteps: steps,
 		}
+		markLast(last, tr, i)
 		l.w.own[name] = append(l.w.own[name], len(l.w.transitions))
-		l.w.transitions = append(l.w.transitions, Transition{
-			Index: len(l.w.transitions), State: name, Trigger: trig, Target: t.GetTarget(), Action: t.GetAction(),
-		})
+		l.w.transitions = append(l.w.transitions, tr)
 	}
-	if invokes {
-		l.checkRequired(name, check, last)
+	problems := &stepProblems{}
+	for _, step := range ArchiveSteps {
+		if invokes {
+			l.checkRequired(problems, step, name, check, last[step])
+		}
+		checkLast(problems, step, s, last[step])
 	}
+	problems.report(l)
+}
+
+// markLast records the transition tr, at index i of its state, as the
+// last of its trigger under each archive step it holds under.
+func markLast(last map[configv1.Project_ArchiveStep]map[Trigger]int, tr Transition, i int) {
+	if tr.Trigger == "" {
+		return
+	}
+	for _, step := range ArchiveSteps {
+		if tr.Holds(step) {
+			last[step][tr.Trigger] = i
+		}
+	}
+}
+
+// checkLast records a problem under step for each trigger of s whose last
+// transition under step, at the index that last holds, is not always
+// allowed (decision 0169).
+func checkLast(problems *stepProblems, step configv1.Project_ArchiveStep, s *workflowv1.State, last map[Trigger]int) {
 	always := policy.AlwaysAllowed()
 	for _, i := range slices.Sorted(maps.Values(last)) {
 		t := s.GetTransitions()[i]
 		if !slices.Contains(always, t.GetAction()) {
 			trig, _ := triggerOf(t.GetTrigger())
-			l.problem("state %q, transition %d is the last transition on %q and is guarded by %q, which is not always allowed; the last must be one of %q, so that the plan always has a move (decision 0169)",
-				name, i+1, trig, t.GetAction(), always)
+			problems.add(step, fmt.Sprintf("state %q, transition %d is the last transition on %q and is guarded by %q, which is not always allowed; the last must be one of %q, so that the plan always has a move (decision 0169)",
+				s.GetName(), i+1, trig, t.GetAction(), always))
 		}
 	}
+}
+
+// stepProblems collects problems by the archive steps under which each
+// holds, in the order they are first found.
+type stepProblems struct {
+	order []string
+	steps map[string][]configv1.Project_ArchiveStep
+}
+
+// add records the problem p under step.
+func (p *stepProblems) add(step configv1.Project_ArchiveStep, problem string) {
+	if p.steps == nil {
+		p.steps = map[string][]configv1.Project_ArchiveStep{}
+	}
+	if _, ok := p.steps[problem]; !ok {
+		p.order = append(p.order, problem)
+	}
+	p.steps[problem] = append(p.steps[problem], step)
+}
+
+// report reports each problem to l, once, with the archive steps under
+// which it holds when it does not hold under every one (decision 0296).
+func (p *stepProblems) report(l *loader) {
+	for _, problem := range p.order {
+		steps := p.steps[problem]
+		if len(steps) == len(ArchiveSteps) {
+			l.problem("%s", problem)
+			continue
+		}
+		names := make([]string, len(steps))
+		for i, step := range steps {
+			names[i] = step.String()
+		}
+		l.problem("%s, under the archive steps %s (decision 0296)", problem, strings.Join(names, ", "))
+	}
+}
+
+// checkArchiveSteps checks the archive steps that the transition t, which
+// at names, lists, and returns them: each a known step other than the
+// unspecified one, and each once (decision 0296).
+func (l *loader) checkArchiveSteps(at string, t *workflowv1.Transition) []configv1.Project_ArchiveStep {
+	steps := t.GetArchiveSteps()
+	for i, step := range steps {
+		switch {
+		case !slices.Contains(ArchiveSteps, step):
+			l.problem("%s lists the archive step %s, which is not one of %v (decision 0296)", at, step, ArchiveSteps)
+		case slices.Contains(steps[:i], step):
+			l.problem("%s lists the archive step %s more than once", at, step)
+		}
+	}
+	return slices.Clone(steps)
 }
 
 // checkRequired refuses a state that starts an invocation, a check when
@@ -465,15 +624,15 @@ func (l *loader) checkTransitions(s *workflowv1.State) {
 // in_doubt for an agent run or an external action (decision 0200), and
 // cap_reached and failed for any invocation (decisions 0203 and 0235). last
 // holds the triggers of its transitions.
-func (l *loader) checkRequired(name string, check bool, last map[Trigger]int) {
+func (l *loader) checkRequired(p *stepProblems, step configv1.Project_ArchiveStep, name string, check bool, last map[Trigger]int) {
 	if _, ok := last[InDoubt]; !check && !ok {
-		l.problem("state %q starts an agent run or an external action and has no transition on %q; its invocation may be in doubt (decision 0200)", name, InDoubt)
+		p.add(step, fmt.Sprintf("state %q starts an agent run or an external action and has no transition on %q; its invocation may be in doubt (decision 0200)", name, InDoubt))
 	}
 	if _, ok := last[CapReached]; !ok {
-		l.problem("state %q starts an invocation and has no transition on %q; its invocation may reach a cap of its budget (decision 0203)", name, CapReached)
+		p.add(step, fmt.Sprintf("state %q starts an invocation and has no transition on %q; its invocation may reach a cap of its budget (decision 0203)", name, CapReached))
 	}
 	if _, ok := last[Failed]; !ok {
-		l.problem("state %q starts an invocation and has no transition on %q; its invocation may fail (decision 0235)", name, Failed)
+		p.add(step, fmt.Sprintf("state %q starts an invocation and has no transition on %q; its invocation may fail (decision 0235)", name, Failed))
 	}
 }
 

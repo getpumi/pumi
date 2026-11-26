@@ -73,10 +73,15 @@ func TestAStateHasANameAParentAGateAnEntryAndOrderedTransitions(t *testing.T) {
 	}
 }
 
-func TestAnInvokeEntryNamesTheRoleTheKindTheTaskTheOutputMessageTheModelRoleTheComponentAndReturnsTree(t *testing.T) {
+func TestAnInvokeEntryNamesTheRoleTheKindTheTaskTheOutputMessageTheModelRoleTheComponentReturnsTreeAndItsInputs(t *testing.T) {
 	inv := (&workflowv1.Invoke{}).ProtoReflect().Descriptor()
-	if got, want := fieldNames(inv), []string{"component", "kind", "model_role", "output_message", "returns_tree", "role", "task"}; !slices.Equal(got, want) {
-		t.Fatalf("Invoke has %q, want %q (decisions 0168, 0233, 0272 and 0282)", got, want)
+	if got, want := fieldNames(inv), []string{"component", "coverage", "kind", "model_role", "narratives", "output_message", "returns_tree", "role", "task"}; !slices.Equal(got, want) {
+		t.Fatalf("Invoke has %q, want %q (decisions 0168, 0233, 0272, 0282 and 0298)", got, want)
+	}
+	for _, name := range []string{"narratives", "coverage"} {
+		if f := fieldOf(t, inv, name); f.Kind() != protoreflect.BoolKind || f.IsList() {
+			t.Errorf("Invoke.%s is not a bool", name)
+		}
 	}
 	if got, want := valueNames(fieldOf(t, inv, "role").Enum()), []string{"ROLE_UNSPECIFIED", "ROLE_AGENT", "ROLE_GATE"}; !slices.Equal(got, want) {
 		t.Errorf("Invoke.Role is %q, want %q", got, want)
@@ -109,10 +114,13 @@ func TestFinalCarriesMerged(t *testing.T) {
 	}
 }
 
-func TestATransitionHasATriggerATargetAndAnAction(t *testing.T) {
+func TestATransitionHasATriggerATargetAnActionAndTheArchiveStepsItHoldsUnder(t *testing.T) {
 	tr := (&workflowv1.Transition{}).ProtoReflect().Descriptor()
-	if got, want := fieldNames(tr), []string{"action", "target", "trigger"}; !slices.Equal(got, want) {
-		t.Fatalf("Transition has %q, want %q (decision 0168)", got, want)
+	if got, want := fieldNames(tr), []string{"action", "archive_steps", "target", "trigger"}; !slices.Equal(got, want) {
+		t.Fatalf("Transition has %q, want %q (decisions 0168 and 0296)", got, want)
+	}
+	if f := fieldOf(t, tr, "archive_steps"); !f.IsList() || f.Enum() == nil || f.Enum().FullName() != "pumi.config.v1.Project.ArchiveStep" {
+		t.Errorf("Transition.archive_steps is not a list of the project's archive steps (decision 0296)")
 	}
 	if f := fieldOf(t, tr, "trigger"); f.Message() == nil || f.Message().FullName() != "pumi.workflow.v1.Trigger" {
 		t.Errorf("Transition.trigger is not a Trigger")
@@ -240,8 +248,15 @@ func TestTextFormatRefusesTwoEntriesOrTwoTriggerKinds(t *testing.T) {
 
 func TestThePlanningOutputHasDeclaredPathsAndOpenQuestionsWithAnswers(t *testing.T) {
 	out := (&workflowv1.PlanningOutput{}).ProtoReflect().Descriptor()
-	if got, want := fieldNames(out), []string{"declared_paths", "plan", "questions"}; !slices.Equal(got, want) {
-		t.Fatalf("PlanningOutput has %q, want %q (decision 0171)", got, want)
+	if got, want := fieldNames(out), []string{"declared_paths", "no_test", "plan", "questions"}; !slices.Equal(got, want) {
+		t.Fatalf("PlanningOutput has %q, want %q (decisions 0171 and 0295)", got, want)
+	}
+	n := fieldOf(t, out, "no_test")
+	if !n.IsList() || n.Message() == nil {
+		t.Fatalf("PlanningOutput.no_test is not a list of messages")
+	}
+	if got, want := fieldNames(n.Message()), []string{"reason", "requirement_id"}; !slices.Equal(got, want) {
+		t.Errorf("a requirement with no test has %q, want %q: the requirement's ID and the reason (decision 0295)", got, want)
 	}
 	if f := fieldOf(t, out, "declared_paths"); !f.IsList() || f.Kind() != protoreflect.StringKind {
 		t.Errorf("PlanningOutput.declared_paths is not a list of strings")
@@ -275,6 +290,7 @@ func TestTheOutputMessagesRoundTripThroughProtojson(t *testing.T) {
 			Plan:          "Add the loader.",
 			DeclaredPaths: []string{"internal/kernel/workflow/**"},
 			Questions:     []*workflowv1.PlanningOutput_Question{{Id: "q1", Text: "Which order?", AgentAnswer: "File order."}},
+			NoTest:        []*workflowv1.PlanningOutput_NoTest{{RequirementId: "WFL-001", Reason: "The golden cases show it."}},
 		},
 		&workflowv1.SecondOpinion{Answers: []*workflowv1.SecondOpinion_Answer{{QuestionId: "q1", Answer: "File order."}}},
 	} {

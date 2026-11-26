@@ -6,6 +6,7 @@ package firstworkflow
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io/fs"
 	"maps"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"testing"
 
 	"getpumi.dev/pumi/api/events"
+	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	workflowv1 "getpumi.dev/pumi/api/gen/pumi/workflow/v1"
 	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/kernel/workflow"
@@ -36,8 +38,9 @@ func load(t *testing.T) *workflow.Workflow {
 // stages are the states of decision 0171, in order, without the superstate
 // and the escalated states.
 var stages = []string{
-	"spec", "planning", "second-opinion", "plan-review", "implementing", "checking",
-	"scope", "budgets", "dco", "outside-checks", "conformance-audit",
+	"spec", "planning", "second-opinion", "plan-review", "implementing", "archiving", "checking",
+	"scope", "budgets", "dco", "outside-checks", "report-coverage", "conformance-audit",
+	"archived-checking", "archived-scope", "archived-budgets", "archived-dco", "archived-outside-checks",
 	"awaiting-approval", "ready-to-merge", "merging", "merged", "cancelled",
 }
 
@@ -145,20 +148,29 @@ func TestEveryGateHasAnEscalatedState(t *testing.T) {
 			t.Errorf("the gate state %q has no escalate transition to %q", s.GetName(), esc.GetName())
 		}
 	}
-	if gates != 10 {
-		t.Errorf("the workflow has %d gate states, want 10", gates)
+	if gates != 14 {
+		t.Errorf("the workflow has %d gate states, want 14", gates)
 	}
 }
 
+// TestEveryTaskHasItsTextFile: the task of each state that starts an agent
+// run or an external action has a text file, and a check's task has none,
+// because its text is its task id (decision 0297).
 func TestEveryTaskHasItsTextFile(t *testing.T) {
 	w := load(t)
 	tasks := []string{}
 	for _, s := range w.Definition().GetStates() {
-		if task := s.GetInvoke().GetTask(); task != "" {
-			tasks = append(tasks, task)
-			if text, ok := w.Task(task); !ok || strings.TrimSpace(text) == "" {
-				t.Errorf("the task %q of state %q has no text", task, s.GetName())
-			}
+		task := s.GetInvoke().GetTask()
+		if task == "" {
+			continue
+		}
+		if s.GetInvoke().GetKind() == workflowv1.Invoke_KIND_CHECK {
+			checkTaskIsItsID(t, w, s.GetName(), task)
+			continue
+		}
+		tasks = append(tasks, task)
+		if text, ok := w.Task(task); !ok || strings.TrimSpace(text) == "" {
+			t.Errorf("the task %q of state %q has no text", task, s.GetName())
 		}
 	}
 	texts, err := fs.Glob(files, "*.md")
@@ -170,8 +182,17 @@ func TestEveryTaskHasItsTextFile(t *testing.T) {
 			t.Errorf("the text file %s is embedded, but no state names its task", name)
 		}
 	}
-	if len(texts) != 8 {
-		t.Errorf("%d task texts are embedded, want 8: %q", len(texts), texts)
+	if len(texts) != 6 {
+		t.Errorf("%d task texts are embedded, want 6: %q", len(texts), texts)
+	}
+}
+
+// checkTaskIsItsID checks that the task of the check state is its task id
+// (decision 0297).
+func checkTaskIsItsID(t *testing.T, w *workflow.Workflow, state, task string) {
+	t.Helper()
+	if text, ok := w.Task(task); !ok || text != task {
+		t.Errorf("the task of the check %q is %q, %v, want its task id %q", state, text, ok, task)
 	}
 }
 
@@ -213,14 +234,14 @@ var (
 // decider and fires the first allowed one, and after each transition it
 // decides the entered trigger of a state that only decides. It returns the
 // states visited, from included.
-func walk(t *testing.T, w *workflow.Workflow, from string, steps []step) []string {
+func walk(t *testing.T, w *workflow.Workflow, archive configv1.Project_ArchiveStep, from string, steps []step) []string {
 	t.Helper()
 	known := map[string]bool{}
 	for _, tr := range w.Transitions() {
 		known[tr.State+":"+tr.Action] = true
 	}
 	s := &storage{state: from}
-	m := w.NewMachine(s.load, s.store)
+	m := w.NewMachine(archive, s.load, s.store)
 	visited := []string{from}
 	for i, st := range steps {
 		for _, a := range st.allow {
@@ -273,28 +294,97 @@ func TestWalks(t *testing.T) {
 	// The cases of issue #66. Each names the transitions the fake decider
 	// allows at each step and the states the plan visits.
 	tests := []struct {
-		name  string
-		from  string
-		steps []step
-		want  []string
+		name    string
+		archive configv1.Project_ArchiveStep
+		from    string
+		steps   []step
+		want    []string
 	}{
 		{
-			name: "every gate passes",
+			name:    "every gate passes, archiving after implementing",
+			archive: configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING,
 			steps: []step{
 				{result, []string{"spec:spec"}},
 				{result, []string{"planning:advance"}},
 				{result, []string{"plan-review:planReview"}},
 				{result, []string{"implementing:advance"}},
+				{result, []string{"archiving:advance"}},
 				{result, []string{"checking:advance", "scope:scope", "budgets:budgets", "dco:dco", "outside-checks:outsideChecks"}},
+				{result, []string{"report-coverage:advance"}},
 				{result, []string{"conformance-audit:conformance"}},
 				{approval, []string{"awaiting-approval:mergeApproval", "ready-to-merge:merge"}},
 				{result, []string{"merging:advance"}},
 			},
 			want: []string{
-				"spec", "planning", "plan-review", "implementing", "checking",
-				"scope", "budgets", "dco", "outside-checks", "conformance-audit",
+				"spec", "planning", "plan-review", "implementing", "archiving", "checking",
+				"scope", "budgets", "dco", "outside-checks", "report-coverage", "conformance-audit",
 				"awaiting-approval", "ready-to-merge", "merging", "merged",
 			},
+		},
+		{
+			name:    "every gate passes, archiving after the conformance audit, and the checks run again",
+			archive: configv1.Project_ARCHIVE_STEP_AFTER_CONFORMANCE,
+			from:    "implementing",
+			steps: []step{
+				{result, []string{"implementing:advance"}},
+				{result, []string{"checking:advance", "scope:scope", "budgets:budgets", "dco:dco", "outside-checks:outsideChecks"}},
+				{result, []string{"report-coverage:advance"}},
+				{result, []string{"conformance-audit:conformance"}},
+				{result, []string{"archiving:advance"}},
+				{result, []string{"archived-checking:advance", "archived-scope:scope", "archived-budgets:budgets", "archived-dco:dco", "archived-outside-checks:outsideChecks"}},
+				{approval, []string{"awaiting-approval:mergeApproval", "ready-to-merge:merge"}},
+			},
+			want: []string{
+				"implementing", "checking", "scope", "budgets", "dco", "outside-checks", "report-coverage",
+				"conformance-audit", "archiving", "archived-checking", "archived-scope", "archived-budgets",
+				"archived-dco", "archived-outside-checks", "awaiting-approval", "ready-to-merge", "merging",
+			},
+		},
+		{
+			name:    "every gate passes with no archive step",
+			archive: configv1.Project_ARCHIVE_STEP_OFF,
+			from:    "implementing",
+			steps: []step{
+				{result, []string{"implementing:advance"}},
+				{result, []string{"checking:advance", "scope:scope", "budgets:budgets", "dco:dco", "outside-checks:outsideChecks"}},
+				{result, []string{"report-coverage:advance"}},
+				{result, []string{"conformance-audit:conformance"}},
+			},
+			want: []string{
+				"implementing", "checking", "scope", "budgets", "dco", "outside-checks", "report-coverage",
+				"conformance-audit", "awaiting-approval",
+			},
+		},
+		{
+			name:    "a check that fails on the archived tree goes back to implementing",
+			archive: configv1.Project_ARCHIVE_STEP_AFTER_CONFORMANCE,
+			from:    "archived-checking",
+			steps: []step{
+				{result, []string{"archived-checking:advance", "archived-scope:retry"}},
+				{result, []string{"implementing:advance"}},
+			},
+			want: []string{"archived-checking", "archived-scope", "implementing", "checking"},
+		},
+		{
+			name:    "an override of the audit goes to the archive step after the conformance audit",
+			archive: configv1.Project_ARCHIVE_STEP_AFTER_CONFORMANCE,
+			from:    "conformance-audit",
+			steps: []step{
+				{result, nil},
+				{override, []string{"conformance-audit-escalated:conformance"}},
+			},
+			want: []string{"conformance-audit", "conformance-audit-escalated", "archiving"},
+		},
+		{
+			name:    "an archive step that fails escalates, and the answer runs it again",
+			archive: configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING,
+			from:    "archiving",
+			steps: []step{
+				{workflow.Failed, nil},
+				{resolved, []string{"archiving-escalated:resume"}},
+				{result, []string{"archiving:advance"}},
+			},
+			want: []string{"archiving", "archiving-escalated", "archiving", "checking"},
 		},
 		{
 			name: "plan review retries to planning",
@@ -314,7 +404,7 @@ func TestWalks(t *testing.T) {
 				{result, []string{"checking:advance"}},
 				{override, []string{"scope-escalated:scope", "budgets:budgets", "dco:dco", "outside-checks:outsideChecks"}},
 			},
-			want: []string{"checking", "scope", "scope-escalated", "budgets", "dco", "outside-checks", "conformance-audit"},
+			want: []string{"checking", "scope", "scope-escalated", "budgets", "dco", "outside-checks", "report-coverage"},
 		},
 		{
 			name: "an override that the gate still denies stays escalated",
@@ -408,7 +498,7 @@ func TestWalks(t *testing.T) {
 				{ingested, nil},
 				{ingested, []string{"outside-checks-escalated:outsideChecks"}},
 			},
-			want: []string{"dco", "outside-checks", "outside-checks-escalated", "outside-checks-escalated", "conformance-audit"},
+			want: []string{"dco", "outside-checks", "outside-checks-escalated", "outside-checks-escalated", "report-coverage"},
 		},
 		{
 			name: "the hard caps stop a plan between stages",
@@ -436,7 +526,7 @@ func TestWalks(t *testing.T) {
 			if from == "" {
 				from = "spec"
 			}
-			if got := walk(t, w, from, tt.steps); !slices.Equal(got, tt.want) {
+			if got := walk(t, w, tt.archive, from, tt.steps); !slices.Equal(got, tt.want) {
 				t.Errorf("visited %q, want %q", got, tt.want)
 			}
 		})
@@ -451,7 +541,7 @@ func TestACancelGoesToCancelledFromEveryActiveState(t *testing.T) {
 			continue
 		}
 		n++
-		if got := walk(t, w, s.GetName(), []step{{cancel, nil}}); !slices.Equal(got, []string{s.GetName(), "cancelled"}) {
+		if got := walk(t, w, configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING, s.GetName(), []step{{cancel, nil}}); !slices.Equal(got, []string{s.GetName(), "cancelled"}) {
 			t.Errorf("a cancel in %q visited %q, want it to go to cancelled", s.GetName(), got)
 		}
 	}
@@ -459,7 +549,7 @@ func TestACancelGoesToCancelledFromEveryActiveState(t *testing.T) {
 		t.Errorf("only %d states are inside active", n)
 	}
 	for _, final := range []string{"merged", "cancelled"} {
-		ts, err := w.NewMachine((&storage{state: final}).load, (&storage{}).store).Transitions(context.Background(), cancel)
+		ts, err := w.NewMachine(configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING, (&storage{state: final}).load, (&storage{}).store).Transitions(context.Background(), cancel)
 		if err != nil || len(ts) != 0 {
 			t.Errorf("a cancel in %q: %v, %v, want no transition", final, ts, err)
 		}
@@ -478,7 +568,7 @@ func TestAFailedInvocationRunsAgainThenEscalates(t *testing.T) {
 		}
 		n++
 		name := s.GetName()
-		ts, err := w.NewMachine((&storage{state: name}).load, (&storage{}).store).Transitions(context.Background(), workflow.Failed)
+		ts, err := w.NewMachine(configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING, (&storage{state: name}).load, (&storage{}).store).Transitions(context.Background(), workflow.Failed)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -490,8 +580,8 @@ func TestAFailedInvocationRunsAgainThenEscalates(t *testing.T) {
 			t.Errorf("the transitions of %q on failed are %q, want %q", name, got, want)
 		}
 	}
-	if n != 8 {
-		t.Errorf("%d states start an invocation, want 8", n)
+	if n != 11 {
+		t.Errorf("%d states start an invocation, want 11", n)
 	}
 }
 
@@ -567,5 +657,56 @@ func TestTheChecksNameTheirComponents(t *testing.T) {
 		if inv.GetComponent() != "spec" || inv.GetOutputMessage() != "pumi.workflow.v1.SpecCheckOutput" {
 			t.Errorf("the spec state runs %q with the output %q, want spec with pumi.workflow.v1.SpecCheckOutput", inv.GetComponent(), inv.GetOutputMessage())
 		}
+	}
+}
+
+// TestTheArchiveAndCoverageStatesRunTheSpecCheckProgram: the archive step
+// and the coverage report run the spec check's program with their own
+// tasks (decisions 0278, 0284 and 0294); the archive step's result carries
+// the workspace's tree and no output (decision 0282), and the coverage
+// report's output is a CoverageReport. The checks run again on the
+// archived tree with the checks program.
+func TestTheArchiveAndCoverageStatesRunTheSpecCheckProgram(t *testing.T) {
+	want := map[string]string{
+		"spec":              "spec validate-spec pumi.workflow.v1.SpecCheckOutput false",
+		"archiving":         "spec archive-change  true",
+		"checking":          "checks run-checks pumi.workflow.v1.CheckingOutput false",
+		"report-coverage":   "spec report-coverage pumi.workflow.v1.CoverageReport false",
+		"archived-checking": "checks run-checks pumi.workflow.v1.CheckingOutput false",
+	}
+	got := map[string]string{}
+	for _, s := range load(t).Definition().GetStates() {
+		if inv := s.GetInvoke(); inv.GetKind() == workflowv1.Invoke_KIND_CHECK {
+			got[s.GetName()] = fmt.Sprintf("%s %s %s %v", inv.GetComponent(), inv.GetTask(), inv.GetOutputMessage(), inv.GetReturnsTree())
+		}
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("the checks are %q, want %q", got, want)
+	}
+}
+
+// TestTheNarrativeIsTheFinalAuthorityInTheTasksThatGetIt: the task text of
+// each state that gets the narratives says that the narrative is the final
+// authority when the spec can be read more than one way (decision 0271),
+// and the audit's says to judge the coverage report (decision 0280).
+func TestTheNarrativeIsTheFinalAuthorityInTheTasksThatGetIt(t *testing.T) {
+	w := load(t)
+	n := 0
+	for _, s := range w.Definition().GetStates() {
+		inv := s.GetInvoke()
+		if !inv.GetNarratives() {
+			continue
+		}
+		n++
+		text, _ := w.Task(inv.GetTask())
+		if !strings.Contains(text, "the narrative is the final authority") {
+			t.Errorf("the task %q of %q does not say that the narrative is the final authority:\n%s", inv.GetTask(), s.GetName(), text)
+		}
+		if inv.GetCoverage() && !strings.Contains(text, "coverage report") {
+			t.Errorf("the task %q of %q gets the coverage report and does not say what to do with it:\n%s", inv.GetTask(), s.GetName(), text)
+		}
+	}
+	if n != 3 {
+		t.Errorf("%d states get the narratives, want 3", n)
 	}
 }

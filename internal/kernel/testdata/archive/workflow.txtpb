@@ -1,0 +1,302 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# A workflow with an archive step that the project's archive step places
+# (decisions 0278 and 0296): implementing, the archive step and the checks.
+# Under after implementing the plan archives and then runs the checks;
+# under after the conformance audit it runs the checks, archives, and runs
+# the checks again on the archived tree; with the archive step off it runs
+# the checks only. Every move is advance, which core.workflow-actions
+# permits for the kernel under the hard caps; otherwise the plan escalates.
+# The golden cases of cmd/pumi under testdata/golden/archive run on it, one
+# for each archive step. It is test data, not a workflow of the release
+# (decision 0166).
+name: "archive"
+version: "1"
+initial: "implementing"
+
+# The superstate of the states of a plan that is not finished.
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+# Implementing (initial): an agent implements the plan. To archiving under
+# after implementing, and to checking otherwise; otherwise escalate.
+states {
+  name: "implementing"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    model_role: "implementer"
+    task: "implement"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_IMPLEMENTING
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking"
+    action: "advance"
+    archive_steps: [ARCHIVE_STEP_AFTER_CONFORMANCE, ARCHIVE_STEP_OFF]
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# Implementing, escalated: wait for a person. An answer goes back to
+# implementing, decided by resume.
+states {
+  name: "implementing-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# Archiving: the spec check's program archives the change, as a check whose
+# task text is its task id and whose result carries the workspace's tree,
+# with no output message (decisions 0282 and 0297). To checking under after
+# implementing, and to archived-checking under after the conformance
+# audit; otherwise escalate.
+states {
+  name: "archiving"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "spec"
+    task: "archive-change"
+    returns_tree: true
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_IMPLEMENTING
+  }
+  transitions {
+    trigger { result {} }
+    target: "archived-checking"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_CONFORMANCE
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archiving"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+}
+
+# Archiving, escalated: wait for a person. An answer goes back to
+# archiving, decided by resume.
+states {
+  name: "archiving-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archiving"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archiving-escalated"
+    action: "escalate"
+  }
+}
+
+# Checking: the checks run on the tree. To done under after implementing
+# and off, and to archiving under after the conformance audit; otherwise
+# escalate.
+states {
+  name: "checking"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "checks"
+    task: "run-checks"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "done"
+    action: "advance"
+    archive_steps: [ARCHIVE_STEP_AFTER_IMPLEMENTING, ARCHIVE_STEP_OFF]
+  }
+  transitions {
+    trigger { result {} }
+    target: "archiving"
+    action: "advance"
+    archive_steps: ARCHIVE_STEP_AFTER_CONFORMANCE
+  }
+  transitions {
+    trigger { result {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "checking"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+}
+
+# Checking, escalated: wait for a person. An answer goes back to checking,
+# decided by resume.
+states {
+  name: "checking-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "checking"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "checking-escalated"
+    action: "escalate"
+  }
+}
+
+# Archived checking: under after the conformance audit, the checks run
+# again on the archived tree. To done on advance; otherwise escalate.
+states {
+  name: "archived-checking"
+  parent: "active"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "checks"
+    task: "run-checks"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "done"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archived-checking"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+}
+
+# Archived checking, escalated: wait for a person. An answer goes back to
+# archived-checking, decided by resume.
+states {
+  name: "archived-checking-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-checking"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "archived-checking-escalated"
+    action: "escalate"
+  }
+}
+
+# Done: final.
+states {
+  name: "done"
+  final { merged: true }
+}
+
+# Cancelled: final.
+states {
+  name: "cancelled"
+  final {}
+}

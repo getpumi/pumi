@@ -23,6 +23,15 @@ message PlanningOutput {
     string agent_answer = 3;
   }
 
+  // NoTest is one requirement of the plan's change that the plan gives no
+  // test, with the reason (decision 0295).
+  message NoTest {
+    // The requirement's ID, such as BLS-001 (decision 0274).
+    string requirement_id = 1;
+    // Why the requirement has no test, and how it is verified instead.
+    string reason = 2;
+  }
+
   // The plan, as Markdown.
   string plan = 1;
   // The paths the plan will change, as patterns relative to the root of the
@@ -32,6 +41,10 @@ message PlanningOutput {
   // The open questions. With none, the plan goes to plan review; with any,
   // to a second opinion.
   repeated Question questions = 3;
+  // The requirements that the plan gives no test, each with the reason.
+  // The kernel adds the reasons to the coverage report before the
+  // conformance audit, which judges each of them (decision 0295).
+  repeated NoTest no_test = 4;
 }
 
 // SecondOpinion is the structured output of the second opinion stage of the

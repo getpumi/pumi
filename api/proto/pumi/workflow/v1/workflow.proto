@@ -10,6 +10,8 @@ syntax = "proto3";
 // unknown Cedar actions and unreachable states (decision 0168).
 package pumi.workflow.v1;
 
+import "pumi/config/v1/config.proto";
+
 // Workflow is the workflow: the states a plan moves through from spec to
 // merge (decision 0168).
 message Workflow {
@@ -97,6 +99,16 @@ message Invoke {
   // file changes of a check without it. Only a state that starts a check
   // may set it.
   bool returns_tree = 7;
+  // Whether the kernel adds the narratives of the plan's change and of the
+  // capabilities it touches, from the spec check's result, to the task of
+  // an agent run (decisions 0271, 0279 and 0298). Only a state that starts
+  // a harness may set it.
+  bool narratives = 8;
+  // Whether the kernel adds the coverage report of the plan's change, with
+  // the plan's reasons for having no test, to the task of an agent run
+  // (decisions 0280, 0295 and 0298). Only a state that starts a harness may
+  // set it.
+  bool coverage = 9;
 }
 
 // Wait is an entry that starts nothing: the state waits for an event.
@@ -119,6 +131,11 @@ message Transition {
   // The name of the Cedar action that guards the transition, as
   // pumi.cedarschema declares it, such as "advance" or "retry".
   string action = 3;
+  // The archive steps of the project under which the transition holds
+  // (decision 0296). The kernel skips a transition that does not list the
+  // project's archive step; a transition that lists none holds under every
+  // archive step.
+  repeated pumi.config.v1.Project.ArchiveStep archive_steps = 4;
 }
 
 // Trigger is what fires a transition (decision 0170): exactly one of these.

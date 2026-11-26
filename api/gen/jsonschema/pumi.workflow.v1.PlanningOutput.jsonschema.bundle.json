@@ -1,5 +1,31 @@
 {
   "$defs": {
+    "pumi.workflow.v1.PlanningOutput.NoTest.jsonschema.json": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "NoTest is one requirement of the plan's change that the plan gives no\n test, with the reason (decision 0295).",
+      "patternProperties": {
+        "^(requirement_id)$": {
+          "default": "",
+          "description": "The requirement's ID, such as BLS-001 (decision 0274).",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "reason": {
+          "default": "",
+          "description": "Why the requirement has no test, and how it is verified instead.",
+          "type": "string"
+        },
+        "requirementId": {
+          "default": "",
+          "description": "The requirement's ID, such as BLS-001 (decision 0274).",
+          "type": "string"
+        }
+      },
+      "title": "No Test",
+      "type": "object"
+    },
     "pumi.workflow.v1.PlanningOutput.Question.jsonschema.json": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
@@ -42,6 +68,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "^(no_test)$": {
+          "description": "The requirements that the plan gives no test, each with the reason.\n The kernel adds the reasons to the coverage report before the\n conformance audit, which judges each of them (decision 0295).",
+          "items": {
+            "$ref": "#/$defs/pumi.workflow.v1.PlanningOutput.NoTest.jsonschema.json"
+          },
+          "type": "array"
         }
       },
       "properties": {
@@ -49,6 +82,13 @@
           "description": "The paths the plan will change, as patterns relative to the root of the\n repository. The scope gate reads the changed paths outside them\n (paths.outside, decision 0136).",
           "items": {
             "type": "string"
+          },
+          "type": "array"
+        },
+        "noTest": {
+          "description": "The requirements that the plan gives no test, each with the reason.\n The kernel adds the reasons to the coverage report before the\n conformance audit, which judges each of them (decision 0295).",
+          "items": {
+            "$ref": "#/$defs/pumi.workflow.v1.PlanningOutput.NoTest.jsonschema.json"
           },
           "type": "array"
         },

@@ -6,6 +6,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,32 +24,109 @@ import (
 )
 
 // The shown runs through the model gateway (decision 0236,
-// getpumi/pumi#102). Like the other shown runs, they are skipped unless the
-// environment names a ScaleWholesale clone and an archived plan.
+// getpumi/pumi#102) and on a sign-in (decision 0251, getpumi/pumi#125).
+// Like the other shown runs, they are skipped unless the environment names
+// a ScaleWholesale clone and an archived plan.
 //
-// claude keeps its own sign-in, unless PUMI_SHOWN_API_KEY_ENV names the
-// environment variable that holds the provider's API key: then the
-// model configuration's adapter entry names it, and the gateway sends
-// the key (decision 0225).
+// The harness keeps the person's own sign-in, unless PUMI_SHOWN_API_KEY_ENV
+// names the environment variable that holds the provider's API key: then
+// the model configuration's adapter entry names it, and the gateway sends
+// the key (decisions 0225 and 0240).
 const envProviderVariable = "PUMI_SHOWN_API_KEY_ENV"
 
-// The model role of the spike workflow and the models it maps to in the
-// shown runs (decision 0233).
-const (
-	shownRole     = "frontier"
-	shownModel    = "claude-opus-5-5"
-	shownFallback = "claude-sonnet-5-5"
-)
+// envHarness names the harness of the shown runs: claude-code, the
+// default, or codex.
+const envHarness = "PUMI_SHOWN_HARNESS"
 
-// shownAdapter is the name of the Claude Code adapter in the model
-// configuration of the shown runs.
-const shownAdapter = "claude-code"
+// shownRole is the model role of the spike workflow (decision 0233).
+const shownRole = "frontier"
+
+// shownHarness is what the shown runs need to know about one harness.
+type shownHarness struct {
+	// name is the adapter's name in the model configuration.
+	name string
+	// binary is the adapter's executable on the PATH.
+	binary string
+	// process is the command name of the harness that the adapter runs.
+	process string
+	// model and fallback are the models that the role maps to.
+	model, fallback string
+	// keyPathHeader is true when, on the API key path, the harness sends
+	// the invocation token in the header X-Pumi-Token, and false when it
+	// sends it as its bearer token.
+	keyPathHeader bool
+	// tokens are the prefixes of the variables in the harness's
+	// environment that hold the invocation token, each with whether the
+	// harness sends it in the header.
+	tokens []tokenVariable
+}
+
+// tokenVariable is the prefix of one variable that holds the invocation
+// token, up to the token.
+type tokenVariable struct {
+	prefix string
+	header bool
+}
+
+// shownHarnesses are the harnesses of the shown runs, by the value of
+// PUMI_SHOWN_HARNESS.
+var shownHarnesses = map[string]shownHarness{
+	"claude-code": {
+		name: "claude-code", binary: "adapter-claude-code", process: "claude",
+		model: "claude-opus-5-5", fallback: "claude-sonnet-5-5",
+		tokens: []tokenVariable{
+			{prefix: "ANTHROPIC_CUSTOM_HEADERS=X-Pumi-Token: ", header: true},
+			{prefix: "ANTHROPIC_AUTH_TOKEN="},
+		},
+	},
+	// The Codex adapter gives codex the token in PUMI_CODEX_GATEWAY_HEADER,
+	// which codex sends in the header X-Pumi-Token, and the gateway sends
+	// the key (getpumi/adapter-codex#1).
+	"codex": {
+		name: "codex", binary: "adapter-codex", process: "codex",
+		model: "gpt-6.2-sol", fallback: "gpt-6.1-sol",
+		keyPathHeader: true,
+		tokens:        []tokenVariable{{prefix: "PUMI_CODEX_GATEWAY_HEADER=", header: true}},
+	},
+}
+
+// shownHarnessOf returns the harness that PUMI_SHOWN_HARNESS names, or
+// Claude Code when it is not set.
+func shownHarnessOf() (shownHarness, error) {
+	name := os.Getenv(envHarness)
+	if name == "" {
+		name = "claude-code"
+	}
+	h, ok := shownHarnesses[name]
+	if !ok {
+		return shownHarness{}, fmt.Errorf("%s is %q, want claude-code or codex", envHarness, name)
+	}
+	return h, nil
+}
+
+// tokenIn returns the invocation token in environ, the content of a
+// process's /proc/<pid>/environ.
+func (h shownHarness) tokenIn(environ []byte) (gatewayToken, bool) {
+	for kv := range strings.SplitSeq(string(environ), "\x00") {
+		for _, v := range h.tokens {
+			if tok, ok := strings.CutPrefix(kv, v.prefix); ok && tok != "" {
+				return gatewayToken{value: tok, header: v.header}, true
+			}
+		}
+	}
+	return gatewayToken{}, false
+}
 
 // shownModels is the model configuration of the shown runs, with the
-// Claude Code adapter at path (decision 0245): in the API key mode when
-// PUMI_SHOWN_API_KEY_ENV names the key's variable, and in the sign-in mode
-// otherwise, running the model role and the checks.
+// adapter of the harness that PUMI_SHOWN_HARNESS names at path (decision
+// 0245): in the API key mode when PUMI_SHOWN_API_KEY_ENV names the key's
+// variable, and in the sign-in mode otherwise, running the model role and
+// the checks.
 func shownModels(path string) (*configv1.Models, error) {
+	h, err := shownHarnessOf()
+	if err != nil {
+		return nil, err
+	}
 	hash, err := hashOf(path)
 	if err != nil {
 		return nil, err
@@ -58,12 +136,12 @@ func shownModels(path string) (*configv1.Models, error) {
 		a.CredentialMode, a.ApiKeyEnv = configv1.Adapter_CREDENTIAL_MODE_API_KEY, key
 	}
 	return &configv1.Models{
-		Adapters: map[string]*configv1.Adapter{shownAdapter: a},
+		Adapters: map[string]*configv1.Adapter{h.name: a},
 		Roles: map[string]*configv1.Role{shownRole: {
-			Adapter: shownAdapter, Model: shownModel,
-			Fallback: &configv1.Fallback{Adapter: shownAdapter, Model: shownFallback},
+			Adapter: h.name, Model: h.model,
+			Fallback: &configv1.Fallback{Adapter: h.name, Model: h.fallback},
 		}},
-		CheckAdapter: shownAdapter,
+		CheckAdapter: h.name,
 	}, nil
 }
 
@@ -112,70 +190,71 @@ type gatewayToken struct {
 	header bool
 }
 
-// tokenOf returns the gateway token in the environment of a claude process
-// in the workspace, read from /proc while the agent run runs, so that the
-// test can look for it in the logs. It never shows the token.
+// tokenOf returns the gateway token in the environment of the harness's
+// process in the workspace, read from /proc while the agent run runs, so
+// that the test can look for it in the logs. It never shows the token.
 func (s *shownCommands) tokenOf(b *background) gatewayToken {
 	s.t.Helper()
+	h, err := shownHarnessOf()
+	if err != nil {
+		s.t.Fatal(err)
+	}
 	deadline := time.Now().Add(commandWait)
 	for {
 		for _, p := range inDir(s.run.WorkDir) {
 			pid, name, _ := strings.Cut(p, " ")
-			if name != "(claude)" {
+			if name != "("+h.process+")" {
 				continue
 			}
-			if tok, ok := tokenInEnviron(pid); ok {
+			if tok, ok := h.tokenIn(environOf(pid)); ok {
 				return tok
 			}
 		}
 		select {
 		case err := <-b.done:
 			b.done <- err
-			s.t.Fatalf("pumi run stopped with %v before claude ran; its output:\n%s", err, b.out.String())
+			s.t.Fatalf("pumi run stopped with %v before %s ran; its output:\n%s", err, h.process, b.out.String())
 		default:
 		}
 		if time.Now().After(deadline) {
-			s.t.Fatalf("no claude process with a gateway token ran in the workspace within %s", commandWait)
+			s.t.Fatalf("no %s process with a gateway token ran in the workspace within %s", h.process, commandWait)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 }
 
-// tokenInEnviron returns the gateway token in the environment of the
-// process pid, read through an os.Root, which gosec does not report
-// (G304).
-func tokenInEnviron(pid string) (gatewayToken, bool) {
+// environOf returns the environment of the process pid, read through an
+// os.Root, which gosec does not report (G304), or nothing when it cannot
+// be read.
+func environOf(pid string) []byte {
 	root, err := os.OpenRoot("/proc")
 	if err != nil {
-		return gatewayToken{}, false
+		return nil
 	}
 	defer func() { _ = root.Close() }()
 	b, err := root.ReadFile(pid + "/environ")
 	if err != nil {
-		return gatewayToken{}, false
+		return nil
 	}
-	for kv := range strings.SplitSeq(string(b), "\x00") {
-		if v, ok := strings.CutPrefix(kv, "ANTHROPIC_CUSTOM_HEADERS=X-Pumi-Token: "); ok && v != "" {
-			return gatewayToken{value: v, header: true}, true
-		}
-		if v, ok := strings.CutPrefix(kv, "ANTHROPIC_AUTH_TOKEN="); ok && v != "" {
-			return gatewayToken{value: v}, true
-		}
-	}
-	return gatewayToken{}, false
+	return b
 }
 
-// checkTokenPath fails the test unless claude sends the token as its
-// bearer token, because the gateway sends the API key (decisions 0225 and
-// 0240).
+// checkTokenPath fails the test unless the harness sends the token as it
+// does on the API key path, where the gateway sends the API key
+// (decisions 0225 and 0240): claude as its bearer token, codex in the
+// header X-Pumi-Token.
 func checkTokenPath(t *testing.T, invocation string, tok gatewayToken) {
 	t.Helper()
+	h, err := shownHarnessOf()
+	if err != nil {
+		t.Fatal(err)
+	}
 	keyEnv := os.Getenv(envProviderVariable)
 	switch {
-	case keyEnv != "" && !tok.header:
-		t.Logf("claude of %s sends the gateway token as its bearer token; the gateway sends the API key of %s", invocation, keyEnv)
+	case keyEnv != "" && tok.header == h.keyPathHeader:
+		t.Logf("%s of %s sends the gateway token (in the header: %v); the gateway sends the API key of %s", h.process, invocation, tok.header, keyEnv)
 	default:
-		t.Errorf("claude of %s sends the gateway token in the header %v, but %s is %q", invocation, tok.header, envProviderVariable, keyEnv)
+		t.Errorf("%s of %s sends the gateway token in the header %v, but %s is %q", h.process, invocation, tok.header, envProviderVariable, keyEnv)
 	}
 }
 
@@ -235,7 +314,7 @@ func TestShownRunsThroughTheGateway(t *testing.T) {
 	s.waitLog(first, commandWait, "invocation.started of the first plan", ofTypeFor(events.TypeInvocationStarted, shownCountedPlan+"/1"))
 	counted := s.tokenOf(first)
 	checkTokenPath(t, shownCountedPlan+"/1", counted)
-	s.waitCountedDone(first)
+	s.waitCountedDone(first, shownCountedPlan)
 	s.pumi(exec.CommandContext(ctx, "pumi", "status"))
 	if err := s.stop(first, syscall.SIGINT); err != nil {
 		t.Errorf("pumi run exited with %v after SIGINT, want status 0", err)
@@ -267,20 +346,20 @@ func TestShownRunsThroughTheGateway(t *testing.T) {
 	logText := string(readFile(t, filepath.Dir(logPath), filepath.Base(logPath)))
 	noToken(t, "the event log", logText, counted)
 	noToken(t, "the event log", logText, capped)
-	checkCounted(t, evs)
-	checkCapped(t, evs)
+	checkCounted(t, evs, shownCountedPlan)
+	checkCapped(t, evs, shownCappedPlan)
 	showChange(t, s.run, evs, shownCountedPlan+"/1")
 }
 
-// waitCountedDone waits until the first plan reaches done. When the plan
+// waitCountedDone waits until plan, the first plan, reaches done. When the plan
 // escalates first, as it does when its agent run fails, it shows pumi
 // status and the log of each of the plan's invocations, and fails the test
 // at once. The configuration allows one more attempt, so the plan has at
 // most two. The command's arguments are constants, because gosec reports a
 // command built from variables (G204).
-func (s *shownCommands) waitCountedDone(b *background) {
+func (s *shownCommands) waitCountedDone(b *background, plan string) {
 	s.t.Helper()
-	done, raised := s.entered(shownCountedPlan, "done"), ofTypeFor(events.TypeEscalationRaised, shownCountedPlan)
+	done, raised := s.entered(plan, "done"), ofTypeFor(events.TypeEscalationRaised, plan)
 	s.waitLog(b, runTimeout, "transition of the first plan to done or its escalation", func(e *cloudeventsv1.CloudEvent) bool {
 		return done(e) || raised(e)
 	})
@@ -292,11 +371,11 @@ func (s *shownCommands) waitCountedDone(b *background) {
 	}
 	ctx := s.t.Context()
 	s.pumi(exec.CommandContext(ctx, "pumi", "status"))
-	s.pumi(exec.CommandContext(ctx, "pumi", "log", shownCountedPlan+"/1"))
-	if has(ofTypesFor(evs, shownCountedPlan+"/2"), events.TypeInvocationStarted) {
-		s.pumi(exec.CommandContext(ctx, "pumi", "log", shownCountedPlan+"/2"))
+	s.pumi(exec.CommandContext(ctx, "pumi", "log", plan+"/1"))
+	if has(ofTypesFor(evs, plan+"/2"), events.TypeInvocationStarted) {
+		s.pumi(exec.CommandContext(ctx, "pumi", "log", plan+"/2"))
 	}
-	s.t.Fatalf("%s escalated before it reached done; pumi status and the logs above say why", shownCountedPlan)
+	s.t.Fatalf("%s escalated before it reached done; pumi status and the logs above say why", plan)
 }
 
 // resultOf returns the one invocation.result of invocation in evs.
@@ -320,32 +399,33 @@ func outcomeOf(t *testing.T, evs []*cloudeventsv1.CloudEvent, invocation string)
 	return dataOf(t, finished[0], &eventsv1.InvocationFinished{}).GetOutcome()
 }
 
-// checkCounted checks the first plan: its invocation succeeded with the
-// tokens and cost that the gateway counted, and the plan reached done.
-func checkCounted(t *testing.T, evs []*cloudeventsv1.CloudEvent) {
+// checkCounted checks plan, the first plan: its invocation succeeded with
+// the tokens and cost that the gateway or the runner counted, and the plan
+// reached done.
+func checkCounted(t *testing.T, evs []*cloudeventsv1.CloudEvent, plan string) {
 	t.Helper()
-	inv := shownCountedPlan + "/1"
-	if got, want := strings.Join(planFired(t, evs, shownCountedPlan), ", "), "implementing -result-> done"; got != want {
-		t.Errorf("the transitions of %s are %s, want %s", shownCountedPlan, got, want)
+	inv := plan + "/1"
+	if got, want := strings.Join(planFired(t, evs, plan), ", "), "implementing -result-> done"; got != want {
+		t.Errorf("the transitions of %s are %s, want %s", plan, got, want)
 	}
 	if o := outcomeOf(t, evs, inv); o != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
 		t.Errorf("%s finished as %v, want succeeded", inv, o)
 	}
 	u := resultOf(t, evs, inv).GetUsage()
 	if u.GetTokens() <= 0 || u.GetCostMicrodollars() <= 0 {
-		t.Errorf("the usage of %s is %v, want the tokens and cost that the gateway counted", inv, u)
+		t.Errorf("the usage of %s is %v, want the tokens and cost that were counted", inv, u)
 	}
 	t.Logf("the result of %s: %d tokens, %d microdollars, %d s", inv, u.GetTokens(), u.GetCostMicrodollars(), u.GetSeconds())
 }
 
-// checkCapped checks the second plan: its invocation's usage is over the
-// token cap, it finished with the outcome cap reached, and the plan went
-// to implementing-escalated on cap-reached.
-func checkCapped(t *testing.T, evs []*cloudeventsv1.CloudEvent) {
+// checkCapped checks plan, the second plan: its invocation's usage is
+// over the token cap, it finished with the outcome cap reached, and the
+// plan went to implementing-escalated on cap-reached.
+func checkCapped(t *testing.T, evs []*cloudeventsv1.CloudEvent, plan string) {
 	t.Helper()
-	inv := shownCappedPlan + "/1"
-	if got, want := strings.Join(planFired(t, evs, shownCappedPlan), ", "), "implementing -cap-reached-> implementing-escalated"; got != want {
-		t.Errorf("the transitions of %s are %s, want %s", shownCappedPlan, got, want)
+	inv := plan + "/1"
+	if got, want := strings.Join(planFired(t, evs, plan), ", "), "implementing -cap-reached-> implementing-escalated"; got != want {
+		t.Errorf("the transitions of %s are %s, want %s", plan, got, want)
 	}
 	if o := outcomeOf(t, evs, inv); o != eventsv1.InvocationFinished_OUTCOME_CAP_REACHED {
 		t.Errorf("%s finished as %v, want cap reached", inv, o)

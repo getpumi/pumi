@@ -42,9 +42,10 @@ import (
 // The shown run of an archived plan (decisions 0181, 0182 and 0186). It is
 // skipped unless PUMI_SHOWN_CLONE names a local clone of ScaleWholesale and
 // PUMI_SHOWN_PLAN the path, in that clone, of a plan of a change in
-// openspec/changes/archive. The Claude Code adapter is PUMI_SHOWN_ADAPTER,
-// or adapter-claude-code on the PATH, and claude reaches the model through
-// the gateway of shownModels (decisions 0225 and 0226).
+// openspec/changes/archive. The harness is PUMI_SHOWN_HARNESS: Claude Code,
+// the default, or codex. Its adapter is PUMI_SHOWN_ADAPTER, or the
+// harness's adapter on the PATH, such as adapter-claude-code, with the
+// model configuration of shownModels (decision 0245).
 //
 // Each run makes a new git repository in a temporary directory that reads
 // the objects of the clone, checks it out at the plan's base commit and adds
@@ -149,7 +150,7 @@ type shownRun struct {
 	// Plan is the plan's id and Paths the paths it declares.
 	Plan  string
 	Paths []string
-	// Adapter is the absolute path of the Claude Code adapter.
+	// Adapter is the absolute path of the harness's adapter.
 	Adapter string
 	// WorkDir is where the runner makes the workspaces.
 	WorkDir string
@@ -170,10 +171,14 @@ func shownSetup(t *testing.T) (string, shownPlan, string) {
 	if err != nil {
 		t.Fatalf("%s: %v", planPath, err)
 	}
+	h, err := shownHarnessOf()
+	if err != nil {
+		t.Fatal(err)
+	}
 	adapter := os.Getenv(envAdapter)
 	if adapter == "" {
-		if adapter, err = exec.LookPath("adapter-claude-code"); err != nil {
-			t.Fatalf("%s is not set and adapter-claude-code is not on the PATH: %v", envAdapter, err)
+		if adapter, err = exec.LookPath(h.binary); err != nil {
+			t.Fatalf("%s is not set and %s is not on the PATH: %v", envAdapter, h.binary, err)
 		}
 	}
 	if adapter, err = filepath.Abs(adapter); err != nil {
@@ -245,8 +250,11 @@ func writeFile(t *testing.T, dir, name, content string) {
 // claude reaches the model through the gateway, and the network access
 // names no host for the web tools (decision 0226).
 func shownBase(run shownRun) *runnerv1.Invocation {
+	// shownSetup has refused a harness that PUMI_SHOWN_HARNESS does not
+	// name correctly.
+	h, _ := shownHarnessOf()
 	return &runnerv1.Invocation{
-		Component: &harnessv1.Component{Name: "adapter-claude-code", Version: "0"},
+		Component: &harnessv1.Component{Name: h.binary, Version: "0"},
 		Input:     &harnessv1.Input{Repo: "scale-wholesale", Tree: run.Tree},
 		Capabilities: &harnessv1.Capabilities{
 			WritePaths: run.Paths,
@@ -352,13 +360,18 @@ func shownRunner(ctx context.Context, run shownRun, dir string) (runner.Config, 
 		return runner.Config{}, nil, err
 	}
 	file := &config{file: &configv1.Config{Models: models}}
+	h, err := shownHarnessOf()
+	if err != nil {
+		_ = blobs.Close()
+		return runner.Config{}, nil, err
+	}
 	gw, err := serveGateway(ctx, file, os.Stderr)
 	if err != nil {
 		_ = blobs.Close()
 		return runner.Config{}, nil, err
 	}
 	cfg := runner.Config{
-		Adapters: file.adapters(), Roles: file.roleAdapters(), CheckAdapter: shownAdapter,
+		Adapters: file.adapters(), Roles: file.roleAdapters(), CheckAdapter: h.name,
 		Repository: run.Repository, WorkDir: run.WorkDir,
 		Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: gw,
 	}

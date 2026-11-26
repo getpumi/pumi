@@ -220,7 +220,7 @@ func adapterEntry(t *testing.T, name, path, mode string) string {
 
 // testModels returns the model configuration of a test clone, in text
 // format: the test adapter in the credential mode mode runs the model role
-// of the workflows of internal/kernel/testdata, frontier, on testModel,
+// of the workflows of internal/kernel/testdata, implementer, on testModel,
 // which falls back to testFallback on the same adapter, and the checks
 // (decisions 0233, 0245 and 0253).
 func testModels(t *testing.T, mode string) string {
@@ -229,10 +229,10 @@ func testModels(t *testing.T, mode string) string {
 }
 
 // testRole returns the role entry of a model configuration, in text
-// format, that runs frontier on testModel of adapter, falling back to
+// format, that runs implementer on testModel of adapter, falling back to
 // testFallback on the same adapter.
 func testRole(adapter string) string {
-	return fmt.Sprintf(`roles { key: "frontier" value { adapter: %q model: %q fallback { adapter: %q model: %q } } }`, adapter, testModel, adapter, testFallback)
+	return fmt.Sprintf(`roles { key: "implementer" value { adapter: %q model: %q fallback { adapter: %q model: %q } } }`, adapter, testModel, adapter, testFallback)
 }
 
 // newCommandCloneWith returns the clone of newCommandClone with models,

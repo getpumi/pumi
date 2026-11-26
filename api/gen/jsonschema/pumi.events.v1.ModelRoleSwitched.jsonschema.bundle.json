@@ -52,7 +52,7 @@
         },
         "role": {
           "default": "",
-          "description": "The model role, such as frontier.",
+          "description": "The model role, such as implementer.",
           "type": "string"
         },
         "switchedBy": {

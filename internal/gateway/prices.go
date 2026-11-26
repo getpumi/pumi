@@ -38,10 +38,22 @@ type Rates struct {
 	Output int64
 }
 
-// Model is the list prices of one model.
+// The makers of the models of the price table (decision 0261): the
+// companies that trained them, not the hosts that serve them.
+const (
+	// Anthropic trained the Claude models.
+	Anthropic = "Anthropic"
+	// OpenAI trained the GPT models.
+	OpenAI = "OpenAI"
+)
+
+// Model is the list prices of one model, and its maker.
 type Model struct {
 	// API is the API that the model's calls use.
 	API API
+	// Maker is the company that trained the model, such as Anthropic or
+	// OpenAI (decision 0261).
+	Maker string
 	// Standard are the rates of a call at standard speed.
 	Standard Rates
 	// Fast, when set, are the rates of a call in fast mode: Anthropic's
@@ -86,32 +98,36 @@ func ratesPtr(r Rates) *Rates { return &r }
 var (
 	fable52 = Model{
 		API:      MessagesAPI,
+		Maker:    Anthropic,
 		Standard: rates(8_000_000, 10_000_000, 16_000_000, 200_000, 40_000_000),
 		Fast:     ratesPtr(rates(16_000_000, 20_000_000, 32_000_000, 400_000, 80_000_000)),
 	}
-	fable51 = Model{API: MessagesAPI, Standard: rates(10_000_000, 12_500_000, 20_000_000, 250_000, 50_000_000)}
-	fable5  = Model{API: MessagesAPI, Standard: rates(10_000_000, 12_500_000, 20_000_000, 1_000_000, 50_000_000)}
+	fable51 = Model{API: MessagesAPI, Maker: Anthropic, Standard: rates(10_000_000, 12_500_000, 20_000_000, 250_000, 50_000_000)}
+	fable5  = Model{API: MessagesAPI, Maker: Anthropic, Standard: rates(10_000_000, 12_500_000, 20_000_000, 1_000_000, 50_000_000)}
 	opus55  = Model{
 		API:      MessagesAPI,
+		Maker:    Anthropic,
 		Standard: rates(4_000_000, 5_000_000, 8_000_000, 200_000, 20_000_000),
 		Fast:     ratesPtr(rates(8_000_000, 10_000_000, 16_000_000, 400_000, 40_000_000)),
 	}
 	opus5 = Model{
 		API:      MessagesAPI,
+		Maker:    Anthropic,
 		Standard: rates(5_000_000, 6_250_000, 10_000_000, 500_000, 25_000_000),
 		Fast:     ratesPtr(rates(10_000_000, 12_500_000, 20_000_000, 1_000_000, 50_000_000)),
 	}
-	opus4    = Model{API: MessagesAPI, Standard: rates(5_000_000, 6_250_000, 10_000_000, 500_000, 25_000_000)}
-	sonnet55 = Model{API: MessagesAPI, Standard: rates(2_000_000, 2_500_000, 4_000_000, 100_000, 10_000_000)}
-	sonnet5  = Model{API: MessagesAPI, Standard: rates(2_000_000, 2_500_000, 4_000_000, 200_000, 10_000_000)}
-	sonnet4  = Model{API: MessagesAPI, Standard: rates(3_000_000, 3_750_000, 6_000_000, 300_000, 15_000_000)}
+	opus4    = Model{API: MessagesAPI, Maker: Anthropic, Standard: rates(5_000_000, 6_250_000, 10_000_000, 500_000, 25_000_000)}
+	sonnet55 = Model{API: MessagesAPI, Maker: Anthropic, Standard: rates(2_000_000, 2_500_000, 4_000_000, 100_000, 10_000_000)}
+	sonnet5  = Model{API: MessagesAPI, Maker: Anthropic, Standard: rates(2_000_000, 2_500_000, 4_000_000, 200_000, 10_000_000)}
+	sonnet4  = Model{API: MessagesAPI, Maker: Anthropic, Standard: rates(3_000_000, 3_750_000, 6_000_000, 300_000, 15_000_000)}
 	haiku55  = Model{
 		API:              MessagesAPI,
+		Maker:            Anthropic,
 		Standard:         rates(100_000, 125_000, 200_000, 10_000, 500_000),
 		LongPrompt:       ratesPtr(rates(500_000, 625_000, 1_000_000, 50_000, 2_500_000)),
 		LongPromptTokens: 100_000,
 	}
-	haiku45 = Model{API: MessagesAPI, Standard: rates(1_000_000, 1_250_000, 2_000_000, 100_000, 5_000_000)}
+	haiku45 = Model{API: MessagesAPI, Maker: Anthropic, Standard: rates(1_000_000, 1_250_000, 2_000_000, 100_000, 5_000_000)}
 )
 
 // The list prices of OpenAI's API, from
@@ -128,6 +144,7 @@ var (
 var (
 	gpt62Astra = Model{
 		API:               ResponsesAPI,
+		Maker:             OpenAI,
 		Standard:          rates(8_000_000, 10_000_000, 20_000_000, 400_000, 40_000_000),
 		Fast:              ratesPtr(rates(16_000_000, 20_000_000, 40_000_000, 800_000, 80_000_000)),
 		Ultrafast:         ratesPtr(rates(24_000_000, 30_000_000, 60_000_000, 1_200_000, 120_000_000)),
@@ -135,6 +152,7 @@ var (
 	}
 	gpt62Sol = Model{
 		API:               ResponsesAPI,
+		Maker:             OpenAI,
 		Standard:          rates(2_000_000, 2_500_000, 5_000_000, 100_000, 10_000_000),
 		Fast:              ratesPtr(rates(4_000_000, 5_000_000, 10_000_000, 200_000, 20_000_000)),
 		Ultrafast:         ratesPtr(rates(6_000_000, 7_500_000, 15_000_000, 300_000, 30_000_000)),
@@ -142,6 +160,7 @@ var (
 	}
 	gpt6Astra = Model{
 		API:               ResponsesAPI,
+		Maker:             OpenAI,
 		Standard:          rates(10_000_000, 12_500_000, 25_000_000, 1_000_000, 50_000_000),
 		Fast:              ratesPtr(rates(20_000_000, 25_000_000, 50_000_000, 2_000_000, 100_000_000)),
 		Flex:              ratesPtr(rates(5_000_000, 6_250_000, 12_500_000, 500_000, 25_000_000)),
@@ -150,6 +169,7 @@ var (
 	}
 	gpt61Sol = Model{
 		API:               ResponsesAPI,
+		Maker:             OpenAI,
 		Standard:          rates(2_000_000, 2_500_000, 5_000_000, 100_000, 10_000_000),
 		Fast:              ratesPtr(rates(4_000_000, 5_000_000, 10_000_000, 200_000, 20_000_000)),
 		Flex:              ratesPtr(rates(1_000_000, 1_250_000, 2_500_000, 50_000, 5_000_000)),
@@ -213,4 +233,10 @@ func FigureCost(u *harnessv1.UsageFigure) (int64, bool) {
 		writeLong: u.GetOneHourCacheWriteTokens(), read: u.GetCacheReadTokens(), output: u.GetOutputTokens(),
 		webSearches: u.GetWebSearches(), fast: u.GetSpeed() == "fast", usOnly: u.GetInferenceGeo() == "us",
 	}), true
+}
+
+// MakerOf returns the maker of the model from the table, or nothing when
+// the table does not list it (decision 0261).
+func MakerOf(model string) string {
+	return prices[model].Maker
 }

@@ -116,7 +116,7 @@ func TestReadConfigRefusesABadProjectSection(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			writeFile(t, dir, "pumi.txtpb", "workflow: \"workflow.txtpb\"\ntrunk: \"main\"\n"+tc.project+"\n"+models(signedIn, frontier, checks, keyed)+"\n")
+			writeFile(t, dir, "pumi.txtpb", "workflow: \"workflow.txtpb\"\ntrunk: \"main\"\n"+tc.project+"\n"+models(signedIn, implementer, checks, keyed)+"\n")
 			_, err := readConfig(dir + "/pumi.txtpb")
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("readConfig = %v, want an error that names %s", err, tc.want)
@@ -124,7 +124,7 @@ func TestReadConfigRefusesABadProjectSection(t *testing.T) {
 		})
 	}
 	dir := t.TempDir()
-	writeFile(t, dir, "pumi.txtpb", "workflow: \"workflow.txtpb\"\ntrunk: \"main\"\n"+projectText+"\n"+models(signedIn, frontier, checks, keyed)+"\n")
+	writeFile(t, dir, "pumi.txtpb", "workflow: \"workflow.txtpb\"\ntrunk: \"main\"\n"+projectText+"\n"+models(signedIn, implementer, checks, keyed)+"\n")
 	cfg, err := readConfig(dir + "/pumi.txtpb")
 	if err != nil {
 		t.Fatalf("readConfig of a good project section = %v", err)

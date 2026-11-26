@@ -34,7 +34,7 @@
       "patternProperties": {
         "^(model_role)$": {
           "default": "",
-          "description": "The model role of an agent run, such as \"frontier\", which the\n configuration maps to a model and a fallback model at the model\n gateway. A state that starts a harness names one; a state that starts\n a check or an external action names none (decision 0233).",
+          "description": "The model role of an agent run, such as \"implementer\", which the\n configuration maps to a model and a fallback model at the model\n gateway. A state that starts a harness names one; a state that starts\n a check or an external action names none (decision 0233).",
           "type": "string"
         },
         "^(output_message)$": {
@@ -70,7 +70,7 @@
         },
         "modelRole": {
           "default": "",
-          "description": "The model role of an agent run, such as \"frontier\", which the\n configuration maps to a model and a fallback model at the model\n gateway. A state that starts a harness names one; a state that starts\n a check or an external action names none (decision 0233).",
+          "description": "The model role of an agent run, such as \"implementer\", which the\n configuration maps to a model and a fallback model at the model\n gateway. A state that starts a harness names one; a state that starts\n a check or an external action names none (decision 0233).",
           "type": "string"
         },
         "outputMessage": {

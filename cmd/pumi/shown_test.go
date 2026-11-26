@@ -34,6 +34,7 @@ import (
 	"getpumi.dev/pumi/internal/controlplane"
 	"getpumi.dev/pumi/internal/controlplane/blobstore"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
+	"getpumi.dev/pumi/internal/gateway"
 	"getpumi.dev/pumi/internal/kernel"
 	"getpumi.dev/pumi/internal/kernel/workflow"
 	"getpumi.dev/pumi/internal/runner"
@@ -374,6 +375,7 @@ func shownRunner(ctx context.Context, run shownRun, dir string) (runner.Config, 
 		Adapters: file.adapters(), Roles: file.roleAdapters(), CheckAdapter: h.name,
 		Repository: run.Repository, WorkDir: run.WorkDir,
 		Blobs: blobstore.ForTenant(blobs, embeddedlog.Tenant), Gateway: gw,
+		Models: roleModels(file), Maker: gateway.MakerOf,
 	}
 	closeAll := func() {
 		gw.shutdown(ctx)

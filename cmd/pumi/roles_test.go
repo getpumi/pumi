@@ -72,9 +72,9 @@ func TestALimitedCallFallsBackAndTheLogSaysSo(t *testing.T) {
 func TestRunRefusesAModelRoleTheConfigurationDoesNotMap(t *testing.T) {
 	adapter := adapterEntry(t, testAdapterName, "/proc/self/exe", signInMode) + ` check_adapter: "` + testAdapterName + `"`
 	for name, tc := range map[string]struct{ models, want string }{
-		"no roles":       {adapter, `"frontier"`},
-		"another role":   {adapter + ` roles { key: "fast" value { adapter: "test" model: "claude-haiku-5-5" } }`, `"frontier"`},
-		"unlisted model": {adapter + ` roles { key: "frontier" value { adapter: "test" model: "claude-unknown" } }`, `"claude-unknown"`},
+		"no roles":       {adapter, `"implementer"`},
+		"another role":   {adapter + ` roles { key: "fast" value { adapter: "test" model: "claude-haiku-5-5" } }`, `"implementer"`},
+		"unlisted model": {adapter + ` roles { key: "implementer" value { adapter: "test" model: "claude-unknown" } }`, `"claude-unknown"`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			c := newCommandCloneWith(t, "tracks", adapterSucceeds, tc.models)
@@ -90,7 +90,7 @@ func TestRunRefusesAModelRoleTheConfigurationDoesNotMap(t *testing.T) {
 }
 
 // TestTheModelRolePicksTheAdapterOfItsAgentRun: the model role of the
-// workflow's agent run, frontier, is on a second adapter, and the checks
+// workflow's agent run, implementer, is on a second adapter, and the checks
 // are on the test adapter; the invocation's log says that the second
 // adapter ran it, with its SHA-256 (decision 0245).
 func TestTheModelRolePicksTheAdapterOfItsAgentRun(t *testing.T) {

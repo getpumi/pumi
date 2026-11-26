@@ -22,7 +22,7 @@ message ModelRoleSwitched {
     string model = 2;
   }
 
-  // The model role, such as frontier.
+  // The model role, such as implementer.
   string role = 1;
   // The adapter that the role switched to.
   string adapter = 2;

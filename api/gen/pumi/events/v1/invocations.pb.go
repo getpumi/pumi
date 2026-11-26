@@ -261,7 +261,12 @@ type InvocationResult struct {
 	Output string `protobuf:"bytes,6,opt,name=output,proto3" json:"output,omitempty"`
 	// The refusals that the harness reported, from the adapter's result
 	// (decision 0249).
-	Refusals      []*v1.Refusal `protobuf:"bytes,7,rep,name=refusals,proto3" json:"refusals,omitempty"`
+	Refusals []*v1.Refusal `protobuf:"bytes,7,rep,name=refusals,proto3" json:"refusals,omitempty"`
+	// The maker of the model of an agent run, such as Anthropic or OpenAI,
+	// from the list-price table: of the model role's model, or of its
+	// fallback's model when the fallback on another adapter ran (decisions
+	// 0246 and 0261). Empty for an invocation that runs no model.
+	Maker         string `protobuf:"bytes,8,opt,name=maker,proto3" json:"maker,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -343,6 +348,13 @@ func (x *InvocationResult) GetRefusals() []*v1.Refusal {
 		return x.Refusals
 	}
 	return nil
+}
+
+func (x *InvocationResult) GetMaker() string {
+	if x != nil {
+		return x.Maker
+	}
+	return ""
 }
 
 // InvocationFinished is the data of dev.getpumi.invocation.finished: the
@@ -614,7 +626,7 @@ const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"invocation\x18\x01 \x01(\tR\n" +
 	"invocation\x12\x16\n" +
 	"\x06runner\x18\x02 \x01(\tR\x06runner\x12!\n" +
-	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\"\xed\x03\n" +
+	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\"\x83\x04\n" +
 	"\x10InvocationResult\x12\x1e\n" +
 	"\n" +
 	"invocation\x18\x01 \x01(\tR\n" +
@@ -624,7 +636,8 @@ const file_pumi_events_v1_invocations_proto_rawDesc = "" +
 	"\x05usage\x18\x04 \x01(\v2&.pumi.events.v1.InvocationResult.UsageR\x05usage\x12\x12\n" +
 	"\x04tree\x18\x05 \x01(\tR\x04tree\x12\x16\n" +
 	"\x06output\x18\x06 \x01(\tR\x06output\x124\n" +
-	"\brefusals\x18\a \x03(\v2\x18.pumi.harness.v1.RefusalR\brefusals\x1a=\n" +
+	"\brefusals\x18\a \x03(\v2\x18.pumi.harness.v1.RefusalR\brefusals\x12\x14\n" +
+	"\x05maker\x18\b \x01(\tR\x05maker\x1a=\n" +
 	"\n" +
 	"OutputFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1b\n" +

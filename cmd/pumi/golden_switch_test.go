@@ -22,7 +22,7 @@ const (
 )
 
 // reportSwitchedOf reports the claimed invocation with the outcome and the
-// switch of its model role, frontier, to its fallback, as the runner does
+// switch of its model role, implementer, to its fallback, as the runner does
 // when the provider's limit stopped the run on the role's own adapter and
 // it ran the fallback (decision 0246). A failed invocation's result holds
 // only the usage.
@@ -33,9 +33,9 @@ func reportSwitchedOf(invocation string, outcome eventsv1.InvocationFinished_Out
 			p.t.Fatalf("the seed reports %s, which the runner did not claim", invocation)
 		}
 		switched, err := events.New(&eventsv1.ModelRoleSwitched{
-			Role: "frontier", Adapter: caseFallbackAdapter, Model: caseFallbackModel, Invocation: invocation,
+			Role: "implementer", Adapter: caseFallbackAdapter, Model: caseFallbackModel, Invocation: invocation,
 			Limit: &eventsv1.ModelRoleSwitched_Limit{Adapter: caseAdapter, Model: caseModel},
-		}, events.Attributes{ID: invocation + "/model-role-switched", Source: "/runner", Subject: "frontier", Tenant: embeddedlog.Tenant})
+		}, events.Attributes{ID: invocation + "/model-role-switched", Source: "/runner", Subject: "implementer", Tenant: embeddedlog.Tenant})
 		if err != nil {
 			p.t.Fatal(err)
 		}

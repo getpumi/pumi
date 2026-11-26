@@ -58,7 +58,7 @@ type Config struct {
 	// the adapter of the model role of an agent run, and CheckAdapter for
 	// a check or an external action.
 	Adapters map[string]Adapter
-	// Roles maps each model role, such as "frontier", to the name of its
+	// Roles maps each model role, such as "implementer", to the name of its
 	// adapter (decision 0245).
 	Roles map[string]string
 	// CheckAdapter is the name of the adapter that runs the checks and
@@ -101,6 +101,10 @@ type Config struct {
 	// is written, each line after the invocation's id and ": ", so that
 	// pumi run prints it (getpumi/pumi#88).
 	Output io.Writer
+	// Maker returns the maker of a model, such as Anthropic, from the
+	// list-price table; the result of an agent run records the maker of its
+	// model (decision 0261). When it is nil, results record none.
+	Maker func(model string) string
 	// Gateway is the model gateway, through which every agent run's model
 	// calls go. The runner refuses an agent run when it is nil (decisions
 	// 0226 and 0231).
@@ -465,7 +469,7 @@ type attempt struct {
 // attempt runs the adapter once in a new directory, which it removes
 // after, and judges how it ended.
 func (r *run) attempt(ctx context.Context) attempt {
-	result := &eventsv1.InvocationResult{Invocation: r.doc.GetInvocation()}
+	result := &eventsv1.InvocationResult{Invocation: r.doc.GetInvocation(), Maker: r.maker()}
 	r.adapter, r.meter = "", nil
 	dir, err := os.MkdirTemp(r.cfg.WorkDir, "invocation-")
 	if err != nil {
@@ -494,6 +498,24 @@ func (r *run) attempt(ctx context.Context) attempt {
 	limited := ex.result.GetStatus() == harnessv1.Result_STATUS_LIMITED && ex.waitErr == nil && ex.readErr == nil &&
 		!ex.cancelled && !ex.capped && outcome == eventsv1.InvocationFinished_OUTCOME_FAILED
 	return attempt{result: result, outcome: outcome, problem: err, limited: limited}
+}
+
+// maker returns the maker of the model that the run of an agent run is
+// given: the model of its model role, or of the role's fallback on another
+// adapter when the role is on it (decisions 0246 and 0261). It returns
+// nothing for any other kind of invocation, which runs no model, and when
+// the configuration has no Maker. A fallback within the run, on the same
+// adapter, is to a model of the same API, which is of the same maker in
+// the price table.
+func (r *run) maker() string {
+	if r.cfg.Maker == nil || r.doc.GetComponent().GetKind() != harnessv1.Component_KIND_AGENT_RUN {
+		return ""
+	}
+	role := r.doc.GetModelRole()
+	if r.onFallback {
+		return r.cfg.Maker(r.cfg.Fallbacks[role].Model)
+	}
+	return r.cfg.Maker(r.cfg.Models[role].Model)
 }
 
 // switchEvent returns the model_role.switched of the invocation's model

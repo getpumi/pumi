@@ -14,7 +14,7 @@ import (
 )
 
 // TestTheInvocationDocumentCarriesTheStatesModelRole: the spike's
-// implementing state starts a harness with the model role frontier, and
+// implementing state starts a harness with the model role implementer, and
 // the kernel writes the role into the invocation document (decision
 // 0233).
 func TestTheInvocationDocumentCarriesTheStatesModelRole(t *testing.T) {
@@ -28,7 +28,7 @@ func TestTheInvocationDocumentCarriesTheStatesModelRole(t *testing.T) {
 	if err := proto.Unmarshal(dataOf(t, requested[0], &eventsv1.InvocationRequested{}).GetDocument(), doc); err != nil {
 		t.Fatal(err)
 	}
-	if got := doc.GetModelRole(); got != "frontier" {
-		t.Errorf("the document's model role = %q, want frontier", got)
+	if got := doc.GetModelRole(); got != "implementer" {
+		t.Errorf("the document's model role = %q, want implementer", got)
 	}
 }

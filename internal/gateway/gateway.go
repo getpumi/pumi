@@ -61,7 +61,7 @@ type Config struct {
 	// Log receives the gateway's refusals and failed calls; nil discards
 	// them. The gateway never logs the API key or a token.
 	Log *slog.Logger
-	// Roles maps each model role, such as "frontier", to its model and
+	// Roles maps each model role, such as "implementer", to its model and
 	// fallback model (decision 0233). A call that names a role goes to the
 	// role's model; a call that names anything else goes to what it names.
 	Roles map[string]Role

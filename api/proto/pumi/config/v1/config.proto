@@ -48,12 +48,18 @@ message Config {
 message Models {
   // The adapters by name, such as "claude-code" and "codex".
   map<string, Adapter> adapters = 1;
-  // The model roles by name, such as "frontier". Each model role that the
-  // workflow names must be here (decision 0233).
+  // The model roles by name, such as "implementer". A model role that the
+  // workflow names and that is not here uses default_role (decision 0257).
   map<string, Role> roles = 2;
   // The adapter that runs every check and external action, which name no
   // model role (decision 0253).
   string check_adapter = 3;
+  // The default role: the adapter, model and fallback of each model role
+  // that the workflow names and roles does not list. pumi refuses a
+  // workflow that names a role which roles does not list when this is not
+  // set (decision 0257). The circuit breaker keeps the state of each such
+  // role by its own name (decision 0264).
+  Role default_role = 4;
 }
 
 // Adapter is a harness adapter (decision 0245).

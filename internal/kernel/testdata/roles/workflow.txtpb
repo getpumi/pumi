@@ -1,0 +1,237 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The workflow of the tests of the model roles (decisions 0256 and 0257):
+# three agent states in a row, each with a model role of the built-in
+# workflow, plan-reviewer, implementer and auditor, so that a test can put
+# roles on different adapters, or leave them to the default role. Each
+# state takes the output of implementing, which the test adapter writes.
+# It is test data, not a workflow of the release (decision 0166).
+name: "roles"
+version: "1"
+initial: "reviewing"
+
+# The superstate of the states of a plan that is not finished. A
+# cancel.requested for the plan goes to cancelled, guarded by cancel.
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+# Reviewing (initial): an agent reviews the plan. To implementing on advance;
+# otherwise escalate.
+states {
+  name: "reviewing"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    model_role: "plan-reviewer"
+    task: "review"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "reviewing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "reviewing"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "reviewing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "reviewing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "reviewing"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "reviewing-escalated"
+    action: "escalate"
+  }
+}
+
+# Reviewing, escalated: wait for a person. An answer goes back to
+# reviewing, decided by resume.
+states {
+  name: "reviewing-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "reviewing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "reviewing-escalated"
+    action: "escalate"
+  }
+}
+
+# Implementing: an agent implements the plan. To auditing on advance;
+# otherwise escalate.
+states {
+  name: "implementing"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    model_role: "implementer"
+    task: "implement"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "auditing"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "implementing"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# Implementing, escalated: wait for a person. An answer goes back to
+# implementing, decided by resume.
+states {
+  name: "implementing-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "implementing-escalated"
+    action: "escalate"
+  }
+}
+
+# Auditing: an agent audits the change. To merged on advance; otherwise
+# escalate.
+states {
+  name: "auditing"
+  parent: "active"
+  invoke {
+    role: ROLE_AGENT
+    kind: KIND_HARNESS
+    model_role: "auditor"
+    task: "audit"
+    output_message: "pumi.workflow.v1.ImplementationOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "merged"
+    action: "advance"
+  }
+  transitions {
+    trigger { result {} }
+    target: "auditing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "auditing"
+    action: "retry"
+  }
+  transitions {
+    trigger { in_doubt {} }
+    target: "auditing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "auditing-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "auditing"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "auditing-escalated"
+    action: "escalate"
+  }
+}
+
+# Auditing, escalated: wait for a person. An answer goes back to
+# auditing, decided by resume.
+states {
+  name: "auditing-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "auditing"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "auditing-escalated"
+    action: "escalate"
+  }
+}
+
+# The plan is implemented and has merged.
+states {
+  name: "merged"
+  final { merged: true }
+}
+
+# The plan was cancelled.
+states {
+  name: "cancelled"
+  final {}
+}

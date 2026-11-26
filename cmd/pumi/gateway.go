@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	configv1 "getpumi.dev/pumi/api/gen/pumi/config/v1"
 	"getpumi.dev/pumi/internal/gateway"
 	"getpumi.dev/pumi/internal/kernel/workflow"
@@ -257,18 +259,30 @@ func runnerGateway(m *modelGateway) runner.Gateway {
 	return m
 }
 
-// checkModelRoles refuses a workflow that names a model role which the
-// configuration file does not map (decision 0233).
-func checkModelRoles(cfg *config, wf *workflow.Workflow) error {
-	roles := cfg.file.GetModels().GetRoles()
+// resolveRoles gives each model role that the workflow names and the
+// configuration file does not list the file's default role, as a role of
+// its own name, so that the gateway, the runner and the circuit breaker
+// treat it as any other role (decisions 0257 and 0264). It refuses a
+// workflow that names such a role when the file has no default role
+// (decisions 0233 and 0257).
+func resolveRoles(cfg *config, wf *workflow.Workflow) error {
+	m := cfg.file.GetModels()
 	var missing []string
 	for _, r := range wf.ModelRoles() {
-		if _, ok := roles[r]; !ok {
-			missing = append(missing, strconv.Quote(r))
+		if _, ok := m.GetRoles()[r]; ok {
+			continue
 		}
+		if m.GetDefaultRole() == nil {
+			missing = append(missing, strconv.Quote(r))
+			continue
+		}
+		if m.Roles == nil {
+			m.Roles = map[string]*configv1.Role{}
+		}
+		m.Roles[r] = proto.CloneOf(m.GetDefaultRole())
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("the workflow names the model roles %s, which models.roles of the configuration file does not map", strings.Join(missing, ", "))
+		return fmt.Errorf("the workflow names the model roles %s, which models.roles of the configuration file does not list, and the file sets no models.default_role for them (decision 0257)", strings.Join(missing, ", "))
 	}
 	return nil
 }

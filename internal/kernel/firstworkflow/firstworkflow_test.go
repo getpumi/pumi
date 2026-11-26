@@ -532,3 +532,21 @@ func TestTheGraphIsCurrent(t *testing.T) {
 		t.Errorf("%s is not the graph of the workflow; run go test ./internal/kernel/firstworkflow -run TestTheGraphIsCurrent -update and review the diff", name)
 	}
 }
+
+// TestEachAgentStateHasAModelRoleOfItsOwn: the five states that start a
+// harness invocation each name their own model role (decision 0256).
+func TestEachAgentStateHasAModelRoleOfItsOwn(t *testing.T) {
+	want := map[string]string{
+		"planning": "planner", "second-opinion": "second-opinion", "plan-review": "plan-reviewer",
+		"implementing": "implementer", "conformance-audit": "auditor",
+	}
+	got := map[string]string{}
+	for _, s := range load(t).Definition().GetStates() {
+		if r := s.GetInvoke().GetModelRole(); r != "" {
+			got[s.GetName()] = r
+		}
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("the states' model roles are %v, want %v", got, want)
+	}
+}

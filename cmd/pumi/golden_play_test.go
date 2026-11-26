@@ -579,7 +579,7 @@ var seeds = map[string][]step{
 	// adapter; the runner falls back to the role's fallback on another
 	// adapter, reports that run's success with the switch, and the plan
 	// goes to done. The person then switches the role back (decision 0246).
-	"spike/role-falls-back": {addPlanA, claimStep, reportSwitchedOf("plan-a/1", eventsv1.InvocationFinished_OUTCOME_SUCCEEDED), resetStep("frontier")},
+	"spike/role-falls-back": {addPlanA, claimStep, reportSwitchedOf("plan-a/1", eventsv1.InvocationFinished_OUTCOME_SUCCEEDED), resetStep("implementer")},
 	// The limit stops the fallback's run too, so plan-a/1 fails with the
 	// switch; it runs again as plan-a/2, on the fallback at once with no
 	// second switch, and fails again, and the plan escalates on failed

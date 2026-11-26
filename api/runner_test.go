@@ -165,10 +165,10 @@ func TestTheInvocationDocumentHasEveryFieldOf0024(t *testing.T) {
 	doc := (&runnerv1.Invocation{}).ProtoReflect().Descriptor()
 	want := []string{
 		"budget", "capabilities", "component", "credential_handles", "idempotency_key",
-		"image_digest", "input", "invocation", "isolation", "model_role", "output_message", "role",
+		"image_digest", "input", "invocation", "isolation", "model_role", "output_message", "returns_tree", "role",
 	}
 	if got := fieldNames(doc); !slices.Equal(got, want) {
-		t.Errorf("the invocation document has %q, want %q (decisions 0024 and 0233)", got, want)
+		t.Errorf("the invocation document has %q, want %q (decisions 0024, 0233 and 0282)", got, want)
 	}
 	component := fieldOf(t, doc, "component").Message()
 	if got := fieldNames(component); !slices.Equal(got, []string{"kind", "name", "version"}) {

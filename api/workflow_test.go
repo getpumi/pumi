@@ -73,10 +73,10 @@ func TestAStateHasANameAParentAGateAnEntryAndOrderedTransitions(t *testing.T) {
 	}
 }
 
-func TestAnInvokeEntryNamesTheRoleTheKindTheTaskTheOutputMessageTheModelRoleAndTheComponent(t *testing.T) {
+func TestAnInvokeEntryNamesTheRoleTheKindTheTaskTheOutputMessageTheModelRoleTheComponentAndReturnsTree(t *testing.T) {
 	inv := (&workflowv1.Invoke{}).ProtoReflect().Descriptor()
-	if got, want := fieldNames(inv), []string{"component", "kind", "model_role", "output_message", "role", "task"}; !slices.Equal(got, want) {
-		t.Fatalf("Invoke has %q, want %q (decisions 0168, 0233 and 0272)", got, want)
+	if got, want := fieldNames(inv), []string{"component", "kind", "model_role", "output_message", "returns_tree", "role", "task"}; !slices.Equal(got, want) {
+		t.Fatalf("Invoke has %q, want %q (decisions 0168, 0233, 0272 and 0282)", got, want)
 	}
 	if got, want := valueNames(fieldOf(t, inv, "role").Enum()), []string{"ROLE_UNSPECIFIED", "ROLE_AGENT", "ROLE_GATE"}; !slices.Equal(got, want) {
 		t.Errorf("Invoke.Role is %q, want %q", got, want)

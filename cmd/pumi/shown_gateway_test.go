@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -371,11 +372,28 @@ func (s *shownCommands) waitCountedDone(b *background, plan string) {
 	}
 	ctx := s.t.Context()
 	s.pumi(exec.CommandContext(ctx, "pumi", "status"))
-	s.pumi(exec.CommandContext(ctx, "pumi", "log", plan+"/1"))
+	s.pumi(countedLog(ctx, plan, false))
 	if has(ofTypesFor(evs, plan+"/2"), events.TypeInvocationStarted) {
-		s.pumi(exec.CommandContext(ctx, "pumi", "log", plan+"/2"))
+		s.pumi(countedLog(ctx, plan, true))
 	}
 	s.t.Fatalf("%s escalated before it reached done; pumi status and the logs above say why", plan)
+}
+
+// countedLog returns the pumi log command of the first or, with second, the
+// second invocation of plan, one of the counted plans of the shown runs. Each
+// command's arguments are constants, because gosec reports a command built
+// from variables (G204).
+func countedLog(ctx context.Context, plan string, second bool) *exec.Cmd {
+	switch {
+	case plan == signInCountedPlan && second:
+		return exec.CommandContext(ctx, "pumi", "log", signInCountedPlan+"/2")
+	case plan == signInCountedPlan:
+		return exec.CommandContext(ctx, "pumi", "log", signInCountedPlan+"/1")
+	case second:
+		return exec.CommandContext(ctx, "pumi", "log", shownCountedPlan+"/2")
+	default:
+		return exec.CommandContext(ctx, "pumi", "log", shownCountedPlan+"/1")
+	}
 }
 
 // resultOf returns the one invocation.result of invocation in evs.

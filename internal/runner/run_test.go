@@ -213,6 +213,13 @@ func fakeAdapter(mode string) int {
 		write("internal/runner/specs/spec.md", "# Spec\n")
 		write("README.md", "changed outside the paths\n")
 		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: specCheckOutput})
+	case "read base":
+		// A check program that reads a file of the base tree from the
+		// workspace's .git (decision 0285).
+		cmd := exec.CommandContext(context.Background(), "git", "show", "refs/pumi/base:README.md")
+		out, err := cmd.CombinedOutput()
+		fmt.Fprintf(os.Stderr, "%sthe base's README.md: %q, %v\n", fakeAdapterPrefix, out, err)
+		return result(&harnessv1.Result{Status: harnessv1.Result_STATUS_COMPLETED, Output: specCheckOutput})
 	case "ignore stop":
 		_, _ = in.ReadString(0)
 		fmt.Fprintln(os.Stderr, fakeAdapterPrefix+"standard input closed")

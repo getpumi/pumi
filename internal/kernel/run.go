@@ -941,6 +941,9 @@ func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Inv
 	if r.tree != "" {
 		doc.Input.Tree = r.tree
 	}
+	// The base tree is the plan's tree, which a check such as the archive
+	// step reads from the workspace's .git (decision 0285).
+	doc.Input.BaseTree = r.tree
 	doc.Input.Task = task
 	if inv.GetKind() == workflowv1.Invoke_KIND_HARNESS {
 		section, err := r.projectSection(ctx, doc.GetInput().GetTree())

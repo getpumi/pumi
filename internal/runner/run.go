@@ -670,7 +670,7 @@ func (r *run) start(ctx context.Context, work, index string) (*execution, protor
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := r.repo.checkout(ctx, r.doc.GetInput().GetTree(), work, index); err != nil {
+	if err := r.repo.checkout(ctx, r.doc.GetInput().GetTree(), r.doc.GetInput().GetBaseTree(), work, index); err != nil {
 		return nil, nil, fmt.Errorf("the input tree could not be checked out: %w", err)
 	}
 	var mt protoreflect.MessageType

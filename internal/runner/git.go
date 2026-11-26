@@ -115,10 +115,17 @@ func (r repository) checkTree(ctx context.Context, tree string) error {
 
 // checkout checks the tree out into the new directory work, with the
 // index file index, which must be outside work, and gives the workspace a
-// .git of its own with one commit of the tree (decision 0247).
-func (r repository) checkout(ctx context.Context, tree, work, index string) error {
+// .git of its own with one commit of the tree (decision 0247). When base
+// is not empty, the workspace's .git also holds the objects of the base
+// tree, with the ref refs/pumi/base pointing at it (decision 0285).
+func (r repository) checkout(ctx context.Context, tree, base, work, index string) error {
 	if err := r.checkTree(ctx, tree); err != nil {
 		return err
+	}
+	if base != "" {
+		if err := r.checkTree(ctx, base); err != nil {
+			return fmt.Errorf("the base tree: %w", err)
+		}
 	}
 	// The raw diff from the empty tree lists every file of the tree, with
 	// its mode and object, which git update-index takes on standard input.
@@ -140,7 +147,7 @@ func (r repository) checkout(ctx context.Context, tree, work, index string) erro
 	if _, err := r.run(exec.CommandContext(ctx, "git", "checkout-index", "--all", "--quiet"), work, index, nil); err != nil {
 		return err
 	}
-	if err := r.workspaceGit(ctx, tree, work, info); err != nil {
+	if err := r.workspaceGit(ctx, tree, base, work, info); err != nil {
 		return fmt.Errorf("the workspace's .git could not be made: %w", err)
 	}
 	return nil
@@ -165,17 +172,22 @@ const (
 // runs. The runner never runs a git command on it afterwards, so nothing
 // the agent does in it, such as a commit or a hook, reaches the resulting
 // tree or the project's repository.
-func (r repository) workspaceGit(ctx context.Context, tree, work string, info []byte) error {
+func (r repository) workspaceGit(ctx context.Context, tree, base, work string, info []byte) error {
 	ws := workspaceRepository{work: work, gitDir: filepath.Join(work, ".git"), objectFormat: r.objectFormat}
 	if _, err := ws.run(exec.CommandContext(ctx, "git", "init", "--quiet", "--template=", "--initial-branch=main"), false, nil); err != nil {
 		return err
 	}
-	// The pack of every object of the tree goes from the project's
-	// repository to the workspace's, which keeps the pack.
+	// The pack of every object of the tree, and of the base tree when
+	// there is one, goes from the project's repository to the workspace's,
+	// which keeps the pack.
+	trees := tree + "\n"
+	if base != "" {
+		trees += base + "\n"
+	}
 	pack := exec.CommandContext(ctx, "git", "pack-objects", "--revs", "--stdout", "--quiet")
 	pack.Env = append(os.Environ(), "GIT_DIR="+r.gitDir)
 	pack.Dir = r.gitDir
-	pack.Stdin = strings.NewReader(tree + "\n")
+	pack.Stdin = strings.NewReader(trees)
 	var packErr bytes.Buffer
 	pack.Stderr = &packErr
 	out, err := pack.StdoutPipe()
@@ -203,8 +215,16 @@ func (r repository) workspaceGit(ctx context.Context, tree, work string, info []
 	if _, err := ws.run(exec.CommandContext(ctx, "git", "update-index", "-q", "--refresh"), true, nil); err != nil {
 		return err
 	}
-	_, err = ws.run(exec.CommandContext(ctx, "git", "commit", "--quiet", "--no-verify", "--allow-empty", "--file=-"),
-		true, []byte(workspaceCommitMessage))
+	if _, err := ws.run(exec.CommandContext(ctx, "git", "commit", "--quiet", "--no-verify", "--allow-empty", "--file=-"),
+		true, []byte(workspaceCommitMessage)); err != nil {
+		return err
+	}
+	if base == "" {
+		return nil
+	}
+	// git update-ref reads its commands from standard input, so that its
+	// arguments stay constant.
+	_, err = ws.run(exec.CommandContext(ctx, "git", "update-ref", "--stdin"), false, []byte("update refs/pumi/base "+base+"\n"))
 	return err
 }
 

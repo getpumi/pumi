@@ -100,7 +100,7 @@ func checkedOut(t *testing.T, r *testRepo) (repository, string, string) {
 	}
 	dir := t.TempDir()
 	work, index := filepath.Join(dir, "workspace"), filepath.Join(dir, "index")
-	if err := g.checkout(t.Context(), r.tree, work, index); err != nil {
+	if err := g.checkout(t.Context(), r.tree, "", work, index); err != nil {
 		t.Fatal(err)
 	}
 	return g, work, index
@@ -180,8 +180,71 @@ func TestACheckoutOfAMissingTreeFails(t *testing.T) {
 	}
 	dir := t.TempDir()
 	for _, tree := range []string{"0123456789abcdef0123456789abcdef01234567", "not a tree", "HEAD", ""} {
-		if err := g.checkout(t.Context(), tree, filepath.Join(dir, "w"), filepath.Join(dir, "i")); err == nil {
+		if err := g.checkout(t.Context(), tree, "", filepath.Join(dir, "w"), filepath.Join(dir, "i")); err == nil {
 			t.Errorf("the checkout of %q gives no error", tree)
+		}
+	}
+}
+
+// TestTheWorkspaceGitHoldsTheBaseTree: the workspace's .git holds the
+// objects of the base tree, with the ref refs/pumi/base pointing at it,
+// while its files and its one commit stay those of the input tree
+// (decision 0285).
+func TestTheWorkspaceGitHoldsTheBaseTree(t *testing.T) {
+	r := newTestRepo(t)
+	base := r.tree
+	r.write("README.md", "read me again\n")
+	r.run(exec.CommandContext(t.Context(), "git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
+		"commit", "--quiet", "--all", "--message=second"))
+	r.tree = strings.TrimSpace(r.run(exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD^{tree}")))
+	g, err := openRepository(t.Context(), r.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	work := filepath.Join(dir, "workspace")
+	if err := g.checkout(t.Context(), r.tree, base, work, filepath.Join(dir, "index")); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(inWorkspace(t, work, exec.CommandContext(t.Context(), "git", "rev-parse", "refs/pumi/base"))); got != base {
+		t.Errorf("refs/pumi/base is %s, want the base tree %s", got, base)
+	}
+	if got := inWorkspace(t, work, exec.CommandContext(t.Context(), "git", "show", "refs/pumi/base:README.md")); got != "read me\n" {
+		t.Errorf("README.md of the base tree is %q, want %q", got, "read me\n")
+	}
+	if got := strings.TrimSpace(inWorkspace(t, work, exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD^{tree}"))); got != r.tree {
+		t.Errorf("the workspace's commit holds the tree %s, want the input tree %s", got, r.tree)
+	}
+	if got := inWorkspace(t, work, exec.CommandContext(t.Context(), "git", "status", "--porcelain", "--untracked-files=all")); got != "" {
+		t.Errorf("git status in the workspace shows\n%s\nwant no changes", got)
+	}
+	if got, err := openRoot(t, work).ReadFile("README.md"); err != nil || string(got) != "read me again\n" {
+		t.Errorf("the workspace's README.md holds %q, %v; want the input tree's", got, err)
+	}
+}
+
+// TestAWorkspaceWithNoBaseTreeHasNoBaseRef: an invocation with no base
+// tree gets no refs/pumi/base (decision 0285).
+func TestAWorkspaceWithNoBaseTreeHasNoBaseRef(t *testing.T) {
+	r := newTestRepo(t)
+	_, work, _ := checkedOut(t, r)
+	if got := inWorkspace(t, work, exec.CommandContext(t.Context(), "git", "for-each-ref", "refs/pumi/")); got != "" {
+		t.Errorf("the workspace has the refs\n%s\nwant none", got)
+	}
+}
+
+// TestACheckoutWithAMissingBaseTreeFails: a base tree that the repository
+// does not have fails the checkout, as a missing input tree does.
+func TestACheckoutWithAMissingBaseTreeFails(t *testing.T) {
+	r := newTestRepo(t)
+	g, err := openRepository(t.Context(), r.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, base := range []string{"0123456789abcdef0123456789abcdef01234567", "HEAD"} {
+		if err := g.checkout(t.Context(), r.tree, base, filepath.Join(dir, base[:4]), filepath.Join(dir, base[:4]+"-index")); err == nil {
+			t.Errorf("the checkout with the base %q gives no error", base)
 		}
 	}
 }
@@ -471,7 +534,7 @@ func TestAnEmptyInputTree(t *testing.T) {
 	}
 	dir := t.TempDir()
 	work, index := filepath.Join(dir, "workspace"), filepath.Join(dir, "index")
-	if err := g.checkout(t.Context(), g.emptyTree, work, index); err != nil {
+	if err := g.checkout(t.Context(), g.emptyTree, "", work, index); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.TrimSpace(inWorkspace(t, work, exec.CommandContext(t.Context(), "git", "rev-parse", "HEAD^{tree}"))); got != g.emptyTree {

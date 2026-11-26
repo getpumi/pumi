@@ -107,6 +107,12 @@ message Input {
   string tree = 2;
   // The task, such as the prompt of an agent run.
   string task = 3;
+  // The plan's base tree: the trunk's tree when the plan started (decision
+  // 0209), or empty when the wiring gives no trunk. The runner puts its
+  // objects in the workspace's .git, with the ref refs/pumi/base pointing
+  // at it, so that a check such as the archive step can read the base
+  // (decision 0285).
+  string base_tree = 4;
 }
 
 // Role is the role an invocation runs in. Only the gate role may write

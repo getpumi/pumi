@@ -38,9 +38,28 @@ message Config {
   // that sets it.
   Gateway gateway = 8 [deprecated = true];
   // The model configuration: the adapters, the model roles and the adapter
-  // of the checks and external actions (decisions 0245 and 0253). It is
-  // apart from the profile settings.
+  // of the external actions (decisions 0245, 0253 and 0272). It is apart
+  // from the profile settings.
   Models models = 9;
+  // The check programs, by the component name of the check, such as
+  // "spec" (decision 0272). Each check that the workflow starts needs one;
+  // a program for a check that the workflow does not start is accepted, so
+  // that adopters can name their own checks.
+  map<string, Check> checks = 10;
+}
+
+// Check is a check program (decision 0272). The runner starts it with the
+// process contract of the harness adapters, with no gateway and no model:
+// one pumi.harness.v1.Invocation line on standard input and a
+// pumi.harness.v1.Result on standard output, whose output is the check's
+// output message (decisions 0158 to 0160).
+message Check {
+  // The executable, relative to the directory of the configuration file
+  // or absolute.
+  string executable = 1;
+  // The SHA-256 of the executable, in lowercase hexadecimal. The runner
+  // refuses to start an executable whose SHA-256 differs (decision 0245).
+  string sha256 = 2;
 }
 
 // Models is the model configuration (decision 0245): which adapter and
@@ -51,8 +70,9 @@ message Models {
   // The model roles by name, such as "implementer". A model role that the
   // workflow names and that is not here uses default_role (decision 0257).
   map<string, Role> roles = 2;
-  // The adapter that runs every check and external action, which name no
-  // model role (decision 0253).
+  // The adapter that runs every external action, which names no model role
+  // (decision 0253), until epic E11 brings the forge adapter. Checks do not
+  // run on it: each runs as the program that checks names (decision 0272).
   string check_adapter = 3;
   // The default role: the adapter, model and fallback of each model role
   // that the workflow names and roles does not list. pumi refuses a
@@ -162,6 +182,24 @@ message Project {
   // relative to the root of the repository. The task names a file that the
   // input tree does not hold as missing.
   repeated string convention_files = 4;
+
+  // ArchiveStep is where the spec adapter archives the plan's change into
+  // the living specs, inside the plan's pull request (decision 0278).
+  enum ArchiveStep {
+    // Not set, which is ARCHIVE_STEP_AFTER_IMPLEMENTING.
+    ARCHIVE_STEP_UNSPECIFIED = 0;
+    // In a state of its own right after implementing, the default.
+    ARCHIVE_STEP_AFTER_IMPLEMENTING = 1;
+    // After the conformance audit; every check runs again on the archived
+    // tree before approval.
+    ARCHIVE_STEP_AFTER_CONFORMANCE = 2;
+    // No archive step: a person archives the change by hand in the
+    // change's own commits.
+    ARCHIVE_STEP_OFF = 3;
+  }
+
+  // Where the change is archived.
+  ArchiveStep archive_step = 5;
 }
 
 // Settings are the profile settings that pumi reads from the file

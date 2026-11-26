@@ -31,6 +31,11 @@
         }
       },
       "properties": {
+        "component": {
+          "default": "",
+          "description": "The component name of a check, such as \"spec\", by which the\n configuration names the check's program (decision 0272). A state that\n starts a check names one; a state that starts a harness or an external\n action names none.",
+          "type": "string"
+        },
         "kind": {
           "anyOf": [
             {

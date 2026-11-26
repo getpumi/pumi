@@ -92,6 +92,7 @@ states {
   invoke {
     role: ROLE_GATE
     kind: KIND_CHECK
+    component: "check"
     task: "check"
     output_message: "pumi.workflow.v1.ImplementationOutput"
   }

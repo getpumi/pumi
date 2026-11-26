@@ -117,7 +117,7 @@
       "patternProperties": {
         "^(check_adapter)$": {
           "default": "",
-          "description": "The adapter that runs every check and external action, which name no\n model role (decision 0253).",
+          "description": "The adapter that runs every external action, which names no model role\n (decision 0253), until epic E11 brings the forge adapter. Checks do not\n run on it: each runs as the program that checks names (decision 0272).",
           "type": "string"
         },
         "^(default_role)$": {
@@ -138,7 +138,7 @@
         },
         "checkAdapter": {
           "default": "",
-          "description": "The adapter that runs every check and external action, which name no\n model role (decision 0253).",
+          "description": "The adapter that runs every external action, which names no model role\n (decision 0253), until epic E11 brings the forge adapter. Checks do not\n run on it: each runs as the program that checks names (decision 0272).",
           "type": "string"
         },
         "defaultRole": {

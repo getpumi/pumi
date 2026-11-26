@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/encoding/prototext"
@@ -35,8 +36,9 @@ type config struct {
 // readConfig reads the configuration file at path, in protobuf text
 // format, and refuses one with an unknown field, without the workflow, the
 // trunk or the project's name, with the replaced adapter field or gateway
-// section, with a model configuration that checkModels refuses, or with a
-// project section that checkProject refuses.
+// section, with a model configuration that checkModels refuses, with a
+// project section that checkProject refuses, or with check programs that
+// checkCheckPrograms refuses.
 func readConfig(path string) (*config, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -73,6 +75,7 @@ func readConfig(path string) (*config, error) {
 	}
 	missing = append(missing, checkModels(path, file.GetModels())...)
 	missing = append(missing, checkProject(path, file.GetProject())...)
+	missing = append(missing, checkCheckPrograms(path, file.GetChecks())...)
 	if err := errors.Join(missing...); err != nil {
 		return nil, err
 	}
@@ -92,6 +95,44 @@ func checkModels(path string, m *configv1.Models) []error {
 		errs = append(errs, fmt.Errorf("the configuration file %s: models.check_adapter %q is not an adapter that models.adapters lists (decision 0253)", path, m.GetCheckAdapter()))
 	}
 	return errs
+}
+
+// checkCheckPrograms returns the errors of the check programs of the file
+// at path: each needs a component name, an executable and a SHA-256 in
+// lowercase hexadecimal, as an adapter does (decisions 0245 and 0272).
+func checkCheckPrograms(path string, checks map[string]*configv1.Check) []error {
+	var errs []error
+	for _, name := range slices.Sorted(maps.Keys(checks)) {
+		c := checks[name]
+		if name == "" {
+			errs = append(errs, fmt.Errorf("the configuration file %s: checks has a check program with no component name (decision 0272)", path))
+			continue
+		}
+		if c.GetExecutable() == "" {
+			errs = append(errs, fmt.Errorf("the configuration file %s: the check program %q: it has no executable", path, name))
+		}
+		if !isSHA256(c.GetSha256()) {
+			errs = append(errs, fmt.Errorf("the configuration file %s: the check program %q: its sha256 %q is not 64 lowercase hexadecimal digits", path, name, c.GetSha256()))
+		}
+	}
+	return errs
+}
+
+// checkPrograms refuses a workflow that starts a check for which the
+// configuration names no program, with an error that names each such
+// check. A program for a check that the workflow does not start is
+// accepted (decision 0272).
+func checkPrograms(cfg *config, wf *workflow.Workflow) error {
+	var missing []string
+	for _, c := range wf.Checks() {
+		if _, ok := cfg.file.GetChecks()[c]; !ok {
+			missing = append(missing, strconv.Quote(c))
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("the workflow starts the checks %s, for which checks of the configuration file names no program (decision 0272)", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // checkAdapters returns the errors of the adapters of the file at path: it
@@ -258,23 +299,33 @@ func (c *config) plane() controlplane.Config {
 }
 
 // project returns the project section of the file for the kernel
-// (decision 0250).
+// (decision 0250), with its archive step, which is after implementing
+// when the file does not set it (decision 0278).
 func (c *config) project() kernel.Project {
 	p := c.file.GetProject()
+	step := p.GetArchiveStep()
+	if step == configv1.Project_ARCHIVE_STEP_UNSPECIFIED {
+		step = configv1.Project_ARCHIVE_STEP_AFTER_IMPLEMENTING
+	}
 	return kernel.Project{
 		Commands: p.GetCheckCommands(), Conventions: p.GetConventionFiles(), ProtectedPaths: p.GetProtectedPaths(),
+		ArchiveStep: step,
 	}
 }
 
 // checkProject returns the errors of the project section p of the file at
-// path (decision 0250): an empty command, and a convention file that is
-// not a clean path inside the repository, with forward slashes.
+// path (decision 0250): an empty command, a convention file that is not a
+// clean path inside the repository, with forward slashes, and an archive
+// step that is unknown (decision 0278).
 func checkProject(path string, p *configv1.Project) []error {
 	var errs []error
 	for i, c := range p.GetCheckCommands() {
 		if strings.TrimSpace(c) == "" {
 			errs = append(errs, fmt.Errorf("the configuration file %s: project.check_commands[%d] is empty", path, i))
 		}
+	}
+	if _, ok := configv1.Project_ArchiveStep_name[int32(p.GetArchiveStep())]; !ok {
+		errs = append(errs, fmt.Errorf("the configuration file %s: project.archive_step %d is unknown (decision 0278)", path, p.GetArchiveStep()))
 	}
 	for i, f := range p.GetConventionFiles() {
 		if f == "" || !fs.ValidPath(f) || f == "." || strings.Contains(f, `\`) {

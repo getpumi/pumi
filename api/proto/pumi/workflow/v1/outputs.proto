@@ -76,3 +76,41 @@ message CheckingOutput {
   // dco.signed.
   pumi.facts.v1.DcoSigned dco_signed = 5;
 }
+
+// SpecCheckOutput is the structured output of the spec check of the first
+// workflow (decisions 0277 and 0279): spec.valid and the narratives of the
+// plan's change and of the capabilities it touches, which the kernel adds
+// to the tasks of the second opinion, plan review and the conformance
+// audit. Its spec_valid is the spec.valid fact, which the state reported as
+// its whole output before (decision 0272). The check's findings go to its
+// log, not here (decision 0277).
+message SpecCheckOutput {
+  // spec.valid.
+  pumi.facts.v1.SpecValid spec_valid = 1;
+  // The narrative of the plan's change (decision 0271).
+  string change_narrative = 2;
+  // The narratives of the capabilities that the change touches, by the
+  // capability's name.
+  map<string, string> capability_narratives = 3;
+}
+
+// CoverageReport is the coverage of the requirements of the plan's change
+// (decision 0280), which the kernel adds to the task of the conformance
+// audit. It is not a fact.
+message CoverageReport {
+  // Requirement is one requirement that the change adds or modifies.
+  message Requirement {
+    // The requirement's ID, such as BLS-001 (decision 0274).
+    string id = 1;
+    // The test files, relative to the root of the repository, whose
+    // Verifies: line names the ID.
+    repeated string test_files = 2;
+    // The reason the plan gives for having no test for the requirement;
+    // empty when it gives none.
+    string no_test_reason = 3;
+  }
+
+  // The requirements that the change adds or modifies, each once. A
+  // removed or only renamed requirement is not listed.
+  repeated Requirement requirements = 1;
+}

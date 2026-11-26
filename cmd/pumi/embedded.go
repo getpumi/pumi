@@ -155,6 +155,7 @@ func newPlane(log *embeddedlog.Log, blobs blobstore.Store, cfg *config) (*contro
 // local blob store beside the log (decision 0232). It refuses a workflow
 // that names a model role which the file neither lists nor gives a default
 // role for, and gives each such role the default (decisions 0233 and 0257),
+// refuses a workflow that starts a check with no program (decision 0272),
 // and records the maker of each agent run's model (decision 0261). It
 // stops when any of them fails.
 func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) error {
@@ -167,6 +168,9 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 		return err
 	}
 	if err := resolveRoles(cfg, wf); err != nil {
+		return err
+	}
+	if err := checkPrograms(cfg, wf); err != nil {
 		return err
 	}
 	id, err := person(ctx, dir)

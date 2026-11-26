@@ -278,6 +278,126 @@ func (x *CheckingOutput) GetDcoSigned() *v1.DcoSigned {
 	return nil
 }
 
+// SpecCheckOutput is the structured output of the spec check of the first
+// workflow (decisions 0277 and 0279): spec.valid and the narratives of the
+// plan's change and of the capabilities it touches, which the kernel adds
+// to the tasks of the second opinion, plan review and the conformance
+// audit. Its spec_valid is the spec.valid fact, which the state reported as
+// its whole output before (decision 0272). The check's findings go to its
+// log, not here (decision 0277).
+type SpecCheckOutput struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// spec.valid.
+	SpecValid *v1.SpecValid `protobuf:"bytes,1,opt,name=spec_valid,json=specValid,proto3" json:"spec_valid,omitempty"`
+	// The narrative of the plan's change (decision 0271).
+	ChangeNarrative string `protobuf:"bytes,2,opt,name=change_narrative,json=changeNarrative,proto3" json:"change_narrative,omitempty"`
+	// The narratives of the capabilities that the change touches, by the
+	// capability's name.
+	CapabilityNarratives map[string]string `protobuf:"bytes,3,rep,name=capability_narratives,json=capabilityNarratives,proto3" json:"capability_narratives,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *SpecCheckOutput) Reset() {
+	*x = SpecCheckOutput{}
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SpecCheckOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SpecCheckOutput) ProtoMessage() {}
+
+func (x *SpecCheckOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SpecCheckOutput.ProtoReflect.Descriptor instead.
+func (*SpecCheckOutput) Descriptor() ([]byte, []int) {
+	return file_pumi_workflow_v1_outputs_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SpecCheckOutput) GetSpecValid() *v1.SpecValid {
+	if x != nil {
+		return x.SpecValid
+	}
+	return nil
+}
+
+func (x *SpecCheckOutput) GetChangeNarrative() string {
+	if x != nil {
+		return x.ChangeNarrative
+	}
+	return ""
+}
+
+func (x *SpecCheckOutput) GetCapabilityNarratives() map[string]string {
+	if x != nil {
+		return x.CapabilityNarratives
+	}
+	return nil
+}
+
+// CoverageReport is the coverage of the requirements of the plan's change
+// (decision 0280), which the kernel adds to the task of the conformance
+// audit. It is not a fact.
+type CoverageReport struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The requirements that the change adds or modifies, each once. A
+	// removed or only renamed requirement is not listed.
+	Requirements  []*CoverageReport_Requirement `protobuf:"bytes,1,rep,name=requirements,proto3" json:"requirements,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CoverageReport) Reset() {
+	*x = CoverageReport{}
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CoverageReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CoverageReport) ProtoMessage() {}
+
+func (x *CoverageReport) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CoverageReport.ProtoReflect.Descriptor instead.
+func (*CoverageReport) Descriptor() ([]byte, []int) {
+	return file_pumi_workflow_v1_outputs_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CoverageReport) GetRequirements() []*CoverageReport_Requirement {
+	if x != nil {
+		return x.Requirements
+	}
+	return nil
+}
+
 // Question is one open question.
 type PlanningOutput_Question struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -294,7 +414,7 @@ type PlanningOutput_Question struct {
 
 func (x *PlanningOutput_Question) Reset() {
 	*x = PlanningOutput_Question{}
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[4]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -306,7 +426,7 @@ func (x *PlanningOutput_Question) String() string {
 func (*PlanningOutput_Question) ProtoMessage() {}
 
 func (x *PlanningOutput_Question) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[4]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -356,7 +476,7 @@ type SecondOpinion_Answer struct {
 
 func (x *SecondOpinion_Answer) Reset() {
 	*x = SecondOpinion_Answer{}
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[5]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -368,7 +488,7 @@ func (x *SecondOpinion_Answer) String() string {
 func (*SecondOpinion_Answer) ProtoMessage() {}
 
 func (x *SecondOpinion_Answer) ProtoReflect() protoreflect.Message {
-	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[5]
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,6 +514,72 @@ func (x *SecondOpinion_Answer) GetQuestionId() string {
 func (x *SecondOpinion_Answer) GetAnswer() string {
 	if x != nil {
 		return x.Answer
+	}
+	return ""
+}
+
+// Requirement is one requirement that the change adds or modifies.
+type CoverageReport_Requirement struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The requirement's ID, such as BLS-001 (decision 0274).
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The test files, relative to the root of the repository, whose
+	// Verifies: line names the ID.
+	TestFiles []string `protobuf:"bytes,2,rep,name=test_files,json=testFiles,proto3" json:"test_files,omitempty"`
+	// The reason the plan gives for having no test for the requirement;
+	// empty when it gives none.
+	NoTestReason  string `protobuf:"bytes,3,opt,name=no_test_reason,json=noTestReason,proto3" json:"no_test_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CoverageReport_Requirement) Reset() {
+	*x = CoverageReport_Requirement{}
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CoverageReport_Requirement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CoverageReport_Requirement) ProtoMessage() {}
+
+func (x *CoverageReport_Requirement) ProtoReflect() protoreflect.Message {
+	mi := &file_pumi_workflow_v1_outputs_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CoverageReport_Requirement.ProtoReflect.Descriptor instead.
+func (*CoverageReport_Requirement) Descriptor() ([]byte, []int) {
+	return file_pumi_workflow_v1_outputs_proto_rawDescGZIP(), []int{5, 0}
+}
+
+func (x *CoverageReport_Requirement) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CoverageReport_Requirement) GetTestFiles() []string {
+	if x != nil {
+		return x.TestFiles
+	}
+	return nil
+}
+
+func (x *CoverageReport_Requirement) GetNoTestReason() string {
+	if x != nil {
+		return x.NoTestReason
 	}
 	return ""
 }
@@ -425,7 +611,22 @@ const file_pumi_workflow_v1_outputs_proto_rawDesc = "" +
 	"\rpaths_outside\x18\x03 \x01(\v2\x1b.pumi.facts.v1.PathsOutsideR\fpathsOutside\x12I\n" +
 	"\x10budgets_breached\x18\x04 \x01(\v2\x1e.pumi.facts.v1.BudgetsBreachedR\x0fbudgetsBreached\x127\n" +
 	"\n" +
-	"dco_signed\x18\x05 \x01(\v2\x18.pumi.facts.v1.DcoSignedR\tdcoSignedB\xbc\x01\n" +
+	"dco_signed\x18\x05 \x01(\v2\x18.pumi.facts.v1.DcoSignedR\tdcoSigned\"\xb0\x02\n" +
+	"\x0fSpecCheckOutput\x127\n" +
+	"\n" +
+	"spec_valid\x18\x01 \x01(\v2\x18.pumi.facts.v1.SpecValidR\tspecValid\x12)\n" +
+	"\x10change_narrative\x18\x02 \x01(\tR\x0fchangeNarrative\x12p\n" +
+	"\x15capability_narratives\x18\x03 \x03(\v2;.pumi.workflow.v1.SpecCheckOutput.CapabilityNarrativesEntryR\x14capabilityNarratives\x1aG\n" +
+	"\x19CapabilityNarrativesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc6\x01\n" +
+	"\x0eCoverageReport\x12P\n" +
+	"\frequirements\x18\x01 \x03(\v2,.pumi.workflow.v1.CoverageReport.RequirementR\frequirements\x1ab\n" +
+	"\vRequirement\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"test_files\x18\x02 \x03(\tR\ttestFiles\x12$\n" +
+	"\x0eno_test_reason\x18\x03 \x01(\tR\fnoTestReasonB\xbc\x01\n" +
 	"\x14com.pumi.workflow.v1B\fOutputsProtoP\x01Z4getpumi.dev/pumi/api/gen/pumi/workflow/v1;workflowv1\xa2\x02\x03PWX\xaa\x02\x10Pumi.Workflow.V1\xca\x02\x10Pumi\\Workflow\\V1\xe2\x02\x1cPumi\\Workflow\\V1\\GPBMetadata\xea\x02\x12Pumi::Workflow::V1b\x06proto3"
 
 var (
@@ -440,33 +641,41 @@ func file_pumi_workflow_v1_outputs_proto_rawDescGZIP() []byte {
 	return file_pumi_workflow_v1_outputs_proto_rawDescData
 }
 
-var file_pumi_workflow_v1_outputs_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_pumi_workflow_v1_outputs_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_pumi_workflow_v1_outputs_proto_goTypes = []any{
-	(*PlanningOutput)(nil),          // 0: pumi.workflow.v1.PlanningOutput
-	(*SecondOpinion)(nil),           // 1: pumi.workflow.v1.SecondOpinion
-	(*ImplementationOutput)(nil),    // 2: pumi.workflow.v1.ImplementationOutput
-	(*CheckingOutput)(nil),          // 3: pumi.workflow.v1.CheckingOutput
-	(*PlanningOutput_Question)(nil), // 4: pumi.workflow.v1.PlanningOutput.Question
-	(*SecondOpinion_Answer)(nil),    // 5: pumi.workflow.v1.SecondOpinion.Answer
-	(*v1.VerifyPassed)(nil),         // 6: pumi.facts.v1.VerifyPassed
-	(*v1.PathsProtected)(nil),       // 7: pumi.facts.v1.PathsProtected
-	(*v1.PathsOutside)(nil),         // 8: pumi.facts.v1.PathsOutside
-	(*v1.BudgetsBreached)(nil),      // 9: pumi.facts.v1.BudgetsBreached
-	(*v1.DcoSigned)(nil),            // 10: pumi.facts.v1.DcoSigned
+	(*PlanningOutput)(nil),             // 0: pumi.workflow.v1.PlanningOutput
+	(*SecondOpinion)(nil),              // 1: pumi.workflow.v1.SecondOpinion
+	(*ImplementationOutput)(nil),       // 2: pumi.workflow.v1.ImplementationOutput
+	(*CheckingOutput)(nil),             // 3: pumi.workflow.v1.CheckingOutput
+	(*SpecCheckOutput)(nil),            // 4: pumi.workflow.v1.SpecCheckOutput
+	(*CoverageReport)(nil),             // 5: pumi.workflow.v1.CoverageReport
+	(*PlanningOutput_Question)(nil),    // 6: pumi.workflow.v1.PlanningOutput.Question
+	(*SecondOpinion_Answer)(nil),       // 7: pumi.workflow.v1.SecondOpinion.Answer
+	nil,                                // 8: pumi.workflow.v1.SpecCheckOutput.CapabilityNarrativesEntry
+	(*CoverageReport_Requirement)(nil), // 9: pumi.workflow.v1.CoverageReport.Requirement
+	(*v1.VerifyPassed)(nil),            // 10: pumi.facts.v1.VerifyPassed
+	(*v1.PathsProtected)(nil),          // 11: pumi.facts.v1.PathsProtected
+	(*v1.PathsOutside)(nil),            // 12: pumi.facts.v1.PathsOutside
+	(*v1.BudgetsBreached)(nil),         // 13: pumi.facts.v1.BudgetsBreached
+	(*v1.DcoSigned)(nil),               // 14: pumi.facts.v1.DcoSigned
+	(*v1.SpecValid)(nil),               // 15: pumi.facts.v1.SpecValid
 }
 var file_pumi_workflow_v1_outputs_proto_depIdxs = []int32{
-	4,  // 0: pumi.workflow.v1.PlanningOutput.questions:type_name -> pumi.workflow.v1.PlanningOutput.Question
-	5,  // 1: pumi.workflow.v1.SecondOpinion.answers:type_name -> pumi.workflow.v1.SecondOpinion.Answer
-	6,  // 2: pumi.workflow.v1.CheckingOutput.verify_passed:type_name -> pumi.facts.v1.VerifyPassed
-	7,  // 3: pumi.workflow.v1.CheckingOutput.paths_protected:type_name -> pumi.facts.v1.PathsProtected
-	8,  // 4: pumi.workflow.v1.CheckingOutput.paths_outside:type_name -> pumi.facts.v1.PathsOutside
-	9,  // 5: pumi.workflow.v1.CheckingOutput.budgets_breached:type_name -> pumi.facts.v1.BudgetsBreached
-	10, // 6: pumi.workflow.v1.CheckingOutput.dco_signed:type_name -> pumi.facts.v1.DcoSigned
-	7,  // [7:7] is the sub-list for method output_type
-	7,  // [7:7] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	6,  // 0: pumi.workflow.v1.PlanningOutput.questions:type_name -> pumi.workflow.v1.PlanningOutput.Question
+	7,  // 1: pumi.workflow.v1.SecondOpinion.answers:type_name -> pumi.workflow.v1.SecondOpinion.Answer
+	10, // 2: pumi.workflow.v1.CheckingOutput.verify_passed:type_name -> pumi.facts.v1.VerifyPassed
+	11, // 3: pumi.workflow.v1.CheckingOutput.paths_protected:type_name -> pumi.facts.v1.PathsProtected
+	12, // 4: pumi.workflow.v1.CheckingOutput.paths_outside:type_name -> pumi.facts.v1.PathsOutside
+	13, // 5: pumi.workflow.v1.CheckingOutput.budgets_breached:type_name -> pumi.facts.v1.BudgetsBreached
+	14, // 6: pumi.workflow.v1.CheckingOutput.dco_signed:type_name -> pumi.facts.v1.DcoSigned
+	15, // 7: pumi.workflow.v1.SpecCheckOutput.spec_valid:type_name -> pumi.facts.v1.SpecValid
+	8,  // 8: pumi.workflow.v1.SpecCheckOutput.capability_narratives:type_name -> pumi.workflow.v1.SpecCheckOutput.CapabilityNarrativesEntry
+	9,  // 9: pumi.workflow.v1.CoverageReport.requirements:type_name -> pumi.workflow.v1.CoverageReport.Requirement
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_pumi_workflow_v1_outputs_proto_init() }
@@ -480,7 +689,7 @@ func file_pumi_workflow_v1_outputs_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pumi_workflow_v1_outputs_proto_rawDesc), len(file_pumi_workflow_v1_outputs_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

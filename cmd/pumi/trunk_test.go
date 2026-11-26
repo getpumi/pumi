@@ -79,3 +79,48 @@ func TestAPlanStartsFromTheTrunksTree(t *testing.T) {
 		t.Errorf("a2/2, which runs a2/1 again, starts from %q, want trunk-2, the tree a2 started from", got)
 	}
 }
+
+// TestTheInputNamesThePlansBaseTree: every invocation of a plan names the
+// trunk's tree when the plan started as its base tree, also after the
+// trunk moves (decision 0285).
+func TestTheInputNamesThePlansBaseTree(t *testing.T) {
+	wf, err := workflow.Load(os.DirFS(filepath.Join(workflowsDir, "tracks")), "workflow.txtpb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	trunk := &movingTrunk{tree: "trunk-1"}
+	p := newPumi(t, wf, caseSettings{Parallelism: 1, MaxAttempts: map[string]int64{"in-doubt": 1}}, nil, 0)
+	p.trunk = trunk.read
+	p.startPlane()
+	p.startKernel()
+	addStep("a1", "a")(p)
+	p.waitIdle()
+	p.claim()
+	trunk.set("trunk-2")
+	p.expire()
+	p.waitIdle()
+	p.claim()
+	for _, invocation := range []string{"a1/1", "a1/2"} {
+		if got := p.claims[invocation].GetInvocation().GetInput().GetBaseTree(); got != "trunk-1" {
+			t.Errorf("%s has the base tree %q, want trunk-1, the trunk's tree when a1 started", invocation, got)
+		}
+	}
+}
+
+// TestWithNoTrunkThereIsNoBaseTree: when the wiring gives no trunk, an
+// invocation names no base tree (decision 0285).
+func TestWithNoTrunkThereIsNoBaseTree(t *testing.T) {
+	wf, err := workflow.Load(os.DirFS(filepath.Join(workflowsDir, "tracks")), "workflow.txtpb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := newPumi(t, wf, caseSettings{Parallelism: 1}, nil, 0)
+	p.startPlane()
+	p.startKernel()
+	addStep("a1", "a")(p)
+	p.waitIdle()
+	p.claim()
+	if got := p.claims["a1/1"].GetInvocation().GetInput().GetBaseTree(); got != "" {
+		t.Errorf("a1/1 has the base tree %q, want none", got)
+	}
+}

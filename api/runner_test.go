@@ -181,8 +181,8 @@ func TestTheInvocationDocumentHasEveryFieldOf0024(t *testing.T) {
 	if want := []string{"KIND_UNSPECIFIED", "KIND_CHECK", "KIND_EXTERNAL_ACTION", "KIND_AGENT_RUN"}; !slices.Equal(kinds, want) {
 		t.Errorf("Component.Kind is %q, want %q", kinds, want)
 	}
-	if got := fieldNames(fieldOf(t, doc, "input").Message()); !slices.Equal(got, []string{"repo", "task", "tree"}) {
-		t.Errorf("Input has %q, want repo, task and tree", got)
+	if got := fieldNames(fieldOf(t, doc, "input").Message()); !slices.Equal(got, []string{"base_tree", "repo", "task", "tree"}) {
+		t.Errorf("Input has %q, want repo, tree, base_tree and task (decision 0285)", got)
 	}
 	if got := fieldNames(fieldOf(t, doc, "budget").Message()); !slices.Equal(got, []string{"cost_microdollars", "seconds", "tokens"}) {
 		t.Errorf("the budget has %q, want tokens, cost_microdollars and seconds", got)

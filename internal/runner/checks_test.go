@@ -116,6 +116,25 @@ func TestTheArchiveStepIsConfinedToTheWritePaths(t *testing.T) {
 	}
 }
 
+// TestACheckProgramReadsTheBaseTree: the runner puts the invocation's base
+// tree in the workspace's .git, where the check program reads it, and
+// passes the base tree in the harness invocation (decision 0285).
+func TestACheckProgramReadsTheBaseTree(t *testing.T) {
+	f, _ := newCheckFixture(t, "read base")
+	f.service.claim.Invocation.Input.BaseTree = f.repo.tree
+	report := f.runOne(t)
+	log := f.service.log()
+	if report.GetOutcome() != eventsv1.InvocationFinished_OUTCOME_SUCCEEDED {
+		t.Fatalf("the outcome is %v, want succeeded; the log is\n%s", report.GetOutcome(), log)
+	}
+	if want := fakeAdapterPrefix + `the base's README.md: "read me\n", <nil>`; !strings.Contains(log, want) {
+		t.Errorf("the log does not hold %q; it is\n%s", want, log)
+	}
+	if got := sentInvocation(t, log).GetInput().GetBaseTree(); got != f.repo.tree {
+		t.Errorf("the harness invocation has the base tree %q, want %s", got, f.repo.tree)
+	}
+}
+
 // TestACheckProgramWhoseHashDiffersIsRefused: the runner checks the
 // program's SHA-256 before it starts it and refuses one that does not
 // match, naming the check and both hashes (decisions 0245 and 0272).

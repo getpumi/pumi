@@ -4,7 +4,19 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false,
       "description": "Input is the input of an invocation (decision 0024).",
+      "patternProperties": {
+        "^(base_tree)$": {
+          "default": "",
+          "description": "The plan's base tree: the trunk's tree when the plan started (decision\n 0209), or empty when the wiring gives no trunk. The runner puts its\n objects in the workspace's .git, with the ref refs/pumi/base pointing\n at it, so that a check such as the archive step can read the base\n (decision 0285).",
+          "type": "string"
+        }
+      },
       "properties": {
+        "baseTree": {
+          "default": "",
+          "description": "The plan's base tree: the trunk's tree when the plan started (decision\n 0209), or empty when the wiring gives no trunk. The runner puts its\n objects in the workspace's .git, with the ref refs/pumi/base pointing\n at it, so that a check such as the archive step can read the base\n (decision 0285).",
+          "type": "string"
+        },
         "repo": {
           "default": "",
           "description": "The repository.",

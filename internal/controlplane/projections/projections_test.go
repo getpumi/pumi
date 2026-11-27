@@ -367,6 +367,69 @@ func TestQuestionsOpenOfAnOutputThatDoesNotParseIsAnError(t *testing.T) {
 	}
 }
 
+// specCheck is the output message of the spec check.
+const specCheck = "pumi.workflow.v1.SpecCheckOutput"
+
+// specOutput returns a spec check's output whose spec.valid is value for
+// tree-1.
+func specOutput(value bool) *workflowv1.SpecCheckOutput {
+	return &workflowv1.SpecCheckOutput{
+		SpecValid:       &factsv1.SpecValid{Tree: "tree-1", SpecAdapterVersion: "adapter-openspec v1, openspec 2.2.0", Value: value},
+		ChangeNarrative: "A narrative.",
+	}
+}
+
+// TestSpecValidIsTheSpecCheckOutputOfTheNamedInvocation: spec.valid is the
+// spec_valid of the spec check output of the named invocation of the plan,
+// for the head tree (decisions 0272, 0277 and 0300). A fact that cannot be
+// read is missing, so the spec gate denies (decision 0143, openspec
+// PEX-059).
+func TestSpecValidIsTheSpecCheckOutputOfTheNamedInvocation(t *testing.T) {
+	p := byFact(t, "spec.valid")
+	log := []*cloudeventsv1.CloudEvent{
+		added(t, 1, "plan-a"),
+		added(t, 2, "plan-b"),
+		requested(t, 3, "plan-a", "inv-1", specCheck),
+		requested(t, 4, "plan-a", "inv-2", specCheck),
+		requested(t, 5, "plan-b", "inv-3", specCheck),
+		requested(t, 6, "plan-a", "inv-4", specCheck),
+		requested(t, 7, "plan-a", "inv-5", planning),
+		requested(t, 8, "plan-a", "inv-6", specCheck),
+		requested(t, 9, "plan-a", "inv-7", specCheck),
+		requested(t, 10, "plan-a", "inv-8", specCheck),
+		result(t, 11, "inv-1", nil, specOutput(true)),
+		result(t, 12, "inv-2", nil, specOutput(false)),
+		result(t, 13, "inv-3", nil, specOutput(true)),
+		result(t, 14, "inv-5", nil, &workflowv1.PlanningOutput{Plan: "p"}),
+		result(t, 15, "inv-6", nil, &workflowv1.SpecCheckOutput{ChangeNarrative: "No fact."}),
+		event(t, 16, &eventsv1.InvocationResult{Invocation: "inv-7", Output: "{not json"}),
+		result(t, 17, "inv-8", nil, nil),
+	}
+	for inv, want := range map[string]bool{"inv-1": true, "inv-2": false} {
+		got := project(t, p, projections.Keys{Plan: "plan-a", Invocation: inv, HeadTree: "tree-1"}, log)
+		if wantFact := specOutput(want).GetSpecValid(); !proto.Equal(got, wantFact) {
+			t.Errorf("spec.valid of %s = %v, want %v", inv, got, wantFact)
+		}
+	}
+	for name, keys := range map[string]projections.Keys{
+		"no invocation named":                {Plan: "plan-a", HeadTree: "tree-1"},
+		"no head tree":                       {Plan: "plan-a", Invocation: "inv-1"},
+		"another tree":                       {Plan: "plan-a", Invocation: "inv-1", HeadTree: "tree-2"},
+		"another plan's invocation":          {Plan: "plan-a", Invocation: "inv-3", HeadTree: "tree-1"},
+		"an invocation with no result yet":   {Plan: "plan-a", Invocation: "inv-4", HeadTree: "tree-1"},
+		"an invocation with another output":  {Plan: "plan-a", Invocation: "inv-5", HeadTree: "tree-1"},
+		"an output with no spec.valid":       {Plan: "plan-a", Invocation: "inv-6", HeadTree: "tree-1"},
+		"an output that does not parse":      {Plan: "plan-a", Invocation: "inv-7", HeadTree: "tree-1"},
+		"a result with no output":            {Plan: "plan-a", Invocation: "inv-8", HeadTree: "tree-1"},
+		"an invocation that was never asked": {Plan: "plan-a", Invocation: "inv-9", HeadTree: "tree-1"},
+		"a plan that was never added":        {Plan: "plan-c", Invocation: "inv-1", HeadTree: "tree-1"},
+	} {
+		if got, _ := p.Project(keys, log); got != nil {
+			t.Errorf("spec.valid with %s = %v, want no fact", name, got)
+		}
+	}
+}
+
 func TestEveryProjectionKeepsTheContract(t *testing.T) {
 	catalog, err := facts.Catalog()
 	if err != nil {
@@ -468,5 +531,11 @@ var samples = map[string]func(t *testing.T) ([]*cloudeventsv1.CloudEvent, projec
 		return []*cloudeventsv1.CloudEvent{
 			added(t, 1, "p"), requested(t, 2, "p", "i", planning), result(t, 3, "i", nil, out),
 		}, projections.Keys{Plan: "p", Invocation: "i"}
+	},
+	"spec.valid": func(t *testing.T) ([]*cloudeventsv1.CloudEvent, projections.Keys) {
+		out := &workflowv1.SpecCheckOutput{SpecValid: &factsv1.SpecValid{Tree: "t", SpecAdapterVersion: "v", Value: true}}
+		return []*cloudeventsv1.CloudEvent{
+			added(t, 1, "p"), requested(t, 2, "p", "i", specCheck), result(t, 3, "i", nil, out),
+		}, projections.Keys{Plan: "p", Invocation: "i", HeadTree: "t"}
 	},
 }

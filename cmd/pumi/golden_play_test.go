@@ -25,6 +25,7 @@ import (
 	eventsv1 "getpumi.dev/pumi/api/gen/pumi/events/v1"
 	"getpumi.dev/pumi/api/policy"
 	"getpumi.dev/pumi/internal/controlplane/embeddedlog"
+	"getpumi.dev/pumi/internal/kernel/firstworkflow"
 	"getpumi.dev/pumi/internal/kernel/workflow"
 )
 
@@ -468,6 +469,33 @@ func reportTreeOf(invocation string) step {
 	}
 }
 
+// The outputs of the spec check, as the OpenSpec adapter writes them
+// (pumi.workflow.v1.SpecCheckOutput): spec.valid for the plan's tree, true
+// and false, none, and for another tree.
+const (
+	specValidOutput     = `{"specValid":{"tree":"tree-0","specAdapterVersion":"adapter-openspec v0.1.0, openspec 2.2.0","value":true},"changeNarrative":"A narrative."}`
+	specNotValidOutput  = `{"specValid":{"tree":"tree-0","specAdapterVersion":"adapter-openspec v0.1.0, openspec 2.2.0"},"changeNarrative":"A narrative."}`
+	specNoFactOutput    = `{"changeNarrative":"A narrative."}`
+	specOtherTreeOutput = `{"specValid":{"tree":"tree-9","specAdapterVersion":"adapter-openspec v0.1.0, openspec 2.2.0","value":true},"changeNarrative":"A narrative."}`
+)
+
+// firstWorkflowCases is the directory of goldenDir whose cases run on the
+// first workflow.
+const firstWorkflowCases = "first"
+
+// reportSpec reports the claimed spec check of the plan, its first
+// invocation, as succeeded with output.
+func reportSpec(output string) step {
+	return func(p *pumi) {
+		const invocation = casePlan + "/1"
+		c, ok := p.claims[invocation]
+		if !ok {
+			p.t.Fatalf("the seed reports %s, which the runner did not claim", invocation)
+		}
+		p.report(&eventsv1.InvocationResult{Invocation: invocation, Usage: underCaps, Output: output}, eventsv1.InvocationFinished_OUTCOME_SUCCEEDED, c.GetLeaseNumber())
+	}
+}
+
 // addStep adds plan to track as the person, depending on dependsOn
 // (decisions 0196 and 0198).
 func addStep(plan, track string, dependsOn ...string) step {
@@ -616,6 +644,20 @@ var seeds = map[string][]step{
 	},
 	// The archive step is off: no state archives.
 	"archive/off": {addPlanA, claimStep, reportOf("plan-a/1", underCaps), claimStep, reportOf("plan-a/2", underCaps)},
+	// The spec adapter reports the change valid for the plan's tree: the
+	// spec gate allows, and the plan goes on to planning (decisions 0272,
+	// 0277 and 0299).
+	"first/spec-valid": {addPlanA, claimStep, reportSpec(specValidOutput)},
+	// The spec adapter reports the change not valid: the spec gate denies,
+	// and the plan escalates, for a person to fix the spec.
+	"first/spec-not-valid": {addPlanA, claimStep, reportSpec(specNotValidOutput)},
+	// The output holds the narratives but no spec.valid: the fact cannot be
+	// read, so the gate denies (decision 0143, openspec PEX-059).
+	"first/spec-fact-missing": {addPlanA, claimStep, reportSpec(specNoFactOutput)},
+	// spec.valid is for another tree than the one the check ran on: it is
+	// not the fact of the decision's tree, so the gate denies (decision
+	// 0300).
+	"first/spec-other-tree": {addPlanA, claimStep, reportSpec(specOtherTreeOutput)},
 	"tracks/cancel-while-waiting": {
 		addStep("a1", "a"), addStep("b1", "b"), cancelStep("b1"), claimStep, reportOf("a1/1", underCaps),
 	},
@@ -656,11 +698,22 @@ func TestGoldenCases(t *testing.T) {
 	}
 }
 
+// loadCaseWorkflow returns the workflow that the cases in the directory
+// dir of goldenDir run on: the first workflow, built into the release, for
+// first, and otherwise the workflow of the directory of workflowsDir of
+// that name.
+func loadCaseWorkflow(dir string) (*workflow.Workflow, error) {
+	if dir == firstWorkflowCases {
+		return firstworkflow.Load()
+	}
+	return workflow.Load(os.DirFS(filepath.Join(workflowsDir, dir)), "workflow.txtpb")
+}
+
 // runCase runs the case name in dir: with -update it writes the case's
 // log.jsonl from its seed first, then it plays the case.
 func runCase(t *testing.T, dir, name string) {
 	t.Helper()
-	wf, err := workflow.Load(os.DirFS(filepath.Join(workflowsDir, filepath.Dir(name))), "workflow.txtpb")
+	wf, err := loadCaseWorkflow(filepath.Dir(name))
 	if err != nil {
 		t.Fatal(err)
 	}

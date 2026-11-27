@@ -80,6 +80,15 @@ func TestCoreIsEmbedded(t *testing.T) {
 	}
 }
 
+func TestGatesIsEmbedded(t *testing.T) {
+	if !strings.HasPrefix(Gates, "// SPDX-License-Identifier: Apache-2.0\n") {
+		t.Errorf("Gates does not start with the SPDX lines: %.80q", Gates)
+	}
+	if !strings.Contains(Gates, `@id("gate.spec")`) {
+		t.Error("Gates has no gate.spec")
+	}
+}
+
 func TestDefaultHardCaps(t *testing.T) {
 	caps := DefaultHardCaps()
 	if caps.Tokens <= 0 || caps.CostMicrodollars <= 0 || caps.Seconds <= 0 {

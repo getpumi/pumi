@@ -69,7 +69,7 @@ type Projection struct {
 
 // All returns the registered projections, sorted by fact.
 func All() []Projection {
-	all := []Projection{attempts(), overrides(), warningsOpen(), approvedBy(), usage(), questionsOpen()}
+	all := []Projection{attempts(), overrides(), warningsOpen(), approvedBy(), usage(), questionsOpen(), specValid()}
 	slices.SortFunc(all, func(a, b Projection) int { return strings.Compare(a.Fact, b.Fact) })
 	return all
 }
@@ -450,4 +450,48 @@ func questionsIn(req *eventsv1.InvocationRequested, res *eventsv1.InvocationResu
 		return 0, fmt.Errorf("the planning output does not parse: %w", err)
 	}
 	return int64(len(out.GetQuestions())), nil
+}
+
+// specCheckOutput is the output message of the spec check, whose
+// spec_valid is spec.valid.
+var specCheckOutput = (&workflowv1.SpecCheckOutput{}).ProtoReflect().Descriptor().FullName()
+
+// specValid projects spec.valid: the spec_valid of the spec check output
+// of the named invocation of the plan, which the spec adapter reports as a
+// check program (decisions 0272 and 0277), when it is for the head tree
+// (decision 0300). It is missing, so the spec gate denies (decision 0143),
+// when no invocation or head tree is named, when the invocation is not the
+// plan's or has no result, when its output is not a spec check output or
+// does not parse, and when the output holds no spec_valid or holds one for
+// another tree or with no spec adapter version.
+func specValid() Projection {
+	return Projection{
+		Fact:  "spec.valid",
+		Types: invocationTypes,
+		Project: func(keys Keys, evs []*cloudeventsv1.CloudEvent) (proto.Message, error) {
+			if keys.Invocation == "" || keys.HeadTree == "" {
+				return nil, nil
+			}
+			req, res, ok, err := ofPlan(keys.Plan, keys.Invocation, evs)
+			if err != nil || !ok || res == nil {
+				return nil, err
+			}
+			doc, err := events.Document(req)
+			if err != nil {
+				return nil, err
+			}
+			if protoreflect.FullName(doc.GetOutputMessage()) != specCheckOutput {
+				return nil, nil
+			}
+			var out workflowv1.SpecCheckOutput
+			if err := protojson.Unmarshal([]byte(res.GetOutput()), &out); err != nil {
+				return nil, fmt.Errorf("the invocation %s: the spec check output does not parse: %w", keys.Invocation, err)
+			}
+			v := out.GetSpecValid()
+			if v == nil || v.GetTree() != keys.HeadTree || v.GetSpecAdapterVersion() == "" {
+				return nil, nil
+			}
+			return v, nil
+		},
+	}
 }

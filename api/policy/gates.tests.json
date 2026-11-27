@@ -1,0 +1,187 @@
+[
+  {
+    "name": "the spec gate allows a valid spec",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"spec\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 0,
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "maxAttempts": 1,
+        "overrides": [],
+        "specValid": true,
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "usageBudget": {
+          "tokens": 1000000,
+          "costMicrodollars": 10000000,
+          "seconds": 3600
+        },
+        "warningsCap": 10,
+        "warningsOpen": 0
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "gate.spec"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "the spec gate denies a spec that is not valid",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"spec\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 0,
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "maxAttempts": 1,
+        "overrides": [],
+        "specValid": false,
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "usageBudget": {
+          "tokens": 1000000,
+          "costMicrodollars": 10000000,
+          "seconds": 3600
+        },
+        "warningsCap": 10,
+        "warningsOpen": 0
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "the spec gate allows a spec that is not valid when a person overrode it",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"spec\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 0,
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "maxAttempts": 1,
+        "overrides": [
+          "spec"
+        ],
+        "specValid": false,
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "usageBudget": {
+          "tokens": 1000000,
+          "costMicrodollars": 10000000,
+          "seconds": 3600
+        },
+        "warningsCap": 10,
+        "warningsOpen": 0
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "allow",
+    "reason": [
+      "gate.spec"
+    ],
+    "num_errors": 0
+  },
+  {
+    "name": "an override of another gate does not pass the spec gate",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"spec\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 0,
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "maxAttempts": 1,
+        "overrides": [
+          "scope"
+        ],
+        "specValid": false,
+        "usage": {
+          "tokens": 1000,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "usageBudget": {
+          "tokens": 1000000,
+          "costMicrodollars": 10000000,
+          "seconds": 3600
+        },
+        "warningsCap": 10,
+        "warningsOpen": 0
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [],
+    "num_errors": 0
+  },
+  {
+    "name": "the hard caps forbid the spec gate over the token cap",
+    "request": {
+      "principal": "Pumi::Kernel::\"kernel\"",
+      "action": "Pumi::Action::\"spec\"",
+      "resource": "Pumi::Plan::\"p1\"",
+      "context": {
+        "attempts": 0,
+        "hardCaps": {
+          "tokens": 5000000,
+          "costMicrodollars": 50000000,
+          "seconds": 14400
+        },
+        "maxAttempts": 1,
+        "overrides": [],
+        "specValid": true,
+        "usage": {
+          "tokens": 5000001,
+          "costMicrodollars": 2000,
+          "seconds": 60
+        },
+        "usageBudget": {
+          "tokens": 1000000,
+          "costMicrodollars": 10000000,
+          "seconds": 3600
+        },
+        "warningsCap": 10,
+        "warningsOpen": 0
+      }
+    },
+    "entities": "core.entities.json",
+    "decision": "deny",
+    "reason": [
+      "invariant.caps"
+    ],
+    "num_errors": 0
+  }
+]

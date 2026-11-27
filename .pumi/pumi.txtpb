@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The configuration of Pumi's own runs (decisions 0290, 0291 and 0307), read
+# with `pumi run --config .pumi/pumi.txtpb` from a clone of getpumi/pumi. The
+# schema is pumi.config.v1.Config (decision 0207); a path in it is relative
+# to this file's directory.
+#
+# The two adapters are built at the commits below, from a clone of each
+# repository at that commit with no changes, with the toolchain of its
+# go.mod (decision 0308):
+#
+#   CGO_ENABLED=0 go build -trimpath -o <pumi clone>/bin/adapters/ ./cmd/...
+#
+# A -trimpath build has the same SHA-256 in any directory, so the hashes
+# below hold for every such build on linux/amd64.
+#
+#   getpumi/adapter-claude-code a34d525e6e53b4df09218c512f006045fd43f85b
+#   getpumi/adapter-openspec    1473aaa4b53414337d88c0174834514d47e282b4
+#
+# The Claude Code adapter runs the claude on the PATH, which must be the
+# version that getpumi/adapter-claude-code's .devcontainer/install-tools.sh
+# pins, and the OpenSpec adapter runs the openspec on the PATH, which must be
+# the version that getpumi/adapter-openspec's .devcontainer/openspec pins.
+
+# The spec-only workflow (decision 0288). For a run through planning,
+# implementing and the archive step (decision 0293), name
+# "workflows/build/workflow.txtpb" here.
+workflow: "workflows/spec/workflow.txtpb"
+trunk: "main"
+
+# The base of every invocation document, the project, the hard caps and the
+# settings (decision 0310).
+base {
+  input { repo: "pumi" }
+  capabilities {
+    # The runner refuses a write outside these paths (decision 0159).
+    write_paths: ["api/**", "cmd/**", "conformance/**", "internal/**", "openspec/**", "go.mod", "go.sum"]
+    commands: [
+      "make build", "make test", "make lint", "make imports", "make spdx", "make generate",
+      "go test", "go build", "go vet", "gofmt"
+    ]
+    network {
+      access: ACCESS_HOSTS
+      hosts: ["proxy.golang.org", "sum.golang.org"]
+    }
+    tools: [TOOL_KIND_READ, TOOL_KIND_EDIT, TOOL_KIND_RUN_COMMANDS]
+  }
+  budget { tokens: 2000000 cost_microdollars: 10000000 seconds: 1800 }
+}
+
+project {
+  name: "pumi"
+  protected_paths: [
+    "AGENTS.md", "CLAUDE.md", "LICENSE", "NOTICE",
+    ".github/**", ".devcontainer/**", ".pumi/**", "tools/**",
+    "openspec/specs/**", "openspec/changes/*/proposal.md"
+  ]
+  check_commands: ["make build", "make test", "make lint", "make imports", "make spdx"]
+  convention_files: ["AGENTS.md"]
+  archive_step: ARCHIVE_STEP_AFTER_IMPLEMENTING
+}
+
+# The release's default hard caps, written out.
+hard_caps { tokens: 5000000 cost_microdollars: 50000000 seconds: 14400 }
+
+settings {
+  parallelism: 1
+}
+
+models {
+  # Claude Code on the sign-in path, in the thread's cloud container
+  # (decisions 0240 and 0291).
+  adapters {
+    key: "claude-code"
+    value {
+      executable: "../bin/adapters/adapter-claude-code"
+      sha256: "f951a949fd8d39d2a50fe7f20a15563741a7ecbdc52d01b3314d0dfcc2063926"
+      credential_mode: CREDENTIAL_MODE_SIGN_IN
+    }
+  }
+  # The planner on Opus and the implementer on Sonnet (decision 0309). The
+  # sign-in path has no gateway, so there is no fallback.
+  roles {
+    key: "planner"
+    value { adapter: "claude-code" model: "claude-opus-5-5" }
+  }
+  roles {
+    key: "implementer"
+    value { adapter: "claude-code" model: "claude-sonnet-5-5" }
+  }
+  check_adapter: "claude-code"
+}
+
+# The OpenSpec adapter as the spec check program (decision 0272).
+checks {
+  key: "spec"
+  value {
+    executable: "../bin/adapters/adapter-openspec"
+    sha256: "09efe96c0edf99a58ba17b93702eb80dc7b925f16788606285206dcd4098fc3b"
+  }
+}

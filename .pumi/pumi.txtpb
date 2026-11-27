@@ -15,7 +15,7 @@
 # A -trimpath build has the same SHA-256 in any directory, so the hashes
 # below hold for every such build on linux/amd64.
 #
-#   getpumi/adapter-claude-code a34d525e6e53b4df09218c512f006045fd43f85b
+#   getpumi/adapter-claude-code 2f95c90de88e7cc80213693ed7af4e1ee302a4dd
 #   getpumi/adapter-openspec    1473aaa4b53414337d88c0174834514d47e282b4
 #
 # The Claude Code adapter runs the claude on the PATH, which must be the
@@ -80,7 +80,7 @@ models {
     key: "claude-code"
     value {
       executable: "../bin/adapters/adapter-claude-code"
-      sha256: "f951a949fd8d39d2a50fe7f20a15563741a7ecbdc52d01b3314d0dfcc2063926"
+      sha256: "53d0178c52138c6e2d15d0d86dab06f7fa61af2056b53bbf3a1b96c907de9f17"
       credential_mode: CREDENTIAL_MODE_SIGN_IN
     }
   }

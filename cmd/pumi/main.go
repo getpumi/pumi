@@ -43,5 +43,8 @@ func execute(ctx context.Context, dir string, args []string, stdout, stderr io.W
 		Run: func(ctx context.Context, config string, out io.Writer) error {
 			return runEmbedded(ctx, dir, config, out)
 		},
+		Branch: func(ctx context.Context, b cli.Branch) (string, error) {
+			return writeBranch(ctx, dir, b)
+		},
 	})
 }

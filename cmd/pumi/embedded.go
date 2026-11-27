@@ -239,7 +239,7 @@ func runEmbedded(ctx context.Context, dir, configPath string, out io.Writer) err
 			return kernel.Run(ctx, kernel.Config{
 				Client: kernelClient, Workflow: wf, Base: cfg.file.GetBase(),
 				Parallelism: cfg.plane().Settings.Parallelism,
-				Trunk:       func(ctx context.Context) (string, error) { return trunkTree(ctx, dir, cfg.file.GetTrunk()) },
+				Trunk:       func(ctx context.Context) (kernel.TrunkHead, error) { return trunkHead(ctx, dir, cfg.file.GetTrunk()) },
 				Project:     cfg.project(),
 				HasFile:     func(ctx context.Context, tree, path string) (bool, error) { return hasFile(ctx, dir, tree, path) },
 			})
@@ -286,24 +286,42 @@ func newClients(svc *controlplane.Service) (controlplanev1connect.ControlPlaneSe
 	return controlplanev1connect.NewControlPlaneServiceClient(k), runnerv1connect.NewRunnerServiceClient(r), nil
 }
 
-// trunkTree returns the tree of the branch trunk of the clone that dir is
-// in (decision 0209). git cat-file reads the name on its standard input,
-// so its arguments are constant (gosec G204).
-func trunkTree(ctx context.Context, dir, trunk string) (string, error) {
+// trunkHead returns the commit and tree of the branch trunk of the clone
+// that dir is in (decisions 0209 and 0313). The tree is read from the commit, so that both are of the same commit
+// also when the branch moves between the two reads. git cat-file reads the
+// names on its standard input, so its arguments are constant (gosec G204).
+func trunkHead(ctx context.Context, dir, trunk string) (kernel.TrunkHead, error) {
+	commit, err := objectOf(ctx, dir, "refs/heads/"+trunk, "commit")
+	if err != nil {
+		return kernel.TrunkHead{}, err
+	}
+	if commit == "" {
+		return kernel.TrunkHead{}, fmt.Errorf("the clone has no branch %s, the trunk of the configuration file", trunk)
+	}
+	tree, err := objectOf(ctx, dir, commit+"^{tree}", "tree")
+	if err != nil {
+		return kernel.TrunkHead{}, err
+	}
+	return kernel.TrunkHead{Tree: tree, Commit: commit}, nil
+}
+
+// objectOf returns the object that name names in the clone that dir is
+// in, or "" when it names no object of the type kind.
+func objectOf(ctx context.Context, dir, name, kind string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", "cat-file", "--batch-check=%(objectname) %(objecttype)")
 	cmd.Dir = dir
-	cmd.Stdin = strings.NewReader("refs/heads/" + trunk + "^{tree}\n")
+	cmd.Stdin = strings.NewReader(name + "\n")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git cat-file: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	name, kind, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
-	if kind != "tree" {
-		return "", fmt.Errorf("the clone has no branch %s, the trunk of the configuration file", trunk)
+	object, typ, _ := strings.Cut(strings.TrimSpace(string(out)), " ")
+	if typ != kind {
+		return "", nil
 	}
-	return name, nil
+	return object, nil
 }
 
 // hasFile reports whether the tree of the clone at dir holds a file at

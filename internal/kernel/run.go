@@ -63,11 +63,13 @@ type Config struct {
 	// event up to head, the head of the log, and waits for more. The golden
 	// cases use it to know when the kernel waits (decision 0183).
 	Idle func(head uint64)
-	// Trunk, when set, returns the tree of the trunk branch. The kernel
-	// calls it when it starts a plan, and that tree is the input tree of
-	// the plan's invocations, in place of Base's (decision 0209). After a
-	// restart a plan keeps the tree of its first invocation.requested.
-	Trunk func(ctx context.Context) (string, error)
+	// Trunk, when set, returns the tree and commit of the trunk branch.
+	// The kernel calls it when it starts a plan, and that tree is the
+	// plan's base tree and the input tree of its first invocation, in place
+	// of Base's (decision 0209); the commit is its base commit (decision
+	// 0313). After a restart a plan keeps the base tree and commit of its
+	// first invocation.requested.
+	Trunk func(ctx context.Context) (TrunkHead, error)
 	// Project is the project section of the configuration, which the
 	// kernel adds to the task of every agent run (decision 0250).
 	Project Project
@@ -113,6 +115,14 @@ type kernel struct {
 	// refusals holds the refusals that the harness reported in the
 	// invocation.result of each invocation that has any (decision 0249).
 	refusals map[string][]*harnessv1.Refusal
+	// trees holds the tree of each invocation's result that carries one,
+	// until its invocation.finished says whether it moves the plan's tree
+	// (decision 0315).
+	trees map[string]string
+	// bases holds the base tree and commit of each plan's first
+	// invocation.requested in the log, which a plan keeps after a restart
+	// (decisions 0209 and 0313).
+	bases map[string]TrunkHead
 	// documents holds the document of each invocation that the log
 	// requests, and resolved the external actions in doubt whose
 	// invocation.finished the kernel appended.
@@ -157,10 +167,14 @@ type planRun struct {
 	invocation string
 	requested  string
 	requests   int
-	// tree is the input tree of the plan's invocations: the trunk's tree
-	// when the plan started (decision 0209), or empty when the wiring
-	// gives no trunk.
-	tree string
+	// tree is the plan's base tree: the trunk's tree when the plan started
+	// (decision 0209), or empty when the wiring gives no trunk. commit is
+	// the trunk's commit of that tree (decision 0313).
+	tree   string
+	commit string
+	// head is the newest tree that a result of the plan carries, the input
+	// tree of its later invocations, or empty before any (decision 0315).
+	head string
 	// declared are the declared paths of the plan's last planning output,
 	// and planned is whether it has one (decision 0250).
 	declared []string
@@ -174,6 +188,12 @@ type planRun struct {
 	// (decisions 0279 and 0294).
 	narratives *workflowv1.SpecCheckOutput
 	coverage   *workflowv1.CoverageReport
+}
+
+// TrunkHead is the head of the trunk branch: its commit and the commit's
+// tree (decisions 0209 and 0313).
+type TrunkHead struct {
+	Tree, Commit string
 }
 
 // Run runs every plan that a plan.added of the log adds on the workflow
@@ -273,6 +293,7 @@ func newKernel(cfg Config) (*kernel, error) {
 	k := &kernel{
 		cfg: cfg, states: map[string]*workflowv1.State{}, plans: map[string]*planRun{},
 		invocations: map[string]*planRun{}, finished: map[string]bool{}, refusals: map[string][]*harnessv1.Refusal{},
+		trees: map[string]string{}, bases: map[string]TrunkHead{},
 		documents: map[string]*runnerv1.Invocation{}, resolved: map[string]bool{}, ended: map[string]bool{}, firedBy: map[string]fired{},
 		requestedBy: map[string]bool{}, decisions: map[string][]decision{}, positionOf: map[string]uint64{},
 	}
@@ -401,6 +422,7 @@ func (k *kernel) index(entry *controlplanev1.Entry) {
 		if e.GetSource() == Source {
 			k.requestedBy[cause] = true
 		}
+		k.indexBase(e)
 	case events.TypeInvocationFinished:
 		var f eventsv1.InvocationFinished
 		if e.GetSource() == Source && unpack(e, &f) == nil {
@@ -414,6 +436,29 @@ func (k *kernel) index(entry *controlplanev1.Entry) {
 			})
 		}
 	}
+}
+
+// indexBase records the base tree and commit of the invocation.requested
+// e when it is its plan's first: its base tree, or its input tree in a log
+// written before decision 0285, and its base commit.
+func (k *kernel) indexBase(e *cloudeventsv1.CloudEvent) {
+	var req eventsv1.InvocationRequested
+	if unpack(e, &req) != nil {
+		return
+	}
+	if _, ok := k.bases[req.GetPlan()]; ok {
+		return
+	}
+	doc, err := events.Document(&req)
+	if err != nil {
+		return
+	}
+	in := doc.GetInput()
+	base := TrunkHead{Tree: in.GetBaseTree(), Commit: doc.GetBaseCommit()}
+	if base.Tree == "" {
+		base.Tree = in.GetTree()
+	}
+	k.bases[req.GetPlan()] = base
 }
 
 // subjectOf returns the subject attribute of e.
@@ -526,9 +571,6 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 			r.invocation, r.requested = req.GetInvocation(), e.GetId()
 			r.requests++
 			k.invocations[req.GetInvocation()] = r
-			if r.tree == "" && k.cfg.Trunk != nil {
-				r.tree = doc.GetInput().GetTree()
-			}
 		}
 		return nil
 	},
@@ -538,6 +580,14 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 			return err
 		}
 		k.finished[f.GetInvocation()] = true
+		// Only a result that fires the result trigger moves the plan's
+		// tree (decisions 0235 and 0315).
+		tree, ok := k.trees[f.GetInvocation()]
+		delete(k.trees, f.GetInvocation())
+		succeeded := f.GetOutcome() == eventsv1.InvocationFinished_OUTCOME_SUCCEEDED
+		if r, found := k.invocations[f.GetInvocation()]; found && ok && succeeded {
+			r.head = tree
+		}
 		return nil
 	},
 	events.TypeInvocationResult: func(k *kernel, e *cloudeventsv1.CloudEvent) error {
@@ -547,6 +597,9 @@ var followers = map[string]func(k *kernel, e *cloudeventsv1.CloudEvent) error{
 		}
 		if len(res.GetRefusals()) > 0 {
 			k.refusals[res.GetInvocation()] = res.GetRefusals()
+		}
+		if res.GetTree() != "" {
+			k.trees[res.GetInvocation()] = res.GetTree()
 		}
 		return k.followOutput(&res)
 	},
@@ -728,20 +781,26 @@ func (r *planRun) begin(ctx context.Context) error {
 	return r.fire(ctx, &cloudeventsv1.CloudEvent{Id: r.added}, string(workflow.Entered), ts, nil)
 }
 
-// readTrunk reads the trunk's tree for the plan, unless the wiring gives
-// no trunk or the plan has its tree (decision 0209).
+// readTrunk reads the trunk's tree and commit for the plan, unless the
+// wiring gives no trunk or the plan has its tree. A plan that the log has
+// an invocation.requested of keeps that invocation's base, also when the
+// trunk moved before a restart (decisions 0209 and 0313).
 func (r *planRun) readTrunk(ctx context.Context) error {
 	if r.tree != "" || r.k.cfg.Trunk == nil {
 		return nil
 	}
-	tree, err := r.k.cfg.Trunk(ctx)
+	if base, ok := r.k.bases[r.plan]; ok {
+		r.tree, r.commit = base.Tree, base.Commit
+		return nil
+	}
+	head, err := r.k.cfg.Trunk(ctx)
 	if err != nil {
 		return fmt.Errorf("cannot read the trunk's tree for the plan %s: %w", r.plan, err)
 	}
-	if tree == "" {
+	if head.Tree == "" {
 		return fmt.Errorf("the trunk has no tree for the plan %s", r.plan)
 	}
-	r.tree = tree
+	r.tree, r.commit = head.Tree, head.Commit
 	return nil
 }
 
@@ -956,12 +1015,18 @@ func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Inv
 	if doc.Input == nil {
 		doc.Input = &harnessv1.Input{}
 	}
-	if r.tree != "" {
+	// An invocation starts from the plan's last result tree, or from its
+	// base tree before any result carries one (decisions 0209 and 0315).
+	switch {
+	case r.head != "":
+		doc.Input.Tree = r.head
+	case r.tree != "":
 		doc.Input.Tree = r.tree
 	}
 	// The base tree is the plan's tree, which a check such as the archive
-	// step reads from the workspace's .git (decision 0285).
-	doc.Input.BaseTree = r.tree
+	// step reads from the workspace's .git (decision 0285), and the base
+	// commit its trunk commit, the parent of pumi branch (decision 0313).
+	doc.Input.BaseTree, doc.BaseCommit = r.tree, r.commit
 	doc.Input.Task = task
 	if inv.GetKind() == workflowv1.Invoke_KIND_HARNESS {
 		text, err := r.agentTask(ctx, task, inv, doc.GetInput().GetTree())

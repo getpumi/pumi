@@ -30,6 +30,22 @@ type Env struct {
 	// Run runs embedded mode with the configuration file config until ctx
 	// is done, writing the runner's output to out.
 	Run func(ctx context.Context, config string, out io.Writer) error
+	// Branch writes b's tree as a commit with b's parent and message on
+	// the new branch b.Name of the clone, and returns the commit (decision
+	// 0289). It fails when the branch exists.
+	Branch func(ctx context.Context, b Branch) (string, error)
+}
+
+// Branch is the commit that pumi branch writes on a new branch: a plan's
+// last tree, with the plan's base commit as its parent (decisions 0289,
+// 0313 and 0314).
+type Branch struct {
+	// Name is the branch's name, without refs/heads/.
+	Name string
+	// Tree is the commit's tree, and Parent its parent.
+	Tree, Parent string
+	// Message is the commit's message.
+	Message string
 }
 
 // Session is the person's session with the control plane.
@@ -60,6 +76,10 @@ Commands:
                                        answer a plan's open escalation
   log [--config <file>] <invocation>   show an invocation's log: its stored log,
                                        or the recent output of a running one
+  branch [--config <file>] <plan> <branch>
+                                       write the plan's last tree as a commit on a new
+                                       branch, with the trunk commit it started from
+                                       as the parent
   role reset [--config <file>] <role>  switch a model role back from its fallback
   version                              show pumi's version
 
@@ -119,6 +139,9 @@ var commands = map[string]func(ctx context.Context, name string, args []string, 
 			return fmt.Errorf("pumi %s takes the command reset: %w", name, errUsage)
 		}
 		return personCommand(1, nil, resetRole)(ctx, name+" reset", args[1:], env)
+	},
+	"branch": func(ctx context.Context, name string, args []string, env Env) error {
+		return personCommand(2, nil, writeBranch(env.Branch))(ctx, name, args, env)
 	},
 	"log": func(ctx context.Context, name string, args []string, env Env) error {
 		return personCommand(1, nil, func(ctx context.Context, s *Session, args []string, w io.Writer) error {

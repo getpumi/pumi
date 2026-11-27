@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The OpenSpec project of Pumi's own changes and living specs (decision
+# 0286). The living specs in specs/ grow only from archived changes.
+schema: spec-driven

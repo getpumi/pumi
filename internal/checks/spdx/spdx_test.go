@@ -65,6 +65,14 @@ func TestClassify(t *testing.T) {
 		{"script.py", Unknown},
 		{"Makefile.old", Unknown},
 		{"devcontainer.json", Exempt},
+		// The living specs, which openspec archive writes (decision 0311),
+		// and only those: a change's files carry the lines.
+		{"openspec/specs/kernel/spec.md", Exempt},
+		{"openspec/specs/README.md", Exempt},
+		{"openspec/changes/add-x/proposal.md", HTML},
+		{"openspec/changes/archive/2026-11-27-add-x/specs/kernel/spec.md", HTML},
+		{"openspec/config.yaml", Hash},
+		{"internal/openspec/specs/kernel/spec.md", HTML},
 	}
 	for _, tt := range tests {
 		if got := Classify(tt.path); got != tt.want {

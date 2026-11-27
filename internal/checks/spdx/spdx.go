@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"path"
 	"regexp"
+	"strings"
 )
 
 // Style is how a file carries the SPDX lines, or that it is exempt or of a
@@ -82,6 +83,16 @@ var exemptPaths = map[string]bool{
 	"api/proto/io/cloudevents/v1/cloudevents.proto": true,
 }
 
+// exemptDirs are the directories, by their path from the repository root,
+// whose files, at any depth, do not carry the SPDX lines.
+var exemptDirs = []string{
+	// The living specs of Pumi's own changes (decision 0286). openspec
+	// archive writes a new living spec without the lines, and the archive
+	// step checks on a later round that the archive is unchanged, so the
+	// lines cannot be added after it (decision 0311).
+	"openspec/specs/",
+}
+
 // claudeFile is the file that holds only the import of AGENTS.md, and
 // claudeContent is that content.
 const (
@@ -146,6 +157,11 @@ var extensionStyles = map[string]Style{
 func Classify(name string) Style {
 	if exemptPaths[name] {
 		return Exempt
+	}
+	for _, dir := range exemptDirs {
+		if strings.HasPrefix(name, dir) {
+			return Exempt
+		}
 	}
 	if s, ok := pathStyles[name]; ok {
 		return s

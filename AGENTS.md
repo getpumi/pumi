@@ -17,6 +17,7 @@ The design lives in [getpumi/design](https://github.com/getpumi/design). Read it
 - Set the item to In Review when you open the pull request.
 - Close the issue through the pull request description ("Closes #n"). Never put a closing keyword in a commit pushed directly to `main`, because it closes the issue at once.
 - The issue's acceptance criteria are the specification. Do not commit plans, specs, design notes or other files that record how a change was worked out; the pull request description holds the plan and the evidence. Some agent tools commit such files by default, such as the Superpowers brainstorming and plan-writing skills under `docs/superpowers/`. This holds until [design #39](https://github.com/getpumi/design/issues/39) decides who owns Pumi's own specs ([0120](https://github.com/getpumi/design/blob/main/decisions/0120-no-process-files.md)).
+- That rule does not cover `openspec/`, which holds Pumi's own OpenSpec changes and living specs ([0286](https://github.com/getpumi/design/blob/main/decisions/0286-pumi-changes-in-the-pumi-repository.md)). When an issue links to an OpenSpec change in `openspec/changes/`, the change's requirements and scenarios are the specification of the work, in place of acceptance criteria ([0312](https://github.com/getpumi/design/blob/main/decisions/0312-an-issues-change-is-its-specification.md)).
 
 ## Layout
 
@@ -34,6 +35,8 @@ In the core module:
 - `internal/checks/<name>/` holds the logic of the project's own checks, and `internal/checks/cmd/<name>/` holds the `main` package that make runs with `go run`. The checks are not part of the binaries ([0107](https://github.com/getpumi/design/blob/main/decisions/0107-checks-in-internal-checks.md)).
 - `tools/` holds one module file per pinned Go tool, run with `go tool -modfile` ([0086](https://github.com/getpumi/design/blob/main/decisions/0086-tool-pinning.md)).
 - `.pumi/` holds the plain JSON files that the checks read ([0112](https://github.com/getpumi/design/blob/main/decisions/0112-check-config-json.md)).
+- `.pumi/pumi.txtpb` is the configuration of Pumi's own runs, and `.pumi/workflows/` holds their two workflow files: `spec`, with only the spec state, and `build`, with the spec, planning, implementing and archive states ([0288](https://github.com/getpumi/design/blob/main/decisions/0288-spec-check-through-pumi-run.md), [0293](https://github.com/getpumi/design/blob/main/decisions/0293-workflow-of-pumis-own-runs.md), [0307](https://github.com/getpumi/design/blob/main/decisions/0307-own-run-files-in-dot-pumi.md)). The file's comment gives the commits of the two adapters it names and how to build them into `bin/adapters/` with the SHA-256 it pins ([0308](https://github.com/getpumi/design/blob/main/decisions/0308-own-adapters-pinned-by-reproducible-builds.md)).
+- `openspec/` is the OpenSpec project of Pumi's own changes; its living specs in `openspec/specs/` grow only from archived changes ([0286](https://github.com/getpumi/design/blob/main/decisions/0286-pumi-changes-in-the-pumi-repository.md)).
 
 `tools/`, `.pumi/` and the other check targets of the Makefile are added by later issues in epic E1 ([#1](https://github.com/getpumi/pumi/issues/1)).
 

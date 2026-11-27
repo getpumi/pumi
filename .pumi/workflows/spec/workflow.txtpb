@@ -1,0 +1,107 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: The Pumi Authors
+
+# The workflow of the spec check on Pumi's own changes (decision 0288): only
+# the first workflow's spec state. The OpenSpec adapter, as the check
+# program that the configuration names for spec (decision 0272), validates
+# the plan's change, and the spec gate decides from its spec.valid
+# (decisions 0277 and 0299). A valid change ends the plan in done; an
+# invalid one escalates, and a person fixes the change or overrides the
+# gate. Nothing merges, so neither final state marks the plan merged
+# (decision 0197).
+name: "pumi-spec"
+version: "1"
+initial: "spec"
+
+# The superstate that holds every state of a plan that is not finished. A
+# cancel.requested for the plan goes to cancelled from any of them.
+states {
+  name: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.cancel.requested" }
+    target: "cancelled"
+    action: "cancel"
+  }
+}
+
+# Spec (initial): to done on the spec gate; otherwise escalate. A failed
+# check runs again while it has attempts left.
+states {
+  name: "spec"
+  parent: "active"
+  gate: "spec"
+  invoke {
+    role: ROLE_GATE
+    kind: KIND_CHECK
+    component: "spec"
+    task: "validate-spec"
+    output_message: "pumi.workflow.v1.SpecCheckOutput"
+  }
+  transitions {
+    trigger { result {} }
+    target: "done"
+    action: "spec"
+  }
+  transitions {
+    trigger { result {} }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { cap_reached {} }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "spec"
+    action: "retry"
+  }
+  transitions {
+    trigger { failed {} }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+}
+
+# Spec, escalated: wait for a person. An override goes on to done, decided
+# again by the spec gate, which now reads the override. An answer goes back
+# to spec, decided by resume, and the adapter validates the change again.
+states {
+  name: "spec-escalated"
+  parent: "active"
+  wait {}
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "done"
+    action: "spec"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.override.recorded" }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "spec"
+    action: "resume"
+  }
+  transitions {
+    trigger { event: "dev.getpumi.escalation.resolved" }
+    target: "spec-escalated"
+    action: "escalate"
+  }
+}
+
+# Done: final. The change passed the spec gate.
+states {
+  name: "done"
+  final {}
+}
+
+# Cancelled: final.
+states {
+  name: "cancelled"
+  final {}
+}

@@ -95,33 +95,45 @@ func TestTheOwnWorkflowsLoad(t *testing.T) {
 			if err != nil {
 				t.Fatalf("workflow.Load = %v, want the workflow loaded", err)
 			}
-			var names []string
-			for _, s := range wf.Definition().GetStates() {
-				if s.GetName() != "active" {
-					names = append(names, s.GetName())
-				}
-			}
-			slices.Sort(names)
-			want := slices.Sorted(slices.Values(c.stages))
-			if !slices.Equal(names, want) {
-				t.Errorf("the states are %q, want %q", names, want)
+			if got, want := stateNames(wf), slices.Sorted(slices.Values(c.stages)); !slices.Equal(got, want) {
+				t.Errorf("the states are %q, want %q", got, want)
 			}
 			if err := checkPrograms(cfg, wf); err != nil {
 				t.Errorf("checkPrograms = %v, want a program for each check", err)
 			}
-			// A decision about a gate with no maxAttempts denies (decision
-			// 0143), and a retry from a state with no gate reads the
-			// in-doubt attempts (decisions 0201 and 0237).
-			attempts := cfg.file.GetSettings().GetMaxAttempts()
-			for _, s := range wf.Definition().GetStates() {
-				if g := s.GetGate(); g != "" && attempts[g] <= 0 {
-					t.Errorf("the state %s has the gate %s, for which the configuration sets no max_attempts", s.GetName(), g)
-				}
-				if s.GetGate() == "" && s.GetInvoke() != nil && attempts["in-doubt"] <= 0 {
-					t.Errorf("the state %s retries with the in-doubt attempts, for which the configuration sets no max_attempts", s.GetName())
-				}
-			}
+			checkAttempts(t, cfg, wf)
 		})
+	}
+}
+
+// stateNames returns the names of the states of wf, sorted, without the
+// superstate active.
+func stateNames(wf *workflow.Workflow) []string {
+	var names []string
+	for _, s := range wf.Definition().GetStates() {
+		if s.GetName() != "active" {
+			names = append(names, s.GetName())
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+// checkAttempts fails the test unless the configuration sets max_attempts
+// for each gate of wf and, when a state with no gate starts an invocation,
+// for in-doubt. A decision about a gate with no maxAttempts denies
+// (decision 0143), and a retry from a state with no gate reads the
+// in-doubt attempts (decisions 0201 and 0237).
+func checkAttempts(t *testing.T, cfg *config, wf *workflow.Workflow) {
+	t.Helper()
+	attempts := cfg.file.GetSettings().GetMaxAttempts()
+	for _, s := range wf.Definition().GetStates() {
+		if g := s.GetGate(); g != "" && attempts[g] <= 0 {
+			t.Errorf("the state %s has the gate %s, for which the configuration sets no max_attempts", s.GetName(), g)
+		}
+		if s.GetGate() == "" && s.GetInvoke() != nil && attempts["in-doubt"] <= 0 {
+			t.Errorf("the state %s retries with the in-doubt attempts, for which the configuration sets no max_attempts", s.GetName())
+		}
 	}
 }
 

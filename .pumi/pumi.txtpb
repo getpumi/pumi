@@ -66,6 +66,11 @@ hard_caps { tokens: 5000000 cost_microdollars: 50000000 seconds: 14400 }
 
 settings {
   parallelism: 1
+  # A decision about a gate with no max_attempts denies (decision 0143), and
+  # a retry from a state with no gate reads in-doubt (decisions 0201 and
+  # 0237): one retry each before the plan escalates (decision 0310).
+  max_attempts { key: "spec" value: 2 }
+  max_attempts { key: "in-doubt" value: 2 }
 }
 
 models {

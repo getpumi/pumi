@@ -52,6 +52,16 @@ const (
 	// adapterReportsAFile writes outputFileContent to outputFilePath and
 	// reports it as an output file.
 	adapterReportsAFile = "reports a file"
+	// adapterWritesAFile writes writtenFileContent to writtenFilePath, so
+	// that its result carries a tree.
+	adapterWritesAFile = "writes a file"
+)
+
+// The file of the mode adapterWritesAFile, under a path that a test clone
+// made with withWritePaths lets the run write.
+const (
+	writtenFilePath    = "src/written.txt"
+	writtenFileContent = "written by the adapter\n"
 )
 
 // The output file of the mode adapterReportsAFile, in a directory that the
@@ -125,6 +135,13 @@ func testAdapter(mode string) int {
 			panic(err)
 		}
 		files = []string{outputFilePath}
+	case adapterWritesAFile:
+		if err := os.MkdirAll(filepath.Dir(writtenFilePath), 0o750); err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(writtenFilePath, []byte(writtenFileContent), 0o600); err != nil {
+			panic(err)
+		}
 	case adapterOverCaps:
 	case adapterWaits:
 		_, _ = in.ReadString('\n')

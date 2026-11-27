@@ -184,6 +184,11 @@
       "additionalProperties": false,
       "description": "Input is the input of an invocation (decision 0024).",
       "patternProperties": {
+        "^(base_commit)$": {
+          "default": "",
+          "description": "The commit of the trunk whose tree is base_tree, when the plan started\n (decision 0313), or empty when the wiring gives no trunk. pumi branch\n writes the plan's last tree as a commit with this parent (decision\n 0314).",
+          "type": "string"
+        },
         "^(base_tree)$": {
           "default": "",
           "description": "The plan's base tree: the trunk's tree when the plan started (decision\n 0209), or empty when the wiring gives no trunk. The runner puts its\n objects in the workspace's .git, with the ref refs/pumi/base pointing\n at it, so that a check such as the archive step can read the base\n (decision 0285).",
@@ -191,6 +196,11 @@
         }
       },
       "properties": {
+        "baseCommit": {
+          "default": "",
+          "description": "The commit of the trunk whose tree is base_tree, when the plan started\n (decision 0313), or empty when the wiring gives no trunk. pumi branch\n writes the plan's last tree as a commit with this parent (decision\n 0314).",
+          "type": "string"
+        },
         "baseTree": {
           "default": "",
           "description": "The plan's base tree: the trunk's tree when the plan started (decision\n 0209), or empty when the wiring gives no trunk. The runner puts its\n objects in the workspace's .git, with the ref refs/pumi/base pointing\n at it, so that a check such as the archive step can read the base\n (decision 0285).",

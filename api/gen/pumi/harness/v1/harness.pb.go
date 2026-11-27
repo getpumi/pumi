@@ -599,7 +599,12 @@ type Input struct {
 	// objects in the workspace's .git, with the ref refs/pumi/base pointing
 	// at it, so that a check such as the archive step can read the base
 	// (decision 0285).
-	BaseTree      string `protobuf:"bytes,4,opt,name=base_tree,json=baseTree,proto3" json:"base_tree,omitempty"`
+	BaseTree string `protobuf:"bytes,4,opt,name=base_tree,json=baseTree,proto3" json:"base_tree,omitempty"`
+	// The commit of the trunk whose tree is base_tree, when the plan started
+	// (decision 0313), or empty when the wiring gives no trunk. pumi branch
+	// writes the plan's last tree as a commit with this parent (decision
+	// 0314).
+	BaseCommit    string `protobuf:"bytes,5,opt,name=base_commit,json=baseCommit,proto3" json:"base_commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -658,6 +663,13 @@ func (x *Input) GetTask() string {
 func (x *Input) GetBaseTree() string {
 	if x != nil {
 		return x.BaseTree
+	}
+	return ""
+}
+
+func (x *Input) GetBaseCommit() string {
+	if x != nil {
+		return x.BaseCommit
 	}
 	return ""
 }
@@ -1453,12 +1465,14 @@ const file_pumi_harness_v1_harness_proto_rawDesc = "" +
 	"\n" +
 	"KIND_CHECK\x10\x01\x12\x18\n" +
 	"\x14KIND_EXTERNAL_ACTION\x10\x02\x12\x12\n" +
-	"\x0eKIND_AGENT_RUN\x10\x03\"`\n" +
+	"\x0eKIND_AGENT_RUN\x10\x03\"\x81\x01\n" +
 	"\x05Input\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x12\n" +
 	"\x04tree\x18\x02 \x01(\tR\x04tree\x12\x12\n" +
 	"\x04task\x18\x03 \x01(\tR\x04task\x12\x1b\n" +
-	"\tbase_tree\x18\x04 \x01(\tR\bbaseTree\"\x89\x04\n" +
+	"\tbase_tree\x18\x04 \x01(\tR\bbaseTree\x12\x1f\n" +
+	"\vbase_commit\x18\x05 \x01(\tR\n" +
+	"baseCommit\"\x89\x04\n" +
 	"\fCapabilities\x12\x1f\n" +
 	"\vwrite_paths\x18\x01 \x03(\tR\n" +
 	"writePaths\x12\x1a\n" +

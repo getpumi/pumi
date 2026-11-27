@@ -183,7 +183,7 @@ type pumi struct {
 	// claims are the Claim responses by invocation.
 	claims map[string]*runnerv1.ClaimResponse
 	// trunk, when set, is the kernel's Trunk (decision 0209).
-	trunk func(context.Context) (string, error)
+	trunk func(context.Context) (kernel.TrunkHead, error)
 }
 
 // newClone creates a git repository with one commit and returns its

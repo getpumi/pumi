@@ -641,11 +641,6 @@
       "additionalProperties": false,
       "description": "Input is the input of an invocation (decision 0024).",
       "patternProperties": {
-        "^(base_commit)$": {
-          "default": "",
-          "description": "The commit of the trunk whose tree is base_tree, when the plan started\n (decision 0313), or empty when the wiring gives no trunk. pumi branch\n writes the plan's last tree as a commit with this parent (decision\n 0314).",
-          "type": "string"
-        },
         "^(base_tree)$": {
           "default": "",
           "description": "The plan's base tree: the trunk's tree when the plan started (decision\n 0209), or empty when the wiring gives no trunk. The runner puts its\n objects in the workspace's .git, with the ref refs/pumi/base pointing\n at it, so that a check such as the archive step can read the base\n (decision 0285).",
@@ -653,11 +648,6 @@
         }
       },
       "properties": {
-        "baseCommit": {
-          "default": "",
-          "description": "The commit of the trunk whose tree is base_tree, when the plan started\n (decision 0313), or empty when the wiring gives no trunk. pumi branch\n writes the plan's last tree as a commit with this parent (decision\n 0314).",
-          "type": "string"
-        },
         "baseTree": {
           "default": "",
           "description": "The plan's base tree: the trunk's tree when the plan started (decision\n 0209), or empty when the wiring gives no trunk. The runner puts its\n objects in the workspace's .git, with the ref refs/pumi/base pointing\n at it, so that a check such as the archive step can read the base\n (decision 0285).",
@@ -750,6 +740,11 @@
       "additionalProperties": false,
       "description": "Invocation is the invocation document: a self-contained record of one\n invocation, with credential handles but never secrets (decision 0024).\n The kernel writes it, and invocation.requested records its hash. The\n runner derives the harness invocation (pumi.harness.v1.Invocation) from it\n (decision 0158).",
       "patternProperties": {
+        "^(base_commit)$": {
+          "default": "",
+          "description": "The trunk's commit when the plan started, whose tree is the input's\n base_tree (decisions 0313 and 0316), or empty when the wiring gives no\n trunk. It stays in the runner's document: the harness invocation that\n an adapter reads does not carry it. pumi branch writes the plan's last\n tree as a commit with this parent (decision 0314).",
+          "type": "string"
+        },
         "^(credential_handles)$": {
           "description": "The credential handles, which the runner exchanges with the credentials\n broker for tokens valid for this invocation only.",
           "items": {
@@ -784,6 +779,11 @@
         }
       },
       "properties": {
+        "baseCommit": {
+          "default": "",
+          "description": "The trunk's commit when the plan started, whose tree is the input's\n base_tree (decisions 0313 and 0316), or empty when the wiring gives no\n trunk. It stays in the runner's document: the harness invocation that\n an adapter reads does not carry it. pumi branch writes the plan's last\n tree as a commit with this parent (decision 0314).",
+          "type": "string"
+        },
         "budget": {
           "$ref": "#/$defs/pumi.harness.v1.Usage.jsonschema.json",
           "description": "The budget in tokens, money and wall time. The runner stops the\n invocation at the hard limits even when it loses its connection\n (decision 0035)."

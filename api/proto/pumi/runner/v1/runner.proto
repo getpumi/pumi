@@ -134,6 +134,12 @@ message Invocation {
   // workflow state that started it; the runner drops the file changes of a
   // check without it (decision 0282).
   bool returns_tree = 13;
+  // The trunk's commit when the plan started, whose tree is the input's
+  // base_tree (decisions 0313 and 0316), or empty when the wiring gives no
+  // trunk. It stays in the runner's document: the harness invocation that
+  // an adapter reads does not carry it. pumi branch writes the plan's last
+  // tree as a commit with this parent (decision 0314).
+  string base_commit = 14;
 }
 
 // HeartbeatRequest is the request of Heartbeat.

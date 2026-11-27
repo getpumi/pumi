@@ -86,7 +86,7 @@ func (r *treeReader) request(e *cloudeventsv1.CloudEvent, d *eventsv1.Invocation
 	if err != nil {
 		return fmt.Errorf("the invocation.requested %s: %w", e.GetId(), err)
 	}
-	r.commit = doc.GetInput().GetBaseCommit()
+	r.commit = doc.GetBaseCommit()
 	return nil
 }
 

@@ -317,7 +317,13 @@ type Invocation struct {
 	// Whether the result of a check carries the workspace's tree, from the
 	// workflow state that started it; the runner drops the file changes of a
 	// check without it (decision 0282).
-	ReturnsTree   bool `protobuf:"varint,13,opt,name=returns_tree,json=returnsTree,proto3" json:"returns_tree,omitempty"`
+	ReturnsTree bool `protobuf:"varint,13,opt,name=returns_tree,json=returnsTree,proto3" json:"returns_tree,omitempty"`
+	// The trunk's commit when the plan started, whose tree is the input's
+	// base_tree (decisions 0313 and 0316), or empty when the wiring gives no
+	// trunk. It stays in the runner's document: the harness invocation that
+	// an adapter reads does not carry it. pumi branch writes the plan's last
+	// tree as a commit with this parent (decision 0314).
+	BaseCommit    string `protobuf:"bytes,14,opt,name=base_commit,json=baseCommit,proto3" json:"base_commit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -441,6 +447,13 @@ func (x *Invocation) GetReturnsTree() bool {
 		return x.ReturnsTree
 	}
 	return false
+}
+
+func (x *Invocation) GetBaseCommit() string {
+	if x != nil {
+		return x.BaseCommit
+	}
+	return ""
 }
 
 // HeartbeatRequest is the request of Heartbeat.
@@ -853,7 +866,7 @@ const file_pumi_runner_v1_runner_proto_rawDesc = "" +
 	"invocation\x12!\n" +
 	"\flease_number\x18\x03 \x01(\x03R\vleaseNumber\x12>\n" +
 	"\rlease_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\fleaseTimeout\x12.\n" +
-	"\x13model_role_switched\x18\x05 \x01(\bR\x11modelRoleSwitched\"\xb3\x05\n" +
+	"\x13model_role_switched\x18\x05 \x01(\bR\x11modelRoleSwitched\"\xd4\x05\n" +
 	"\n" +
 	"Invocation\x12\x1e\n" +
 	"\n" +
@@ -872,7 +885,9 @@ const file_pumi_runner_v1_runner_proto_rawDesc = "" +
 	"\x12credential_handles\x18\v \x03(\tR\x11credentialHandles\x12\x1d\n" +
 	"\n" +
 	"model_role\x18\f \x01(\tR\tmodelRole\x12!\n" +
-	"\freturns_tree\x18\r \x01(\bR\vreturnsTree\"W\n" +
+	"\freturns_tree\x18\r \x01(\bR\vreturnsTree\x12\x1f\n" +
+	"\vbase_commit\x18\x0e \x01(\tR\n" +
+	"baseCommit\"W\n" +
 	"\tIsolation\x12\x19\n" +
 	"\x15ISOLATION_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ISOLATION_CONTAINER\x10\x01\x12\x16\n" +

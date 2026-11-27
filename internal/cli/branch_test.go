@@ -65,7 +65,7 @@ func requested(t *testing.T, plan, inv, baseTree, baseCommit string) *eventsv1.I
 	req, err := events.InvocationRequested(plan, &runnerv1.Invocation{
 		Invocation: inv, IdempotencyKey: inv, Role: harnessv1.Role_ROLE_AGENT,
 		Component: &harnessv1.Component{Kind: harnessv1.Component_KIND_AGENT_RUN},
-		Input:     &harnessv1.Input{Tree: baseTree, BaseTree: baseTree, BaseCommit: baseCommit},
+		Input:     &harnessv1.Input{Tree: baseTree, BaseTree: baseTree}, BaseCommit: baseCommit,
 	})
 	if err != nil {
 		t.Fatal(err)

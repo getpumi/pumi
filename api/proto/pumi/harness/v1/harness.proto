@@ -113,11 +113,6 @@ message Input {
   // at it, so that a check such as the archive step can read the base
   // (decision 0285).
   string base_tree = 4;
-  // The commit of the trunk whose tree is base_tree, when the plan started
-  // (decision 0313), or empty when the wiring gives no trunk. pumi branch
-  // writes the plan's last tree as a commit with this parent (decision
-  // 0314).
-  string base_commit = 5;
 }
 
 // Role is the role an invocation runs in. Only the gate role may write

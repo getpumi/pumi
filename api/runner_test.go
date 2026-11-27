@@ -164,11 +164,11 @@ func TestSendLogCarriesTheLeaseNumberAndTheOutput(t *testing.T) {
 func TestTheInvocationDocumentHasEveryFieldOf0024(t *testing.T) {
 	doc := (&runnerv1.Invocation{}).ProtoReflect().Descriptor()
 	want := []string{
-		"budget", "capabilities", "component", "credential_handles", "idempotency_key",
+		"base_commit", "budget", "capabilities", "component", "credential_handles", "idempotency_key",
 		"image_digest", "input", "invocation", "isolation", "model_role", "output_message", "returns_tree", "role",
 	}
 	if got := fieldNames(doc); !slices.Equal(got, want) {
-		t.Errorf("the invocation document has %q, want %q (decisions 0024, 0233 and 0282)", got, want)
+		t.Errorf("the invocation document has %q, want %q (decisions 0024, 0233, 0282 and 0316)", got, want)
 	}
 	component := fieldOf(t, doc, "component").Message()
 	if got := fieldNames(component); !slices.Equal(got, []string{"kind", "name", "version"}) {
@@ -181,8 +181,8 @@ func TestTheInvocationDocumentHasEveryFieldOf0024(t *testing.T) {
 	if want := []string{"KIND_UNSPECIFIED", "KIND_CHECK", "KIND_EXTERNAL_ACTION", "KIND_AGENT_RUN"}; !slices.Equal(kinds, want) {
 		t.Errorf("Component.Kind is %q, want %q", kinds, want)
 	}
-	if got := fieldNames(fieldOf(t, doc, "input").Message()); !slices.Equal(got, []string{"base_commit", "base_tree", "repo", "task", "tree"}) {
-		t.Errorf("Input has %q, want repo, tree, base_tree, base_commit and task (decisions 0285 and 0313)", got)
+	if got := fieldNames(fieldOf(t, doc, "input").Message()); !slices.Equal(got, []string{"base_tree", "repo", "task", "tree"}) {
+		t.Errorf("Input has %q, want repo, tree, base_tree and task (decisions 0285 and 0316)", got)
 	}
 	if got := fieldNames(fieldOf(t, doc, "budget").Message()); !slices.Equal(got, []string{"cost_microdollars", "seconds", "tokens"}) {
 		t.Errorf("the budget has %q, want tokens, cost_microdollars and seconds", got)

@@ -130,7 +130,7 @@ func TestWithNoTrunkThereIsNoBaseTree(t *testing.T) {
 
 // TestTheInputNamesThePlansBaseCommit: every invocation of a plan names
 // the trunk's commit when the plan started as its base commit, also after
-// the trunk moves and after a restart (decision 0313).
+// the trunk moves and after a restart (decisions 0313 and 0316).
 func TestTheInputNamesThePlansBaseCommit(t *testing.T) {
 	wf, err := workflow.Load(os.DirFS(filepath.Join(workflowsDir, "tracks")), "workflow.txtpb")
 	if err != nil {
@@ -154,7 +154,7 @@ func TestTheInputNamesThePlansBaseCommit(t *testing.T) {
 	p.waitIdle()
 	p.claim()
 	for _, invocation := range []string{"a1/1", "a1/2", "a1/3"} {
-		if got := p.claims[invocation].GetInvocation().GetInput().GetBaseCommit(); got != "commit-of-trunk-1" {
+		if got := p.claims[invocation].GetInvocation().GetBaseCommit(); got != "commit-of-trunk-1" {
 			t.Errorf("%s has the base commit %q, want commit-of-trunk-1, the trunk's commit when a1 started", invocation, got)
 		}
 	}

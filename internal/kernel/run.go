@@ -454,7 +454,7 @@ func (k *kernel) indexBase(e *cloudeventsv1.CloudEvent) {
 		return
 	}
 	in := doc.GetInput()
-	base := TrunkHead{Tree: in.GetBaseTree(), Commit: in.GetBaseCommit()}
+	base := TrunkHead{Tree: in.GetBaseTree(), Commit: doc.GetBaseCommit()}
 	if base.Tree == "" {
 		base.Tree = in.GetTree()
 	}
@@ -1026,7 +1026,7 @@ func (r *planRun) request(ctx context.Context, state string, inv *workflowv1.Inv
 	// The base tree is the plan's tree, which a check such as the archive
 	// step reads from the workspace's .git (decision 0285), and the base
 	// commit its trunk commit, the parent of pumi branch (decision 0313).
-	doc.Input.BaseTree, doc.Input.BaseCommit = r.tree, r.commit
+	doc.Input.BaseTree, doc.BaseCommit = r.tree, r.commit
 	doc.Input.Task = task
 	if inv.GetKind() == workflowv1.Invoke_KIND_HARNESS {
 		text, err := r.agentTask(ctx, task, inv, doc.GetInput().GetTree())
